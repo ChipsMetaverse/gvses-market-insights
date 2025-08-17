@@ -1,0 +1,30 @@
+{
+    "name": "get_stock_price",
+    "description": "Fetches the current stock price and market data for a given stock symbol",
+    "type": "webhook",
+    "approval_required": false,
+    "approval_timeout_secs": 10,
+    "api_schema": {
+        "url": "https://gvses-backend.loca.lt/api/stock-price",
+        "method": "GET",
+        "path_params_schema": [],
+        "query_params_schema": [
+            {
+                "id": "symbol",
+                "type": "string",
+                "value_type": "llm_prompt",
+                "description": "Stock ticker symbol (e.g., AAPL, GOOGL, TSLA)",
+                "dynamic_variable": "",
+                "constant_value": "",
+                "required": true
+            }
+        ],
+        "request_body_schema": null,
+        "request_headers": [],
+        "auth_connection": null
+    },
+    "response_timeout_secs": 10,
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    }
+}

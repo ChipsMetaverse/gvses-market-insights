@@ -1,0 +1,9 @@
+{
+    "tools": [
+        {
+            "name": "get_stock_price",
+            "type": "webhook",
+            "config": "tool_configs/get_stock_price.json"
+        }
+    ]
+}

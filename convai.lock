@@ -1,0 +1,22 @@
+{
+    "agents": {
+        "Test Agent": {
+            "dev": {
+                "id": "agent_8701k2tkj0b8ezbt2kyz2589j81d",
+                "hash": "f7ab6135a1a3a55a41b738a974ac9755"
+            }
+        },
+        "Gsves Market Insights": {
+            "dev": {
+                "id": "agent_4901k2tkkq54f4mvgpndm3pgzm7g",
+                "hash": "8e5256873e43e3bd918864a43d046b8d"
+            }
+        }
+    },
+    "tools": {
+        "get_stock_price": {
+            "id": "tool_1755400767345_nntjsnyti",
+            "hash": "54b68c657b9226893dd81701197c49e9"
+        }
+    }
+}

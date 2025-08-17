@@ -1,0 +1,20 @@
+{
+    "agents": [
+        {
+            "name": "Gsves Market Insights",
+            "environments": {
+                "dev": {
+                    "config": "agent_configs/dev/gsves_market_insights.json"
+                }
+            }
+        },
+        {
+            "name": "Test Agent",
+            "environments": {
+                "dev": {
+                    "config": "agent_configs/dev/test_agent.json"
+                }
+            }
+        }
+    ]
+}
