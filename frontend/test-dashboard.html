@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #0B0F1A;
+            color: #E5E7EB;
+        }
+        .status { 
+            padding: 10px; 
+            border-radius: 5px; 
+            margin: 10px 0;
+        }
+        .success { background: #22C55E20; color: #22C55E; }
+        .error { background: #EF444420; color: #EF4444; }
+        .info { background: #3B82F620; color: #3B82F6; }
+        pre { background: #111827; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Trading Dashboard API Test</h1>
+    <div id="results"></div>
+
+    <script>
+        const results = document.getElementById('results');
+        
+        async function testDashboard() {
+            try {
+                results.innerHTML = '<div class="status info">Testing dashboard API...</div>';
+                
+                const response = await fetch('http://localhost:8001/api/v1/dashboard?symbol=TSLA&range=1D');
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'ok') {
+                    results.innerHTML += '<div class="status success">✓ Dashboard API working</div>';
+                    
+                    // Check key components
+                    const components = [
+                        { name: 'Price Header', data: data.data.price_header },
+                        { name: 'Market Snapshot', data: data.data.market_snapshot },
+                        { name: 'Chart Data', data: data.data.chart },
+                        { name: 'Technical Overview', data: data.data.technical_overview },
+                        { name: 'Summary Table', data: data.data.summary_table },
+                        { name: 'Strategic Insights', data: data.data.strategic_insights },
+                        { name: 'Related News', data: data.data.related_news }
+                    ];
+                    
+                    components.forEach(comp => {
+                        if (comp.data) {
+                            results.innerHTML += `<div class="status success">✓ ${comp.name} present</div>`;
+                        } else {
+                            results.innerHTML += `<div class="status error">✗ ${comp.name} missing</div>`;
+                        }
+                    });
+                    
+                    // Show sample data
+                    results.innerHTML += '<h3>Price Header</h3>';
+                    results.innerHTML += `<pre>${JSON.stringify(data.data.price_header, null, 2)}</pre>`;
+                    
+                    if (data.data.chart && data.data.chart.candles && data.data.chart.candles.length > 0) {
+                        results.innerHTML += '<h3>Chart Data (first 3 candles)</h3>';
+                        results.innerHTML += `<pre>${JSON.stringify(data.data.chart.candles.slice(0, 3), null, 2)}</pre>`;
+                    }
+                    
+                } else {
+                    results.innerHTML += `<div class="status error">✗ Dashboard API failed: ${JSON.stringify(data)}</div>`;
+                }
+                
+            } catch (error) {
+                results.innerHTML += `<div class="status error">✗ Error: ${error.message}</div>`;
+            }
+        }
+        
+        testDashboard();
+    </script>
+</body>
+</html>

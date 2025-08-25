@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0f0;
+        }
+        pre {
+            background: #000;
+            padding: 10px;
+            border: 1px solid #0f0;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dashboard API Test</h1>
+    <div id="status">Testing API...</div>
+    <pre id="result"></pre>
+
+    <script>
+        async function testAPI() {
+            const status = document.getElementById('status');
+            const result = document.getElementById('result');
+            
+            try {
+                const response = await fetch('http://localhost:8001/api/v1/dashboard?symbol=TSLA&range=1D');
+                const data = await response.json();
+                
+                status.textContent = `✓ API Status: ${response.status} - ${data.status}`;
+                status.style.color = '#0f0';
+                
+                // Show formatted result
+                result.textContent = JSON.stringify(data, null, 2);
+                
+                // Log key info
+                console.log('API Response:', {
+                    status: data.status,
+                    hasData: !!data.data,
+                    priceHeader: data.data?.price_header,
+                    chartCandles: data.data?.chart?.candles?.length || 0
+                });
+                
+            } catch (error) {
+                status.textContent = `✗ Error: ${error.message}`;
+                status.style.color = '#f00';
+                result.textContent = error.stack;
+            }
+        }
+        
+        testAPI();
+    </script>
+</body>
+</html>

@@ -4,12 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a voice-enabled Model Context Protocol (MCP) server that enables real-time voice interactions using ElevenLabs Conversational AI for streaming ASR+TTS, with optional Claude usage via MCP. The project consists of a FastAPI backend, React TypeScript frontend, and Supabase integration for conversation persistence.
+GVSES AI Market Analysis Assistant - A professional trading dashboard with voice-enabled market insights powered by ElevenLabs Conversational AI and Claude. The application provides real-time market data visualization, technical analysis, and an AI voice assistant for market queries. Built with React TypeScript frontend featuring TradingView Lightweight Charts, FastAPI backend, and Supabase for conversation persistence.
 
 ## Key Architecture
 
 - **Backend** (`backend/`): FastAPI server exposing REST endpoints, a proxy to ElevenLabs for signed WS URLs, and text-only `/ask` fallback to Claude
-- **Frontend** (`frontend/`): React + TypeScript + Vite application with real-time voice (ElevenLabs WS), audio visualization, and text input
+- **Frontend** (`frontend/`): React + TypeScript + Vite application featuring:
+  - **TradingDashboardSimple**: Main dashboard component with three-panel layout
+  - **TradingChart**: Candlestick chart component using TradingView Lightweight Charts v5
+  - **Voice Assistant**: Real-time voice interface with visual feedback and conversation history
+  - **Market Insights Panel**: Stock tickers with price movements and technical indicators (ST, LTB, QE)
+  - **Chart Analysis Panel**: Real-time market analysis and pattern detection
 - **Database** (`database/`): PostgreSQL schema for Supabase conversation persistence
 - **Docker**: Full containerization support with docker-compose
 
@@ -103,6 +108,7 @@ Frontend:
 - Vite for build tooling
 - Supabase JS client
 - `@elevenlabs/client` and `voice-stream` for Conversational AI
+- `lightweight-charts` v5 for TradingView charting
 - ESLint for code quality
 
 ## Testing
@@ -113,7 +119,7 @@ Frontend:
 ## Port Configuration
 
 - Backend API: http://localhost:8000
-- Frontend Dev: http://localhost:5173
+- Frontend Dev: http://localhost:5174 (configured in vite.config.ts)
 - API Documentation: http://localhost:8000/docs
 
 ## Database Schema
@@ -201,3 +207,32 @@ External MCP servers can be configured via the `MCP_SERVERS` environment variabl
 ### 8) Direct Claude usage (optional)
 
 - The `/ask` endpoint remains available for text-only flows to Claude. For a consistent experience, prefer sending text via the ElevenLabs WS (`user_message`) so voice and text share one agent session.
+
+## Trading Dashboard Components
+
+### TradingDashboardSimple (`frontend/src/components/TradingDashboardSimple.tsx`)
+Main dashboard component implementing the GVSES AI Market Analysis Assistant interface:
+- Three-panel layout: Market Insights (left), Interactive Charts with Voice (center), Chart Analysis (right)
+- Tab navigation between Interactive Charts and Voice + Manual Control modes
+- Responsive design with clean white professional styling
+
+### TradingChart (`frontend/src/components/TradingChart.tsx`)
+Candlestick chart component using TradingView Lightweight Charts v5:
+- Real-time price data visualization
+- Technical level overlays (QE, ST, LTB levels)
+- Responsive chart sizing
+- Dark theme configuration
+
+### Voice Assistant Interface
+Interactive voice control with visual feedback:
+- Animated microphone with pulse rings when listening
+- Recording timer display
+- Audio visualizer bars
+- Voice conversation history with user/assistant messages
+- "Control the chart" button for voice commands
+
+### Market Data Display
+- Stock cards with symbols, prices, and percentage changes
+- Color-coded technical indicators (ST, LTB, QE)
+- Real-time chart analysis updates
+- Pattern detection with confidence levels
