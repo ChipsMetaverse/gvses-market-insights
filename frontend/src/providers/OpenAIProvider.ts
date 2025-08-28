@@ -252,10 +252,8 @@ export class OpenAIProvider extends AbstractBaseProvider implements ChatProvider
     throw new Error('Audio processing requires backend integration with OpenAI Whisper API');
   }
 
-  async sendMessage(message: string): Promise<void> {
-    // Reuse the chat implementation
-    await this.sendMessage(message);
-  }
+  // Note: VoiceProvider's sendMessage is handled by the ChatProvider implementation
+  // When OpenAI real-time voice is available, we'll implement this properly
 
   async setVoice(voiceId: string): Promise<void> {
     this.voice = voiceId;

@@ -4,23 +4,58 @@
 
 ```mermaid
 graph TB
-    subgraph "Frontend (React + Vite)"
+    subgraph "Frontend (React + Vite) - Modular Architecture"
         App[App.tsx]
-        App --> TradingDashboardSimple[TradingDashboardSimple]
+        App --> TradingDashboardModular[TradingDashboardModular]
+        App --> TradingDashboardSimple[TradingDashboardSimple - Legacy]
+        App --> ProviderTest[ProviderTest - Testing Interface]
         
         subgraph "Trading Components"
-            TradingDashboardSimple --> TradingChart[TradingChart]
-            TradingDashboardSimple --> MarketInsights[Market Insights Panel]
-            TradingDashboardSimple --> ChartAnalysis[Chart Analysis Panel]
-            TradingDashboardSimple --> VoiceInterface[Voice Interface]
+            TradingDashboardModular --> TradingChart[TradingChart]
+            TradingDashboardModular --> MarketInsights[Market Insights Panel]
+            TradingDashboardModular --> ChartAnalysis[Chart Analysis Panel]
+            TradingDashboardModular --> VoiceInterface[Voice Interface]
+            TradingDashboardModular --> ProviderSelector[Provider Selector]
+        end
+        
+        subgraph "Modular Provider System"
+            subgraph "Provider Interfaces"
+                BaseProvider[BaseProvider - Abstract]
+                VoiceProvider[VoiceProvider Interface]
+                ChatProvider[ChatProvider Interface]
+                TTSProvider[TTSProvider Interface]
+                ASRProvider[ASRProvider Interface]
+            end
+            
+            subgraph "Provider Implementations"
+                ElevenLabsProvider[ElevenLabsProvider]
+                OpenAIProvider[OpenAIProvider]
+                ClaudeProvider[ClaudeProvider - Configurable]
+                CustomProvider[CustomProvider - Extensible]
+            end
+            
+            subgraph "Provider Management"
+                ProviderFactory[ProviderFactory - Singleton]
+                ProviderManager[ProviderManager - Singleton]
+                ProviderConfig[ProviderConfigManager]
+            end
+            
+            BaseProvider --> ElevenLabsProvider
+            BaseProvider --> OpenAIProvider
+            BaseProvider --> ClaudeProvider
+            
+            ProviderFactory --> ProviderManager
+            ProviderConfig --> ProviderFactory
+            ProviderManager --> VoiceInterface
         end
         
         subgraph "Voice Components"
             VoiceInterface --> AudioVisualizer[AudioVisualizer]
             VoiceInterface --> VoiceConversation[Voice Conversation]
-            VoiceAssistantFixed[VoiceAssistantFixed]
-            VoiceAssistant[VoiceAssistant]
-            VoiceAssistantElevenlabs[VoiceAssistantElevenlabs]
+            ProviderSelector --> ProviderSwitching[Runtime Provider Switching]
+            VoiceAssistantFixed[VoiceAssistantFixed - Legacy]
+            VoiceAssistant[VoiceAssistant - Legacy]
+            VoiceAssistantElevenlabs[VoiceAssistantElevenlabs - Legacy]
         end
         
         subgraph "Chart Components"
@@ -38,12 +73,20 @@ graph TB
             ChartAnalysis --> FixedTechnicals[Fixed Technical Levels]
         end
         
-        subgraph "Hooks"
-            useElevenLabsConversation[useElevenLabsConversation]
-            useAgentConversation[useAgentConversation]
-            useVoiceRecording[useVoiceRecording]
+        subgraph "Hooks - Modular System"
+            useProvider[useProvider - Main Hook]
+            useVoiceProvider[useVoiceProvider - Voice Specific]
+            useChatProvider[useChatProvider - Chat Specific]
+            useElevenLabsConversation[useElevenLabsConversation - Legacy]
+            useAgentConversation[useAgentConversation - Legacy]
+            useVoiceRecording[useVoiceRecording - Legacy]
             useSupabase[useSupabase]
         end
+        
+        VoiceInterface --> useProvider
+        TradingDashboardModular --> useProvider
+        ProviderSelector --> useProvider
+        ProviderTest --> useProvider
         
         VoiceInterface --> useElevenLabsConversation
         VoiceAssistant --> useAgentConversation

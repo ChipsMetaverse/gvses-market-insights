@@ -1,7 +1,7 @@
-import { TradingDashboardSimple } from './components/TradingDashboardSimple';
+import { TradingDashboardModular } from './components/TradingDashboardModular';
 
 function App() {
-  return <TradingDashboardSimple />;
+  return <TradingDashboardModular />;
 }
 
 export default App;
