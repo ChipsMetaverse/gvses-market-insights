@@ -37,6 +37,7 @@ export interface StockPrice {
 
 export interface StockCandle {
   date: string;
+  time: number; // Unix timestamp for TradingChart compatibility
   open: number;
   high: number;
   low: number;

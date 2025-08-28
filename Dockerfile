@@ -1,38 +1,75 @@
+# Multi-stage build for optimized image size
+FROM node:18-slim AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Copy frontend package files
+COPY frontend/package*.json ./
+RUN npm ci --only=production
+
+# Copy frontend source and build
+COPY frontend/ .
+RUN npm run build
+
+# Final production image
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies including Node.js for MCP servers
+# Install system dependencies (minimal set)
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     portaudio19-dev \
     python3-dev \
     curl \
-    nodejs \
-    npm \
-    && rm -rf /var/lib/apt/lists/*
+    nginx \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Copy and setup market-mcp-server (Node.js)
-COPY market-mcp-server/ ./market-mcp-server/
+# Install Node.js 18 (minimal install)
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy built frontend from builder stage
+COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html/
+
+# Setup market-mcp-server (production dependencies only)
+COPY market-mcp-server/package*.json ./market-mcp-server/
 WORKDIR /app/market-mcp-server
-RUN npm install
+RUN npm ci --only=production && npm cache clean --force
 
-# Copy and setup alpaca-mcp-server (Python)
+# Copy MCP server source
+COPY market-mcp-server/ .
+
+# Install Python dependencies for alpaca-mcp-server
 WORKDIR /app
 COPY alpaca-mcp-server/ ./alpaca-mcp-server/
-RUN pip install mcp>=1.0.0 alpaca-py>=0.33.0 python-dotenv>=1.0.0
+RUN pip install --no-cache-dir mcp>=1.0.0 alpaca-py>=0.33.0 python-dotenv>=1.0.0
 
-# Copy backend requirements and install
+# Install backend dependencies
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend application code
-COPY backend/ .
+COPY backend/ ./backend/
+
+# Copy configuration files
+COPY nginx.conf /etc/nginx/sites-available/default
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Clean up build dependencies to reduce image size
+RUN apt-get remove -y gcc g++ python3-dev curl && \
+    apt-get autoremove -y && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip cache purge
 
 # Expose ports
-EXPOSE 8000
 EXPOSE 8080
 
-# Run the application
-CMD uvicorn mcp_server:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2
+# Start supervisor
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

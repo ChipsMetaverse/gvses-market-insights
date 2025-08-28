@@ -1,7 +1,4 @@
-"use client"
-
 import type { Insight } from '../types'
-import { StreamingStatusIndicator } from '@/components/ui/streaming-status-indicator'
 
 interface ChartAnalysisProps {
   recentInsights: Insight[]

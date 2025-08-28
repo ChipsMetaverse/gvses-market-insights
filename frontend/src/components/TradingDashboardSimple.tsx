@@ -51,12 +51,12 @@ export const TradingDashboardSimple: React.FC = () => {
   const {
     isConnected,
     isLoading: isConnecting,
-    error: connectionError,
     startConversation,
     stopConversation,
     sendTextMessage: sendElevenLabsText,
     sendAudioChunk,
   } = useElevenLabsConversation({
+    apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
     onUserTranscript: (transcript) => {
       const message: Message = {
         id: crypto.randomUUID(),
@@ -97,8 +97,7 @@ export const TradingDashboardSimple: React.FC = () => {
   // Start voice recording
   const startVoiceRecording = useCallback(async () => {
     if (!isConnected) {
-      // Start conversation first if not connected
-      await startConversation();
+      console.log('Cannot start recording - not connected to ElevenLabs');
       return;
     }
 
@@ -118,12 +117,16 @@ export const TradingDashboardSimple: React.FC = () => {
         for (let i = 0; i < inputData.length; i++) {
           sum += Math.abs(inputData[i]);
         }
-        setAudioLevel(sum / inputData.length);
+        const level = sum / inputData.length;
+        setAudioLevel(level);
         
-        // Convert and send audio
-        const pcm16 = convertFloat32ToInt16(inputData);
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
-        sendAudioChunk(base64);
+        // Only send audio if there's actual sound (not silence)
+        if (level > 0.001) {
+          // Convert and send audio
+          const pcm16 = convertFloat32ToInt16(inputData);
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
+          sendAudioChunk(base64);
+        }
       };
       
       sourceRef.current.connect(processorRef.current);
@@ -182,12 +185,29 @@ export const TradingDashboardSimple: React.FC = () => {
     setAudioLevel(0);
   }, []);
 
-  // Handle record button click
-  const handleRecord = () => {
-    if (isRecording) {
+  
+  // Single connect/disconnect handler
+  const handleConnectToggle = async () => {
+    if (isConnected) {
+      console.log('Disconnecting...');
+      // Disconnect everything
       stopVoiceRecording();
+      stopConversation();
     } else {
-      startVoiceRecording();
+      console.log('Connecting to ElevenLabs...');
+      // Connect and auto-start listening
+      try {
+        await startConversation();
+        console.log('Connected! Starting voice recording in 1 second...');
+        // Auto-start listening after connection
+        setTimeout(() => {
+          console.log('Starting voice recording now...');
+          startVoiceRecording();
+        }, 1000);
+      } catch (error) {
+        console.error('Failed to connect:', error);
+        alert('Failed to connect to voice assistant. Please check your connection and try again.');
+      }
     }
   };
 
@@ -233,7 +253,7 @@ export const TradingDashboardSimple: React.FC = () => {
         let label = 'ST';
         let description = 'Neutral momentum';
         
-        const changePercent = stockPrice.change_pct || stockPrice.change_percent || 0;
+        const changePercent = stockPrice.change_percent || stockPrice.change_pct || 0;
         
         if (changePercent > 2) {
           label = 'QE';
@@ -254,9 +274,9 @@ export const TradingDashboardSimple: React.FC = () => {
         
         return {
           symbol: stockPrice.symbol,
-          price: stockPrice.last || stockPrice.price || 0,
-          change: stockPrice.change_abs || stockPrice.change || 0,
-          changePercent: stockPrice.change_pct || stockPrice.change_percent || 0,
+          price: stockPrice.price || stockPrice.last || 0,
+          change: stockPrice.change || stockPrice.change_abs || 0,
+          changePercent: stockPrice.change_percent || stockPrice.change_pct || 0,
           label,
           description,
           volume: stockPrice.volume || 0
@@ -430,7 +450,7 @@ export const TradingDashboardSimple: React.FC = () => {
               <div className="listening-animation">
                 <div 
                   className={`mic-icon ${isListening ? 'listening' : ''}`}
-                  onClick={handleRecord}
+                  onClick={handleConnectToggle}
                 >
                   <div className="pulse-ring"></div>
                   <div className="pulse-ring"></div>
@@ -441,7 +461,10 @@ export const TradingDashboardSimple: React.FC = () => {
                   </svg>
                 </div>
                 <div className="listening-text">
-                  {isListening ? 'Listening...' : 'AI Analysis'}
+                  {isConnected ? 
+                    '🎧 Listening... (speak anytime)' : 
+                    isConnecting ? '⏳ Connecting...' :
+                    '🔌 Click mic to connect'}
                 </div>
                 {isRecording && (
                   <div className="recording-timer">{recordingTime}</div>
@@ -495,55 +518,46 @@ export const TradingDashboardSimple: React.FC = () => {
               </div>
               
               <div className="chart-control">
-                <div className="control-header">Voice Control</div>
-                {!isConnected ? (
-                  <button 
-                    className="listening-btn" 
-                    onClick={() => startConversation()}
-                    disabled={isConnecting}
-                  >
-                    {isConnecting ? 'Connecting...' : 'Start Voice Chat'}
-                  </button>
-                ) : (
-                  <div className="voice-controls-group">
-                    <button 
-                      className="listening-btn" 
-                      onClick={handleRecord}
-                    >
-                      {isRecording ? '🔴 Stop Recording' : '🎤 Click to Record'}
-                    </button>
-                    <button 
-                      className="disconnect-btn" 
-                      onClick={stopConversation}
-                    >
-                      End Chat
-                    </button>
+                <button 
+                  className={isConnected ? "disconnect-btn" : "listening-btn"}
+                  onClick={handleConnectToggle}
+                  disabled={isConnecting}
+                  style={{ width: '100%', fontSize: '16px', padding: '12px' }}
+                >
+                  {isConnecting ? '⏳ Connecting...' : 
+                   isConnected ? '🔴 Disconnect Voice' : 
+                   '🎤 Connect Voice Assistant'}
+                </button>
+                {isConnected && (
+                  <div className="voice-status" style={{ marginTop: '10px', textAlign: 'center', color: '#4CAF50' }}>
+                    <span className="pulse-indicator" style={{ display: 'inline-block', width: '8px', height: '8px', backgroundColor: '#4CAF50', borderRadius: '50%', animation: 'pulse 1.5s infinite', marginRight: '8px' }}></span>
+                    <span>Voice active • Speak anytime</span>
                   </div>
                 )}
               </div>
               
-              {/* Text Input Section */}
-              <div className="text-input-section">
-                <div className="control-header">Or type your message</div>
-                <div className="text-input-group">
-                  <input
-                    type="text"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && sendTextMessage()}
-                    placeholder="Type your message..."
-                    disabled={!isConnected}
-                    className="text-input"
-                  />
-                  <button 
-                    onClick={sendTextMessage}
-                    disabled={!isConnected || !inputText.trim()}
-                    className="send-button"
-                  >
-                    Send
-                  </button>
+              {/* Text Input Section - Only shown when connected */}
+              {isConnected && (
+                <div className="text-input-section">
+                  <div className="text-input-group">
+                    <input
+                      type="text"
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && sendTextMessage()}
+                      placeholder="Type a message (or just speak)..."
+                      className="text-input"
+                    />
+                    <button 
+                      onClick={sendTextMessage}
+                      disabled={!inputText.trim()}
+                      className="send-button"
+                    >
+                      Send
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
               
               <div className="voice-commands">
                 <strong>Try these commands:</strong>

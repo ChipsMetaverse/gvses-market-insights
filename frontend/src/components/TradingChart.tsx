@@ -52,34 +52,6 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
     }
   }
 
-  // Fallback sample data generator
-  const generateSampleData = () => {
-    const data = []
-    let basePrice = symbol === 'TSLA' ? 240 : symbol === 'AAPL' ? 185 : symbol === 'NVDA' ? 420 : 440
-
-    for (let i = 0; i < 100; i++) {
-      const time = Math.floor(Date.now() / 1000) - (100 - i) * 86400
-      const volatility = 0.02
-      const change = (Math.random() - 0.5) * volatility * basePrice
-
-      const open = basePrice
-      const close = basePrice + change
-      const high = Math.max(open, close) + Math.random() * volatility * basePrice * 0.5
-      const low = Math.min(open, close) - Math.random() * volatility * basePrice * 0.5
-
-      data.push({
-        time: time as any,
-        open,
-        high,
-        low,
-        close,
-      })
-
-      basePrice = close
-    }
-
-    return data
-  }
 
   useEffect(() => {
     if (!chartContainerRef.current) return

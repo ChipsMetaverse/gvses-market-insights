@@ -149,18 +149,22 @@ export const useElevenLabsConversation = (config: UseElevenLabsConfig = {}) => {
       const ws = new WebSocket(signedUrl);
       
       ws.onopen = () => {
+        console.log('ElevenLabs WebSocket connected!');
         setIsConnected(true);
         setIsLoading(false);
         onConnectionChange?.(true);
         
         // Send initialization message
-        ws.send(JSON.stringify({
+        const initMessage = {
           type: 'conversation_initiation_client_data'
-        }));
+        };
+        console.log('Sending init message:', initMessage);
+        ws.send(JSON.stringify(initMessage));
       };
       
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        console.log('ElevenLabs message:', data.type);
         
         switch (data.type) {
           case 'user_transcript':
