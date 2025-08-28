@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TradingChart } from './TradingChart';
 import { marketDataService } from '../services/marketDataService';
+import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import './TradingDashboardSimple.css';
 
 interface StockData {
@@ -15,8 +16,8 @@ interface StockData {
 
 interface Message {
   id: string;
-  sender: 'user' | 'assistant';
-  text: string;
+  role: 'user' | 'assistant';
+  content: string;
   timestamp: string;
 }
 
@@ -25,59 +26,195 @@ export const TradingDashboardSimple: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState('00:00');
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      sender: 'user',
-      text: 'What is the price of Apple?',
-      timestamp: '08:19:51 PM'
-    },
-    {
-      id: '2',
-      sender: 'assistant',
-      text: '...',
-      timestamp: ''
-    }
-  ]);
-  const [isConnected, setIsConnected] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [audioLevel, setAudioLevel] = useState(0);
   const [stocksData, setStocksData] = useState<StockData[]>([]);
   const [isLoadingStocks, setIsLoadingStocks] = useState(true);
   const [selectedSymbol, setSelectedSymbol] = useState('TSLA');
   const [stockNews, setStockNews] = useState<any[]>([]);
   const [technicalLevels, setTechnicalLevels] = useState<any>({});
   const [isLoadingNews, setIsLoadingNews] = useState(false);
+  const [expandedNews, setExpandedNews] = useState<number | null>(null);
+  
+  // Audio processing refs
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Stock symbols to track
   const watchlist = ['TSLA', 'AAPL', 'NVDA', 'SPY'];
+  
+  // ElevenLabs conversation hook
+  const {
+    isConnected,
+    isLoading: isConnecting,
+    error: connectionError,
+    startConversation,
+    stopConversation,
+    sendTextMessage: sendElevenLabsText,
+    sendAudioChunk,
+  } = useElevenLabsConversation({
+    onUserTranscript: (transcript) => {
+      const message: Message = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: transcript,
+        timestamp: new Date().toLocaleTimeString()
+      };
+      setMessages(prev => [...prev, message]);
+    },
+    onAgentResponse: (response) => {
+      const message: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: response,
+        timestamp: new Date().toLocaleTimeString()
+      };
+      setMessages(prev => [...prev, message]);
+    },
+    onConnectionChange: (connected) => {
+      if (!connected) {
+        setIsRecording(false);
+        setIsListening(false);
+        stopVoiceRecording();
+      }
+    }
+  });
 
-  const handleRecord = () => {
-    setIsRecording(!isRecording);
-    setIsListening(!isListening);
-    if (!isRecording) {
+  // Convert Float32 PCM to Int16 PCM (required by ElevenLabs)
+  const convertFloat32ToInt16 = (float32Array: Float32Array): Int16Array => {
+    const int16Array = new Int16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    return int16Array;
+  };
+
+  // Start voice recording
+  const startVoiceRecording = useCallback(async () => {
+    if (!isConnected) {
+      // Start conversation first if not connected
+      await startConversation();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      
+      audioContextRef.current = new AudioContext({ sampleRate: 16000 });
+      sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
+      processorRef.current = audioContextRef.current.createScriptProcessor(2048, 1, 1);
+      
+      processorRef.current.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Calculate audio level for visualization
+        let sum = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          sum += Math.abs(inputData[i]);
+        }
+        setAudioLevel(sum / inputData.length);
+        
+        // Convert and send audio
+        const pcm16 = convertFloat32ToInt16(inputData);
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
+        sendAudioChunk(base64);
+      };
+      
+      sourceRef.current.connect(processorRef.current);
+      processorRef.current.connect(audioContextRef.current.destination);
+      
+      setIsRecording(true);
+      setIsListening(true);
+      
       // Start recording timer
       let seconds = 0;
-      const interval = setInterval(() => {
+      recordingTimerRef.current = setInterval(() => {
         seconds++;
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         setRecordingTime(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
       }, 1000);
-      
-      // Stop after some time or on stop
-      setTimeout(() => {
-        clearInterval(interval);
-        setRecordingTime('00:00');
-        setIsRecording(false);
-        setIsListening(false);
-      }, 60000);
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      alert('Failed to access microphone. Please check your permissions.');
+    }
+  }, [isConnected, startConversation, sendAudioChunk]);
+
+  // Stop voice recording
+  const stopVoiceRecording = useCallback(() => {
+    // Clean up audio nodes
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+    
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+    
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    
+    // Stop media stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    // Clear timer
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    
+    setIsRecording(false);
+    setIsListening(false);
+    setRecordingTime('00:00');
+    setAudioLevel(0);
+  }, []);
+
+  // Handle record button click
+  const handleRecord = () => {
+    if (isRecording) {
+      stopVoiceRecording();
     } else {
-      setRecordingTime('00:00');
+      startVoiceRecording();
+    }
+  };
+
+  // Send text message
+  const sendTextMessage = () => {
+    if (inputText.trim() && isConnected) {
+      const message: Message = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: inputText,
+        timestamp: new Date().toLocaleTimeString()
+      };
+      setMessages(prev => [...prev, message]);
+      sendElevenLabsText(inputText);
+      setInputText('');
+    } else if (!isConnected) {
+      alert('Please connect to the voice assistant first');
     }
   };
 
   const handleTabChange = (tab: 'charts' | 'voice') => {
     setActiveTab(tab);
     console.log('Tab changed to:', tab);
+  };
+
+  const handleNewsToggle = (index: number) => {
+    setExpandedNews(expandedNews === index ? null : index);
   };
 
   const handleBackToClassic = () => {
@@ -96,16 +233,18 @@ export const TradingDashboardSimple: React.FC = () => {
         let label = 'ST';
         let description = 'Neutral momentum';
         
-        if (stockPrice.change_percent > 2) {
+        const changePercent = stockPrice.change_pct || stockPrice.change_percent || 0;
+        
+        if (changePercent > 2) {
           label = 'QE';
           description = 'Bullish momentum';
-        } else if (stockPrice.change_percent < -2) {
+        } else if (changePercent < -2) {
           label = 'LTB';
           description = 'Support level';
-        } else if (Math.abs(stockPrice.change_percent) < 0.5) {
+        } else if (Math.abs(changePercent) < 0.5) {
           label = 'ST';
           description = 'Consolidation';
-        } else if (stockPrice.change_percent > 0) {
+        } else if (changePercent > 0) {
           label = 'ST';
           description = 'Upward trend';
         } else {
@@ -115,12 +254,12 @@ export const TradingDashboardSimple: React.FC = () => {
         
         return {
           symbol: stockPrice.symbol,
-          price: stockPrice.price,
-          change: stockPrice.change,
-          changePercent: stockPrice.change_percent,
+          price: stockPrice.last || stockPrice.price || 0,
+          change: stockPrice.change_abs || stockPrice.change || 0,
+          changePercent: stockPrice.change_pct || stockPrice.change_percent || 0,
           label,
           description,
-          volume: stockPrice.volume
+          volume: stockPrice.volume || 0
         };
       });
       
@@ -142,25 +281,32 @@ export const TradingDashboardSimple: React.FC = () => {
   // Fetch news and analysis for selected stock
   const fetchStockAnalysis = async (symbol: string) => {
     setIsLoadingNews(true);
+    
+    // Fetch news independently
     try {
-      // Fetch news
       const news = await marketDataService.getStockNews(symbol);
-      setStockNews(news.slice(0, 3)); // Show top 3 news items
-      
-      // Fetch comprehensive data for technical levels
-      const comprehensive = await marketDataService.getComprehensiveData(symbol);
-      if (comprehensive.technical_levels) {
-        setTechnicalLevels(comprehensive.technical_levels);
-      }
+      setStockNews(news); // Show all available news items
     } catch (error) {
-      console.error('Error fetching stock analysis:', error);
-      // Set fallback news
+      console.error('Error fetching news:', error);
+      // Set fallback news only if news fetch fails
       setStockNews([
         { title: `${symbol} shows bullish flag pattern forming`, time: '2 min ago' },
         { title: `Price testing key support levels`, time: '5 min ago' },
         { title: `Volume breakout above resistance`, time: '8 min ago' }
       ]);
     }
+    
+    // Fetch comprehensive data separately
+    try {
+      const comprehensive = await marketDataService.getComprehensiveData(symbol);
+      if (comprehensive.technical_levels) {
+        setTechnicalLevels(comprehensive.technical_levels);
+      }
+    } catch (error) {
+      console.error('Error fetching comprehensive data:', error);
+      // Technical levels will just remain undefined/empty if this fails
+    }
+    
     setIsLoadingNews(false);
   };
 
@@ -178,6 +324,16 @@ export const TradingDashboardSimple: React.FC = () => {
   useEffect(() => {
     fetchStockAnalysis(selectedSymbol);
   }, [selectedSymbol]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopVoiceRecording();
+      if (isConnected) {
+        stopConversation();
+      }
+    };
+  }, [stopVoiceRecording, isConnected, stopConversation]);
 
   return (
     <div className="trading-dashboard-simple">
@@ -293,11 +449,11 @@ export const TradingDashboardSimple: React.FC = () => {
               </div>
               
               <div className="audio-visualizer">
-                <div className="audio-bar"></div>
-                <div className="audio-bar"></div>
-                <div className="audio-bar"></div>
-                <div className="audio-bar"></div>
-                <div className="audio-bar"></div>
+                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
+                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 400)}%` }}></div>
+                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 600)}%` }}></div>
+                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 400)}%` }}></div>
+                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
               </div>
               
               <div className="connection-status">
@@ -310,34 +466,93 @@ export const TradingDashboardSimple: React.FC = () => {
             <div className="voice-conversation">
               <h3>Voice Conversation</h3>
               <div className="conversation-messages">
-                {messages.map((msg) => (
-                  <div key={msg.id} className="conversation-message">
-                    <div className="message-icon">
-                      {msg.sender === 'user' ? '👤' : '🤖'}
-                    </div>
-                    <div className="message-content">
-                      <div className="message-text">{msg.text}</div>
-                      {msg.timestamp && (
-                        <div className="message-time">{msg.timestamp}</div>
-                      )}
-                    </div>
+                {messages.length === 0 ? (
+                  <div className="no-messages">
+                    <p>Start a conversation by clicking the microphone or typing a message</p>
                   </div>
-                ))}
+                ) : (
+                  messages.map((msg) => (
+                    <div key={msg.id} className="conversation-message">
+                      <div className="message-icon">
+                        {msg.role === 'user' ? '👤' : '🤖'}
+                      </div>
+                      <div className="message-content">
+                        <div className="message-text">{msg.content}</div>
+                        {msg.timestamp && (
+                          <div className="message-time">{msg.timestamp}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
               
               <div className="conversation-footer">
-                <span className="footer-text">1 message • Listening for your voice...</span>
+                <span className="footer-text">
+                  {messages.length} message{messages.length !== 1 ? 's' : ''} • 
+                  {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
+                </span>
               </div>
               
               <div className="chart-control">
-                <div className="control-header">Control the chart</div>
-                <button className="listening-btn" onClick={handleRecord}>
-                  {isListening ? 'Listening...' : 'Click to Listen'}
-                </button>
+                <div className="control-header">Voice Control</div>
+                {!isConnected ? (
+                  <button 
+                    className="listening-btn" 
+                    onClick={() => startConversation()}
+                    disabled={isConnecting}
+                  >
+                    {isConnecting ? 'Connecting...' : 'Start Voice Chat'}
+                  </button>
+                ) : (
+                  <div className="voice-controls-group">
+                    <button 
+                      className="listening-btn" 
+                      onClick={handleRecord}
+                    >
+                      {isRecording ? '🔴 Stop Recording' : '🎤 Click to Record'}
+                    </button>
+                    <button 
+                      className="disconnect-btn" 
+                      onClick={stopConversation}
+                    >
+                      End Chat
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {/* Text Input Section */}
+              <div className="text-input-section">
+                <div className="control-header">Or type your message</div>
+                <div className="text-input-group">
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && sendTextMessage()}
+                    placeholder="Type your message..."
+                    disabled={!isConnected}
+                    className="text-input"
+                  />
+                  <button 
+                    onClick={sendTextMessage}
+                    disabled={!isConnected || !inputText.trim()}
+                    className="send-button"
+                  >
+                    Send
+                  </button>
+                </div>
               </div>
               
               <div className="voice-commands">
-                Try these voice commands:
+                <strong>Try these commands:</strong>
+                <ul>
+                  <li>"What's the price of Tesla?"</li>
+                  <li>"Show me Apple's chart"</li>
+                  <li>"What's the market sentiment?"</li>
+                  <li>"Any news on {selectedSymbol}?"</li>
+                </ul>
               </div>
             </div>
           </div>
@@ -351,16 +566,48 @@ export const TradingDashboardSimple: React.FC = () => {
               <div className="loading-spinner">Loading analysis...</div>
             ) : (
               <>
-                {stockNews.map((news, index) => (
-                  <div key={index} className="analysis-item">
-                    <div className="analysis-header">
-                      <h3>{selectedSymbol}</h3>
-                      <span className="time">{news.published || news.time || `${index * 3 + 2} min ago`}</span>
+                {/* Scrollable news section */}
+                <div className="news-scroll-container">
+                  {stockNews.map((news, index) => (
+                    <div key={index} className="analysis-item clickable-news">
+                      <div 
+                        className="news-header"
+                        onClick={() => handleNewsToggle(index)}
+                      >
+                        <div className="analysis-header">
+                          <h3>{selectedSymbol}</h3>
+                          <span className="time">{news.published || news.time || `${index * 3 + 2} min ago`}</span>
+                        </div>
+                        <p className="news-title">{news.title}</p>
+                        <div className="news-source">
+                          <span className="source-name">{news.source || 'Market News'}</span>
+                          <span className="expand-icon">{expandedNews === index ? '▼' : '▶'}</span>
+                        </div>
+                      </div>
+                      
+                      {expandedNews === index && (
+                        <div className="news-expanded">
+                          {news.description && (
+                            <p className="news-description">{news.description}</p>
+                          )}
+                          {news.url && (
+                            <a 
+                              href={news.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="news-link"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Read Full Article →
+                            </a>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <p>{news.title}</p>
-                  </div>
-                ))}
+                  ))}
+                </div>
 
+                {/* Fixed Technical Levels section */}
                 <div className="technical-section">
                   <h4>TECHNICAL LEVELS</h4>
                   <div className="level-row">

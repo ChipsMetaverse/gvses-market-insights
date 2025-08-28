@@ -29,6 +29,15 @@ graph TB
             TradingChart --> TechnicalLevels[Technical Levels]
         end
         
+        subgraph "News Components"
+            ChartAnalysis[Chart Analysis Panel] --> ScrollableContainer[Scrollable News Container]
+            ScrollableContainer --> ExpandableNews[Expandable News Items]
+            ExpandableNews --> CNBCNews[CNBC Market News]
+            ExpandableNews --> YahooNews[Yahoo Finance Targeted]
+            ExpandableNews --> InlineExpansion[Inline Article Expansion]
+            ChartAnalysis --> FixedTechnicals[Fixed Technical Levels]
+        end
+        
         subgraph "Hooks"
             useElevenLabsConversation[useElevenLabsConversation]
             useAgentConversation[useAgentConversation]
@@ -40,23 +49,33 @@ graph TB
         VoiceAssistant --> useAgentConversation
     end
     
-    subgraph "Backend (FastAPI)"
+    subgraph "Backend (FastAPI) - Alpaca-First Architecture"
         FastAPI[mcp_server.py]
         FastAPI --> ElevenLabsProxy["/elevenlabs/signed-url"]
         FastAPI --> AskEndpoint["/ask"]
         FastAPI --> ConversationsAPI["/conversations/*"]
-        FastAPI --> MarketDataService[market_data_service.py]
+        FastAPI --> ServiceFactory[MarketServiceFactory<br/>Alpaca Primary, Yahoo Fallback]
+        
+        ServiceFactory -->|Quotes & Charts| AlpacaService[AlpacaService<br/>Professional Market Data]
+        ServiceFactory -->|Fallback| MCPService[MarketDataService<br/>Yahoo via MCP]
+        ServiceFactory -->|News| NewsService[NewsService<br/>CNBC + Yahoo Hybrid]
+        
+        AlpacaService --> AlpacaAPI[Alpaca Markets API]
+        MCPService --> MCPClient[MCP Client]
+        NewsService --> MCPClient
     end
     
     subgraph "External Services"
         ElevenLabs[ElevenLabs API]
         Claude[Claude API via MCP]
         Supabase[(Supabase DB)]
+        AlpacaMarkets[Alpaca Markets<br/>Professional Data]
     end
     
     Frontend --> FastAPI
     FastAPI --> ElevenLabs
     FastAPI --> Claude
+    FastAPI --> AlpacaMarkets
     Frontend --> Supabase
     FastAPI --> Supabase
 ```
@@ -92,16 +111,75 @@ graph TD
     end
 ```
 
-## Data Flow
+## Alpaca-First Data Architecture
+
+```mermaid
+graph TB
+    subgraph "Data Source Priority"
+        Request[Market Data Request] --> Router{Data Type?}
+        
+        Router -->|Stock Quotes| QuoteFlow[Quote Flow]
+        Router -->|Chart Data| ChartFlow[Chart Flow]
+        Router -->|News| NewsFlow[News Flow]
+        
+        QuoteFlow --> AlpacaQuote[1. Try Alpaca<br/>Professional Data]
+        AlpacaQuote -->|Success| ReturnQuote[Return with<br/>"alpaca" source]
+        AlpacaQuote -->|Fail| YahooQuote[2. Fallback to Yahoo<br/>via MCP]
+        YahooQuote --> ReturnQuote2[Return with<br/>"yahoo_mcp" source]
+        
+        ChartFlow --> AlpacaChart[1. Try Alpaca<br/>Professional Bars]
+        AlpacaChart -->|Success| ReturnChart[Return with<br/>"alpaca" source]
+        AlpacaChart -->|Fail| YahooChart[2. Fallback to Yahoo<br/>via MCP]
+        YahooChart --> ReturnChart2[Return with<br/>"yahoo_mcp" source]
+        
+        NewsFlow --> CNBCNews[CNBC via MCP<br/>+ Yahoo Supplement]
+        CNBCNews --> ReturnNews[Return hybrid<br/>"mcp" source]
+    end
+    
+    style AlpacaQuote fill:#81C784
+    style AlpacaChart fill:#81C784
+    style YahooQuote fill:#FFB74D
+    style YahooChart fill:#FFB74D
+    style CNBCNews fill:#90CAF9
+```
+
+## Data Flow - Alpaca-First Architecture
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Frontend
     participant Backend
+    participant ServiceFactory
+    participant AlpacaService
+    participant MCPService
+    participant Alpaca
+    participant YahooFinance
     participant ElevenLabs
     participant Claude
     participant Supabase
+    
+    User->>Frontend: Request Chart Data
+    Frontend->>Backend: GET /api/stock-history?symbol=TSLA
+    Backend->>ServiceFactory: get_stock_history()
+    
+    ServiceFactory->>AlpacaService: get_ohlcv_from_alpaca()
+    AlpacaService->>Alpaca: get_stock_bars()
+    
+    alt Alpaca Success
+        Alpaca-->>AlpacaService: Professional bar data
+        AlpacaService-->>ServiceFactory: Formatted candles + "alpaca" source
+    else Alpaca Failure
+        AlpacaService-->>ServiceFactory: Error
+        ServiceFactory->>MCPService: get_ohlcv() fallback
+        MCPService->>YahooFinance: Via MCP subprocess
+        YahooFinance-->>MCPService: Raw OHLC data
+        MCPService-->>ServiceFactory: Formatted candles + "yahoo_mcp" source
+    end
+    
+    ServiceFactory-->>Backend: Historical data with source
+    Backend-->>Frontend: Transformed candles
+    Frontend->>User: Display TradingView Chart
     
     User->>Frontend: Start Voice Chat
     Frontend->>Backend: GET /elevenlabs/signed-url
@@ -183,17 +261,213 @@ graph TD
         Health[GET /health]
         SignedURL[GET /elevenlabs/signed-url]
         Ask[POST /ask]
-        RecordConv[POST /conversations/record]
-        GetConv[GET /conversations/:session_id]
-        StockHistory[GET /api/stock-history]
+        StockPrice[GET /api/stock-price - Alpaca → Yahoo Fallback]
+        StockHistory[GET /api/stock-history - Alpaca → Yahoo Fallback]
+        StockNews[GET /api/stock-news - CNBC + Yahoo Hybrid via MCP]
+        ComprehensiveData[GET /api/comprehensive-stock-data - MCP Only]
+        AnalystRatings[GET /api/analyst-ratings - MCP Only]
+        MarketMovers[GET /api/market-movers - MCP Only]
+        MarketOverview[GET /api/market-overview - MCP Only]
+        
+        subgraph "Alpaca API Routes"
+            AlpacaAccount[GET /api/alpaca/account]
+            AlpacaQuote[GET /api/alpaca/quote/{symbol}]
+            AlpacaSnapshot[GET /api/alpaca/snapshot/{symbol}]
+            AlpacaBars[GET /api/alpaca/bars/{symbol}]
+            AlpacaPositions[GET /api/alpaca/positions]
+            AlpacaOrders[GET /api/alpaca/orders]
+            AlpacaMarketStatus[GET /api/alpaca/market-status]
+            AlpacaStockPrice[GET /api/alpaca/stock-price]
+        end
+        
+        subgraph "Enhanced API Routes - Dual MCP"
+            EnhancedMarketData[GET /api/enhanced/market-data<br/>Auto-selects best source]
+            EnhancedHistorical[GET /api/enhanced/historical-data<br/>Intelligent data routing]
+            EnhancedAccount[GET /api/enhanced/alpaca-account<br/>Direct Alpaca access]
+            EnhancedPositions[GET /api/enhanced/alpaca-positions<br/>Portfolio positions]
+            EnhancedOrders[GET /api/enhanced/alpaca-orders<br/>Order management]
+            EnhancedStatus[GET /api/enhanced/market-status<br/>Market hours]
+            EnhancedCompare[GET /api/enhanced/compare-sources<br/>Debug data sources]
+        end
     end
     
     subgraph "Request Flow"
         SignedURL --> ElevenLabsAPI[ElevenLabs API]
         Ask --> ClaudeAPI[Claude via MCP]
-        RecordConv --> SupabaseDB[(Supabase)]
-        GetConv --> SupabaseDB
-        StockHistory --> MarketData[Market Data Service]
+        StockPrice --> MCPClient[MCP Client - Python]
+        StockHistory --> MCPClient
+        ComprehensiveData --> MCPClient
+        StockNews --> NewsService[News Service - Hybrid]
+        AnalystRatings --> MCPClient
+        MarketMovers --> MCPClient
+        MarketOverview --> MCPClient
+        MCPClient --> MCPServer[Market MCP Server - Node.js]
+        
+        AlpacaAccount --> AlpacaService[Alpaca Service - Python]
+        AlpacaQuote --> AlpacaService
+        AlpacaSnapshot --> AlpacaService
+        AlpacaBars --> AlpacaService
+        AlpacaPositions --> AlpacaService
+        AlpacaOrders --> AlpacaService
+        AlpacaMarketStatus --> AlpacaService
+        AlpacaStockPrice --> AlpacaService
+        
+        EnhancedMarketData --> MCPManager[MCP Manager]
+        EnhancedHistorical --> MCPManager
+        EnhancedAccount --> MCPManager
+        EnhancedPositions --> MCPManager
+        EnhancedOrders --> MCPManager
+        EnhancedStatus --> MCPManager
+        EnhancedCompare --> MCPManager
+        MCPManager --> MarketMCP[market-mcp-server]
+        MCPManager --> AlpacaMCP[alpaca-mcp-server]
+    end
+    
+    subgraph "MCP Tools & Data Sources"
+        MCPServer --> YahooFinance[Yahoo Finance API v8]
+        MCPServer --> CNBCIntegration[CNBC Web Scraping]
+        MCPServer --> TechnicalIndicators[TA Library]
+        MarketMCP --> YahooFinance
+        MarketMCP --> CNBCIntegration
+        YahooFinance --> HistoricalData[Historical OHLC Data]
+        YahooFinance --> RealtimeQuotes[Real-time Stock Quotes]
+        YahooFinance --> MarketData[Market Overview Data]
+        CNBCIntegration --> NewsArticles[Professional Journalism]
+        CNBCIntegration --> PreMarket[Pre-market Movers]
+        CNBCIntegration --> MarketSentiment[Expert Analysis]
+    end
+    
+    subgraph "Alpaca Markets Integration"
+        AlpacaService --> AlpacaAPI[Alpaca Markets API]
+        AlpacaMCP --> AlpacaAPI
+        AlpacaAPI --> PaperTrading[Paper Trading Account]
+        AlpacaAPI --> RealTimeData[Real-time Market Data]
+        AlpacaAPI --> HistoricalBars[Historical Bars]
+        AlpacaAPI --> AccountInfo[Account & Positions]
+        AlpacaAPI --> OrderManagement[Order Management]
+    end
+    
+    subgraph "News Service Hybrid System"
+        NewsService --> CNBCPrimary[CNBC Market News via MCP]
+        NewsService --> YahooSupplement[Yahoo Finance Symbol-Specific]
+        NewsService --> NewsFiltering[Symbol Relevance Filter]
+        NewsFiltering --> FinalNews[Merged News Feed]
+    end
+```
+
+## News Service Architecture
+
+```mermaid
+sequenceDiagram
+    participant Frontend
+    participant NewsService
+    participant MCPClient
+    participant CNBCServer
+    participant YahooAPI
+    
+    Frontend->>NewsService: GET /api/stock-news?symbol=TSLA
+    NewsService->>MCPClient: get_market_news(category: "stocks")
+    MCPClient->>CNBCServer: Fetch CNBC market news
+    CNBCServer-->>MCPClient: CNBC articles
+    MCPClient-->>NewsService: Market news array
+    
+    NewsService->>NewsService: Filter for TSLA relevance
+    
+    alt Insufficient TSLA-specific articles
+        NewsService->>YahooAPI: Fetch TSLA-specific news
+        YahooAPI-->>NewsService: Yahoo Finance TSLA news
+    end
+    
+    NewsService->>NewsService: Merge CNBC + Yahoo news
+    NewsService-->>Frontend: Hybrid news feed
+```
+
+## Historical Data Pipeline (Fixed Aug 25, 2025)
+
+```mermaid
+graph LR
+    subgraph "Frontend"
+        TradingChart[TradingChart.tsx]
+        TradingChart -->|fetchChartData()| MarketDataService[marketDataService.ts]
+        MarketDataService -->|GET /api/stock-history| Axios[Axios HTTP Client]
+    end
+    
+    subgraph "Backend"
+        FastAPI[mcp_server.py]
+        FastAPI -->|mcp_get_stock_history()| MCPClient[mcp_client.py]
+        MCPClient -->|JSON-RPC over stdio| Subprocess[Node.js Subprocess]
+    end
+    
+    subgraph "Market MCP Server"
+        IndexJS[index.js]
+        IndexJS -->|tools/call| StockHistory[get_stock_history tool]
+        StockHistory -->|HTTP GET| YahooAPI[Yahoo Finance v8 API]
+    end
+    
+    subgraph "Data Transformation"
+        YahooAPI -->|Raw ISO timestamps| MCPServer[MCP Server formats]
+        MCPServer -->|data array| Backend[Backend transforms]
+        Backend -->|candles array| Frontend[Frontend displays]
+    end
+    
+    style TradingChart fill:#90EE90
+    style FastAPI fill:#87CEEB
+    style IndexJS fill:#FFE4B5
+    style YahooAPI fill:#FFA07A
+```
+
+## Market Data Integration (MCP)
+
+```mermaid
+sequenceDiagram
+    participant Frontend
+    participant Backend
+    participant MCPClient
+    participant MCPServer
+    participant YahooFinance
+    participant CNBC
+    
+    Frontend->>Backend: GET /api/v1/dashboard?symbol=AAPL
+    Backend->>MCPClient: Initialize connection
+    MCPClient->>MCPServer: Start stdio subprocess
+    MCPServer-->>MCPClient: JSON-RPC ready
+    
+    Backend->>MCPClient: call_tool("get_stock_quote", {symbol: "AAPL"})
+    MCPClient->>MCPServer: JSON-RPC: tools/call
+    MCPServer->>YahooFinance: Fetch quote data
+    YahooFinance-->>MCPServer: Real market data
+    MCPServer-->>MCPClient: Quote response
+    MCPClient-->>Backend: Formatted data
+    
+    Backend->>MCPClient: call_tool("get_market_news", {keywords: ["AAPL"]})
+    MCPClient->>MCPServer: JSON-RPC: tools/call
+    MCPServer->>CNBC: Scrape news articles
+    CNBC-->>MCPServer: Real news data
+    MCPServer-->>MCPClient: News response
+    MCPClient-->>Backend: Formatted articles
+    
+    Backend-->>Frontend: Combined dashboard data
+```
+
+## Real-Time WebSocket Streaming
+
+```mermaid
+graph LR
+    subgraph "WebSocket Architecture"
+        Client[Browser Client]
+        WSEndpoint[/ws/quotes]
+        QuoteService[get_quote()]
+        MCPClient[MCP Client]
+        MCPServer[Market MCP Server]
+        
+        Client -->|WebSocket| WSEndpoint
+        WSEndpoint -->|Poll 2s| QuoteService
+        QuoteService --> MCPClient
+        MCPClient -->|JSON-RPC| MCPServer
+        MCPServer -->|Real Data| MCPClient
+        MCPClient --> QuoteService
+        QuoteService --> WSEndpoint
+        WSEndpoint -->|Stream| Client
     end
 ```
 
@@ -243,6 +517,182 @@ graph TD
     end
 ```
 
+## Three-Pillar Data Architecture
+
+```mermaid
+graph TB
+    subgraph "Complete Data Sources Architecture"
+        Frontend[Frontend Application]
+        
+        subgraph "Three Data Pillars"
+            subgraph "Pillar 1: Yahoo Finance"
+                YF[Yahoo Finance API<br/>via market-mcp-server]
+                YF --> YFData[✓ Free tier data<br/>✓ Historical quotes<br/>✓ Options chains<br/>✓ Technical indicators<br/>✓ Real-time quotes]
+            end
+            
+            subgraph "Pillar 2: CNBC"
+                CNBC[CNBC Web Scraping<br/>via market-mcp-server]
+                CNBC --> CNBCData[✓ Professional journalism<br/>✓ Market analysis<br/>✓ Pre-market movers<br/>✓ Expert sentiment<br/>✓ Breaking news]
+            end
+            
+            subgraph "Pillar 3: Alpaca"
+                ALP[Alpaca Markets API<br/>via alpaca-mcp-server]
+                ALP --> ALPData[✓ Licensed data<br/>✓ Commercial-compliant<br/>✓ Paper trading<br/>✓ Account management<br/>✓ Real-time streaming]
+            end
+        end
+        
+        Frontend --> MCPManager[MCP Manager<br/>Intelligent Routing]
+        MCPManager --> YF
+        MCPManager --> CNBC
+        MCPManager --> ALP
+    end
+    
+    style YF fill:#FFB74D
+    style CNBC fill:#90CAF9
+    style ALP fill:#81C784
+    style MCPManager fill:#64B5F6
+```
+
+## Dual MCP Server Architecture
+
+```mermaid
+graph TB
+    subgraph "Unified MCP Architecture"
+        Frontend[Frontend Application]
+        Frontend -->|Enhanced API| EnhancedEndpoints[Enhanced Endpoints<br/>/api/enhanced/market-data<br/>/api/enhanced/historical-data]
+        Frontend -->|Legacy Support| LegacyEndpoints[Legacy Endpoints<br/>/api/stock-price<br/>/api/alpaca/quote]
+        
+        EnhancedEndpoints --> MCPManager[MCP Manager<br/>Intelligent Routing]
+        LegacyEndpoints --> MCPManager
+        
+        MCPManager -->|Node.js| MarketMCP[market-mcp-server<br/>35+ Yahoo Finance tools<br/>+ CNBC Integration]
+        MCPManager -->|Python| AlpacaMCP[alpaca-mcp-server<br/>11+ Alpaca tools]
+        
+        MarketMCP --> YahooAPI[Yahoo Finance API<br/>Free data<br/>Development use]
+        MarketMCP --> CNBCScraper[CNBC Web Scraping<br/>News & Sentiment<br/>Pre-market movers]
+        AlpacaMCP --> AlpacaAPI[Alpaca Markets API<br/>Licensed data<br/>Production ready]
+    end
+    
+    style MCPManager fill:#64B5F6
+    style AlpacaMCP fill:#81C784
+    style MarketMCP fill:#FFB74D
+    style CNBCScraper fill:#90CAF9
+```
+
+## Comprehensive Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant Backend
+    participant MCPManager
+    participant MarketMCP
+    participant AlpacaMCP
+    participant Yahoo
+    participant CNBC
+    participant Alpaca
+    
+    User->>Frontend: Request market data
+    Frontend->>Backend: GET /api/enhanced/market-data
+    Backend->>MCPManager: get_stock_data("TSLA", "auto")
+    
+    alt Alpaca Available (Primary)
+        MCPManager->>AlpacaMCP: get_stock_snapshot
+        AlpacaMCP->>Alpaca: API Request
+        Alpaca-->>AlpacaMCP: Licensed real-time data
+        AlpacaMCP-->>MCPManager: Formatted response
+    else Yahoo Fallback
+        MCPManager->>MarketMCP: get_stock_quote
+        MarketMCP->>Yahoo: API Request
+        Yahoo-->>MarketMCP: Free tier data
+        MarketMCP-->>MCPManager: Formatted response
+    end
+    
+    MCPManager-->>Backend: Best available data
+    Backend-->>Frontend: Response with source
+    Frontend-->>User: Display data
+    
+    Note over Frontend,CNBC: News Flow (Hybrid System)
+    
+    Frontend->>Backend: GET /api/stock-news?symbol=TSLA
+    Backend->>MCPManager: get_market_news
+    MCPManager->>MarketMCP: get_market_news
+    
+    par CNBC News Fetch
+        MarketMCP->>CNBC: Web scraping
+        CNBC-->>MarketMCP: Articles
+    and Yahoo News Fetch
+        MarketMCP->>Yahoo: News API
+        Yahoo-->>MarketMCP: Symbol news
+    end
+    
+    MarketMCP-->>MCPManager: Merged news
+    MCPManager-->>Backend: Filtered by relevance
+    Backend-->>Frontend: Hybrid news feed
+    Frontend-->>User: Display news
+```
+
+## Hybrid MCP/Direct Architecture (Performance Optimized)
+
+```mermaid
+graph TB
+    subgraph "Production Performance Fix"
+        Request[API Request] --> Factory{MarketServiceFactory<br/>USE_MCP?}
+        
+        Factory -->|false<br/>Production| Direct[DirectMarketDataService]
+        Factory -->|true<br/>Development| MCP[MarketDataService]
+        
+        Direct --> DirectAPI[Direct HTTP to Yahoo Finance]
+        MCP --> Subprocess[Node.js MCP Server Subprocess]
+        Subprocess --> JSONRPC[JSON-RPC Protocol]
+        JSONRPC --> YahooAPI[Yahoo Finance API]
+        
+        DirectAPI -->|40-700ms| Response[Fast Response]
+        YahooAPI -->|15s+ timeout| SlowResponse[Slow/Timeout]
+    end
+    
+    style Direct fill:#90EE90
+    style DirectAPI fill:#90EE90
+    style Response fill:#90EE90
+    style MCP fill:#FFB74D
+    style Subprocess fill:#FFB74D
+    style SlowResponse fill:#FF6B6B
+```
+
+## Performance Metrics Comparison
+
+```mermaid
+graph LR
+    subgraph "Before: MCP Only"
+        Health1[Health Check<br/>15s+ timeout] 
+        Price1[Stock Price<br/>15s+ timeout]
+        History1[Stock History<br/>503 Timeout]
+        News1[Stock News<br/>503 Timeout]
+    end
+    
+    subgraph "After: Hybrid Architecture"
+        Health2[Health Check<br/>40ms ✅]
+        Price2[Stock Price<br/>493ms ✅]
+        History2[Stock History<br/>217ms ✅]
+        News2[Stock News<br/>653ms ✅]
+    end
+    
+    Health1 -.->|375x faster| Health2
+    Price1 -.->|30x faster| Price2
+    History1 -.->|Fixed| History2
+    News1 -.->|Fixed| News2
+    
+    style Health1 fill:#FF6B6B
+    style Price1 fill:#FF6B6B
+    style History1 fill:#FF6B6B
+    style News1 fill:#FF6B6B
+    style Health2 fill:#90EE90
+    style Price2 fill:#90EE90
+    style History2 fill:#90EE90
+    style News2 fill:#90EE90
+```
+
 ## Technology Stack
 
 ```mermaid
@@ -263,7 +713,9 @@ mindmap
       Python 3.x
       httpx
       python-dotenv
-      MCP Integration
+      Hybrid Architecture
+        Direct API (Production)
+        MCP Integration (Development)
     Services
       ElevenLabs
         Conversational AI
@@ -280,6 +732,7 @@ mindmap
       Docker
       docker-compose
       Fly.io ready
+        USE_MCP=false
 ```
 
 ## Error Handling Flow
@@ -398,11 +851,13 @@ graph TD
         StockCard --> Description[Momentum Description]
     end
     
-    subgraph "Chart Analysis Panel"
-        AnalysisItem[Analysis Item]
-        AnalysisItem --> StockName[Stock Name]
-        AnalysisItem --> TimeAgo[Time Ago]
-        AnalysisItem --> Analysis[Analysis Text]
+    subgraph "Chart Analysis Panel - Scrollable"
+        NewsSection[News Section - Expandable Items]
+        NewsSection --> NewsItem[Clickable News Item]
+        NewsItem --> NewsHeader[Header: Symbol + Time]
+        NewsItem --> NewsTitle[Title + Source Badge]
+        NewsItem --> ExpandIcon[▶/▼ Expand Icon]
+        NewsItem --> ExpandedContent[Expanded: Description + Link]
         
         TechnicalLevels[Technical Levels]
         TechnicalLevels --> QELevel[QE Level + Price]
@@ -437,5 +892,275 @@ graph TD
     end
 ```
 
-*Last Updated: 2025-08-24*
+## MCP Tools Overview
+
+### market-mcp-server Tools (Yahoo Finance & CNBC)
+
+#### Yahoo Finance Tools:
+- **Stock Market**: get_stock_quote, get_stock_history, stream_stock_prices, get_options_chain, get_stock_fundamentals, get_earnings_calendar
+- **Crypto**: get_crypto_price, get_crypto_market_data, stream_crypto_prices, get_defi_data, get_nft_collection
+- **Analysis**: get_technical_indicators, get_analyst_ratings, get_insider_trading, get_institutional_holdings
+- **Market Overview**: get_market_overview, get_trending_stocks, get_sector_performance, get_economic_calendar
+- **Forex**: get_forex_rate, get_forex_history, stream_forex_rates
+- **Commodities**: get_commodity_price, get_commodity_history, stream_commodity_prices
+
+#### CNBC Integration Tools:
+- **News & Analysis**: get_market_news (hybrid CNBC + Yahoo), get_sentiment_analysis
+- **CNBC-Specific**: get_cnbc_movers (pre-market gainers/losers), get_cnbc_sentiment (market outlook)
+- **News Categories**: markets, stocks, bonds, commodities, currencies, crypto, economy
+- **Data Methods**: Web scraping with fallback strategies, real-time article extraction
+
+### alpaca-mcp-server Tools (Alpaca Markets)
+- **Account**: get_account, get_positions, get_orders
+- **Market Data**: get_stock_quote, get_stock_bars, get_stock_snapshot, get_latest_bar
+- **Trading**: place_market_order, place_limit_order, cancel_order
+- **Status**: get_market_status
+
+## CNBC Integration Details
+
+### CNBCIntegration Class (`market-mcp-server/cnbc-integration.js`)
+The CNBC integration provides professional financial journalism and market analysis through web scraping:
+
+#### Key Features:
+- **Real-time News Scraping**: Extracts latest articles from CNBC categories
+- **Multi-category Support**: Markets, Stocks, Bonds, Commodities, Currencies, Crypto, Economy
+- **Pre-market Data**: Gainers, losers, and most active stocks before market open
+- **Market Sentiment**: Analysis of market outlook and expert opinions
+- **Fallback Strategies**: Multiple scraping methods with error handling
+
+#### Data Extraction Methods:
+1. **Quote Data** (`getCNBCQuote`):
+   - Tries API endpoints first
+   - Falls back to web scraping
+   - Extracts price, change, volume data
+
+2. **News Articles** (`getCNBCNews`):
+   - Scrapes category pages
+   - Extracts headlines, URLs, timestamps
+   - Caches results for performance
+
+3. **Pre-market Movers** (`getCNBCPreMarket`):
+   - Identifies top gainers/losers
+   - Tracks most active stocks
+   - Provides early market signals
+
+4. **Sentiment Analysis** (`getCNBCSentiment`):
+   - Analyzes article tone
+   - Aggregates expert opinions
+   - Provides market outlook
+
+### News Service Hybrid Strategy
+The backend news service implements intelligent news aggregation:
+
+1. **Primary Source**: CNBC for high-quality financial journalism
+2. **Symbol Filtering**: Analyzes CNBC content for symbol relevance
+3. **Yahoo Supplement**: Adds Yahoo Finance articles when CNBC lacks symbol-specific coverage
+4. **Smart Merging**: Combines sources for comprehensive coverage
+
+## Chart Analysis Panel UI Architecture
+
+### Scrollable News Container Implementation
+The Chart Analysis panel features an enhanced news display system:
+
+```mermaid
+graph TD
+    subgraph "Chart Analysis Panel Layout"
+        AnalysisPanel[Chart Analysis Panel]
+        AnalysisPanel --> ScrollableNews[Scrollable News Container]
+        AnalysisPanel --> FixedSections[Fixed Bottom Sections]
+        
+        subgraph "Scrollable Area (350px max-height)"
+            ScrollableNews --> NewsItem1[Expandable News Item]
+            ScrollableNews --> NewsItem2[Expandable News Item]
+            ScrollableNews --> NewsItemN[... More News Items]
+            
+            NewsItem1 --> ExpandedView[Inline Expanded Content]
+            ExpandedView --> Description[Article Description]
+            ExpandedView --> ReadMore[External Link]
+        end
+        
+        subgraph "Fixed Position Elements"
+            FixedSections --> TechnicalLevels[Technical Levels]
+            FixedSections --> PatternDetection[Pattern Detection]
+            
+            TechnicalLevels --> QELevel[QE Level Display]
+            TechnicalLevels --> STLevel[ST Level Display]
+            TechnicalLevels --> LTBLevel[LTB Level Display]
+        end
+    end
+```
+
+### Key UI Components
+
+#### News Scroll Container (`news-scroll-container`)
+- **Max Height**: 350px with vertical scrolling
+- **Custom Scrollbar**: Styled with 6px width and rounded thumb
+- **Overflow Handling**: Hidden horizontal, auto vertical
+- **Performance**: Smooth scrolling with webkit optimization
+
+#### Expandable News Items
+- **Inline Expansion**: No modal overlay, maintains chart visibility
+- **Visual Indicators**: ▶/▼ icons for expand/collapse state
+- **Source Attribution**: Clear CNBC/Yahoo Finance badges
+- **Click Behavior**: Header toggles expansion, links stop propagation
+
+#### Fixed Technical Sections
+- **Position**: Below scrollable news, always visible
+- **Technical Levels**: QE, ST, LTB with real-time updates
+- **Pattern Detection**: Confidence percentage and pattern name
+
+### CSS Architecture
+```css
+.news-scroll-container {
+  max-height: 350px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-bottom: 16px;
+  padding-right: 4px;
+  flex-shrink: 0;
+}
+
+.news-expanded {
+  padding: 12px;
+  background: #f9f9f9;
+  border-top: 1px solid #e0e0e0;
+  animation: slideDown 0.3s ease-out;
+}
+```
+
+### Data Flow for News Display
+```mermaid
+sequenceDiagram
+    participant Component as TradingDashboardSimple
+    participant Service as marketDataService
+    participant Backend as Backend API
+    participant MCP as MCP Server
+    
+    Component->>Service: getStockNews(symbol)
+    Service->>Backend: GET /api/stock-news?symbol=TSLA
+    Backend->>MCP: Fetch CNBC + Yahoo news
+    MCP-->>Backend: Combined news array
+    Backend-->>Service: Full news response (no limit)
+    Service-->>Component: setStockNews(news)
+    Component->>Component: Render all items in scrollable container
+```
+
+## Key Implementation Files
+
+### Frontend Components
+- **Main Dashboard**: `frontend/src/components/TradingDashboardSimple.tsx`
+  - Lines 359-398: Scrollable news container implementation
+  - Lines 400-433: Fixed technical sections
+  - Lines 84-86: News expansion toggle handler
+  - Line 153: Removed 3-item limit on news display
+
+- **Chart Component**: `frontend/src/components/TradingChart.tsx`
+  - Implements TradingView Lightweight Charts v5
+  - Real-time candlestick data visualization
+  
+- **Styling**: `frontend/src/components/TradingDashboardSimple.css`
+  - Lines 574-601: Scrollable container styles
+  - Custom webkit scrollbar implementation
+  - Expansion animations and transitions
+
+### Backend Services
+- **Main Server**: `backend/mcp_server.py`
+  - FastAPI server with hybrid MCP/Direct architecture
+  - Market data endpoints and WebSocket support
+
+- **Service Factory**: `backend/services/market_service_factory.py`
+  - Intelligent service selection based on USE_MCP environment
+  - Routes to Direct or MCP service transparently
+
+- **Direct Service**: `backend/services/direct_market_service.py`
+  - Direct Yahoo Finance API integration (Production)
+  - Sub-second response times, no subprocess overhead
+
+- **MCP Service**: `backend/services/market_service.py`
+  - MCP subprocess integration (Development)
+  - JSON-RPC communication with Node.js server
+
+- **News Service**: `backend/services/news_service.py`
+  - Hybrid CNBC + Yahoo Finance aggregation
+  - Smart symbol filtering and merging
+
+### MCP Servers
+- **market-mcp-server**: `market-mcp-server/index.js`
+  - Node.js-based MCP server
+  - Yahoo Finance and CNBC integration
+  - 35+ financial data tools
+
+- **alpaca-mcp-server**: `alpaca-mcp-server/server.py`
+  - Python-based MCP server
+  - Alpaca Markets API integration
+  - Trading and account management tools
+
+- **MCP Manager**: `backend/mcp_manager.py`
+  - Orchestrates multiple MCP servers
+  - Intelligent data source routing
+
+### Configuration Files
+- **Backend Environment**: `backend/.env`
+  - API keys for Anthropic, Supabase, ElevenLabs, Alpaca
+  - Server configuration and ports
+
+- **Frontend Environment**: `frontend/.env.development`
+  - API URL configuration (port 8000)
+  - Supabase connection settings
+
+*Last Updated: 2025-08-28*
+
 *This document represents the current architecture of the GVSES AI Market Analysis Assistant application.*
+
+**Latest Updates (Aug 28, 2025 - Alpaca Integration):**
+- ✅ **Alpaca-First Architecture**: Integrated Alpaca Markets as primary data source for quotes and charts
+- ✅ **Professional Market Data**: Using licensed Alpaca data for production-ready trading information
+- ✅ **Automatic Fallback**: Yahoo Finance via MCP serves as automatic fallback when Alpaca unavailable
+- ✅ **Transparent Upgrade**: Same API endpoints, upgraded data sources behind the scenes
+- ✅ **Source Attribution**: All responses include `data_source` field ("alpaca" or "yahoo_mcp")
+- ✅ **Improved Data Quality**: Alpaca provides more accurate intraday bars and real-time quotes
+- ✅ **Backward Compatible**: No frontend changes required, seamless transition
+
+**Earlier Updates (Aug 27, 2025 - Production Performance Fix):**
+- ✅ **Hybrid MCP/Direct Architecture**: Implemented intelligent service selection based on environment
+- ✅ **375x Performance Improvement**: Health check reduced from 15s+ to 40ms in production
+- ✅ **Eliminated Timeouts**: All endpoints now respond in < 700ms in production
+- ✅ **Service Factory Pattern**: MarketServiceFactory transparently routes between Direct and MCP modes
+- ✅ **Direct API Service**: New DirectMarketDataService bypasses MCP subprocess overhead
+- ✅ **Backward Compatible**: Same API interface, frontend unchanged
+- ✅ **Production Optimized**: USE_MCP=false in Fly.io for maximum performance
+
+**Earlier Updates (Aug 26, 2025 - UI Enhancements):**
+- ✅ **Scrollable News Section**: Implemented max-height 350px container with custom scrollbar styling
+- ✅ **Unlimited News Display**: Removed 3-item limit, now shows all available news articles
+- ✅ **Fixed Technical Sections**: Technical Levels and Pattern Detection remain fixed below scrollable area
+- ✅ **Inline Expandable News**: Click-to-expand news items without modal overlays
+- ✅ **Smooth Animations**: Added slideDown animation for news expansion
+- ✅ **Custom Scrollbar**: Webkit-styled scrollbar with 6px width and rounded thumb
+
+**Earlier Updates (Aug 26, 2025 - Architecture):**
+- ✅ **Comprehensive Documentation**: Added complete CNBC integration details and three-pillar data architecture
+- ✅ **CNBC Integration Documented**: Detailed CNBC tools, web scraping methods, and news categorization
+- ✅ **Three-Pillar Architecture**: Clear visualization of Yahoo Finance, CNBC, and Alpaca data sources
+- ✅ **Enhanced Data Flow Diagrams**: Added comprehensive sequence diagrams showing complete data routing
+- ✅ **Dual MCP Server Architecture**: Implemented separate Python-based alpaca-mcp-server alongside Node.js market-mcp-server
+- ✅ **MCP Manager**: Created unified manager for orchestrating multiple MCP server connections
+- ✅ **Enhanced API Endpoints**: Added /api/enhanced/* endpoints for intelligent data source routing
+- ✅ **Environment Configuration**: Updated .env.example with Alpaca and ElevenLabs variables
+
+**Previous Updates (Aug 26, 2025 - Earlier):**
+- ✅ **Alpaca Markets Integration**: Added official Alpaca Markets API for commercial-compliant real-time and historical data
+- ✅ **Dual Data Sources**: System now supports both Yahoo Finance (via MCP) and Alpaca Markets (direct API)
+- ✅ **Paper Trading Ready**: Alpaca paper trading account with $200k buying power integrated
+- ✅ **Backwards Compatible**: All existing Yahoo Finance endpoints preserved alongside new Alpaca endpoints
+- ✅ **Commercial Compliance**: Alpaca provides legally licensed data suitable for production use
+- ✅ **Extended Features**: Access to account info, positions, orders, and fractional trading via Alpaca
+
+**Previous Updates (Aug 25, 2025):**
+- ✅ **Enhanced News System**: Hybrid CNBC + Yahoo Finance news integration
+- ✅ **Improved UX**: Replaced obstructive modal with expandable inline news
+- ✅ **API Fixes**: Corrected port configuration and added missing endpoints
+- ✅ **Scrollable UI**: Chart Analysis panel now handles abundant news content
+- ✅ **Real-time Data**: All news sourced from live CNBC and Yahoo Finance APIs
+- ✅ **MCP Integration**: Full integration with market-mcp-server for real historical data from Yahoo Finance
+- ✅ **Chart Data Pipeline**: Backend MCP client → Market MCP Server → Yahoo Finance API → TradingView Charts

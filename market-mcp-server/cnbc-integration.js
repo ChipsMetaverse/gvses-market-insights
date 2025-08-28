@@ -28,7 +28,7 @@ class CNBCIntegration {
           return result;
         }
       } catch (error) {
-        console.log(`CNBC approach failed: ${error.message}`);
+        console.error(`CNBC approach failed: ${error.message}`);
         continue;
       }
     }

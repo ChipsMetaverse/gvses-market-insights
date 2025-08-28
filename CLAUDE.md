@@ -4,235 +4,244 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-GVSES AI Market Analysis Assistant - A professional trading dashboard with voice-enabled market insights powered by ElevenLabs Conversational AI and Claude. The application provides real-time market data visualization, technical analysis, and an AI voice assistant for market queries. Built with React TypeScript frontend featuring TradingView Lightweight Charts, FastAPI backend, and Supabase for conversation persistence.
+GVSES AI Market Analysis Assistant - A professional trading dashboard with voice-enabled market insights powered by ElevenLabs Conversational AI and Claude. The application provides real-time market data visualization, technical analysis, and an AI voice assistant for market queries. Built with React TypeScript frontend featuring TradingView Lightweight Charts, FastAPI backend with hybrid MCP/Direct API architecture for optimal performance.
 
 ## Key Architecture
 
-- **Backend** (`backend/`): FastAPI server exposing REST endpoints, a proxy to ElevenLabs for signed WS URLs, and text-only `/ask` fallback to Claude
-- **Frontend** (`frontend/`): React + TypeScript + Vite application featuring:
-  - **TradingDashboardSimple**: Main dashboard component with three-panel layout
-  - **TradingChart**: Candlestick chart component using TradingView Lightweight Charts v5
-  - **Voice Assistant**: Real-time voice interface with visual feedback and conversation history
-  - **Market Insights Panel**: Stock tickers with price movements and technical indicators (ST, LTB, QE)
-  - **Chart Analysis Panel**: Real-time market analysis and pattern detection
-- **Database** (`database/`): PostgreSQL schema for Supabase conversation persistence
-- **Docker**: Full containerization support with docker-compose
+### Backend (`backend/`)
+FastAPI server with hybrid MCP/Direct API architecture for optimal performance:
+- **Hybrid Data Service**: Automatically selects best service based on environment
+  - **Direct API Mode** (Production): Sub-second Yahoo Finance responses, no subprocess overhead
+  - **MCP Mode** (Development): AI tooling benefits, JSON-RPC communication
+- **Service Factory Pattern**: `MarketServiceFactory` intelligently routes based on `USE_MCP` environment variable
+- **Dual MCP Support**: market-mcp-server (Node.js) and alpaca-mcp-server (Python) for extended capabilities
+- **ElevenLabs Proxy**: Signed URL generation for WebSocket voice streaming
+- **Claude Integration**: Text-only `/ask` endpoint fallback
+
+### Frontend (`frontend/`)
+React + TypeScript + Vite application with professional trading interface:
+- **TradingDashboardSimple**: Three-panel layout (Market Insights, Interactive Charts, Chart Analysis)
+- **TradingChart**: TradingView Lightweight Charts v5 with real-time candlestick visualization
+- **Voice Assistant**: ElevenLabs Conversational AI with visual feedback
+- **Market Insights Panel**: Stock tickers with technical indicators (ST, LTB, QE)
+- **Chart Analysis Panel**: Scrollable expandable news feed (CNBC + Yahoo Finance hybrid)
+
+### MCP Servers
+- **market-mcp-server** (`market-mcp-server/`): Node.js, 35+ Yahoo Finance and CNBC tools
+- **alpaca-mcp-server** (`alpaca-mcp-server/`): Python, Alpaca Markets API integration
 
 ## Development Commands
 
 ### Backend
 ```bash
-# Install dependencies
 cd backend && pip install -r requirements.txt
-
-# Run development server
 uvicorn mcp_server:app --reload --host 0.0.0.0 --port 8000
 
-# Run test script
-python test_server.py
+# Testing
+python test_server.py          # Basic functionality
+python test_dual_mcp.py         # Dual MCP integration
+python test_alpaca_mcp.py       # Alpaca MCP testing
 ```
 
 ### Frontend
 ```bash
-# Install dependencies
 cd frontend && npm install
-
-# Development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Type checking
-npm run build  # includes tsc
-
-# Linting
-npm run lint
+npm run dev      # Development server (port 5174)
+npm run build    # Production build with TypeScript checking
+npm run lint     # ESLint checking
 ```
 
-### Docker Development
+### Market MCP Server
 ```bash
-# Build and run all services
-docker-compose up --build
+cd market-mcp-server && npm install
+npm start        # Production mode
+npm run dev      # Development with watch
+npm test         # Run tests
+```
 
-# Run in background
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
+### Docker
+```bash
+docker-compose up --build    # Build and run all services
+docker-compose up -d          # Run in background
+docker-compose logs -f        # View logs
+docker-compose down           # Stop services
 ```
 
 ## Environment Configuration
 
-Supabase is required for persistence and multi-user support. ElevenLabs is required for real-time voice (ASR+TTS).
+### Backend (`backend/.env`)
+```bash
+# Required
+ANTHROPIC_API_KEY=sk-ant-...
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOi...
+ELEVENLABS_API_KEY=your_key
+ELEVENLABS_AGENT_ID=your_agent_id
 
-Set variables in:
-- `backend/.env`
-  - `ANTHROPIC_API_KEY`
-  - `SUPABASE_URL`
-  - `SUPABASE_ANON_KEY`
-  - `ELEVENLABS_API_KEY`
-  - `ELEVENLABS_AGENT_ID`
-- `frontend/.env`
-  - `VITE_SUPABASE_URL`
-  - `VITE_SUPABASE_ANON_KEY`
-  - `VITE_API_URL` (default `http://localhost:8000`)
+# Performance Control
+USE_MCP=false    # Set to false in production for Direct API mode
+                 # Set to true in development for MCP benefits
 
-## WebSocket Protocol
+# Optional
+ALPACA_API_KEY=your_alpaca_key
+ALPACA_SECRET_KEY=your_alpaca_secret
+MODEL=claude-3-sonnet-20240229
+```
 
-The application uses ElevenLabs Conversational AI WebSocket for real-time voice conversations. The browser connects directly to ElevenLabs using a signed URL fetched from the backend.
+### Frontend (`frontend/.env` and `frontend/.env.development`)
+```bash
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
+VITE_API_URL=http://localhost:8000    # Important: Use port 8000
+```
 
-Key flow:
-- Client fetches signed URL: `GET /elevenlabs/signed-url`
-- Client opens WS to ElevenLabs: `wss://api.elevenlabs.io/v1/convai/conversation?...`
-- Client streams mic audio (`user_audio_chunk`) and receives events:
-  - `audio` (base64 PCM chunks) → queued and played
-  - `user_transcript` → user’s recognized text
-  - `agent_response` → agent’s text (usually sent with first `audio`)
-  - `agent_response_correction`, `ping/pong`, etc.
+## API Endpoints
 
-## Key Dependencies
+### Core Market Data
+All endpoints support both MCP and Direct modes transparently:
 
-Backend:
-- FastAPI with WebSocket support
-- httpx for HTTP client operations
-- Supabase client for database operations
-- SpeechRecognition and gTTS for audio processing
-- python-dotenv for environment configuration
+- `GET /api/stock-price?symbol=TSLA` - Real-time price (< 500ms in Direct mode)
+- `GET /api/stock-history?symbol=TSLA&days=100` - Historical candles (< 300ms in Direct mode)
+- `GET /api/stock-news?symbol=TSLA` - Hybrid CNBC + Yahoo news (< 700ms in Direct mode)
+- `GET /api/comprehensive-stock-data?symbol=TSLA` - Complete stock information
+- `GET /api/market-overview` - Market indices and movers
 
-Frontend:
-- React 18 with TypeScript
-- Vite for build tooling
-- Supabase JS client
-- `@elevenlabs/client` and `voice-stream` for Conversational AI
-- `lightweight-charts` v5 for TradingView charting
-- ESLint for code quality
+### Enhanced Endpoints
+- `GET /api/enhanced/market-data` - Auto-selects best data source
+- `GET /api/enhanced/historical-data` - Intelligent routing
+- `GET /api/enhanced/compare-sources` - Debug tool for data comparison
 
-## Testing
+### Voice & AI
+- `GET /elevenlabs/signed-url` - WebSocket URL for voice streaming
+- `POST /ask` - Text-only Claude fallback
+- `WS /ws/quotes` - Real-time quote streaming
 
-- Backend testing: Run `python test_server.py` from project root
-- Frontend: No test runner configured
+### Health & Status
+- `GET /health` - Reports service mode (MCP or Direct) and health status
 
-## Port Configuration
+## Performance Characteristics
 
-- Backend API: http://localhost:8000
-- Frontend Dev: http://localhost:5174 (configured in vite.config.ts)
-- API Documentation: http://localhost:8000/docs
+### Production (Direct Mode)
+- **Response Times**: 40-700ms (375x faster than MCP)
+- **Cold Start**: None (direct HTTP calls)
+- **Reliability**: No subprocess management issues
+- **Memory**: Minimal overhead
 
-## Database Schema
+### Development (MCP Mode)
+- **Response Times**: 3-15+ seconds (subprocess overhead)
+- **Cold Start**: 3-5 seconds per subprocess
+- **Benefits**: AI tooling integration, unified protocol
+- **Use Case**: Development and AI agent interactions
 
-When using Supabase, the schema in `database/schema.sql` creates:
-- `conversations` table for message storage
-- `sessions` table for conversation sessions
-- `audio_files` table for audio recordings
+## Key Implementation Details
 
-## MCP Server Configuration
+### Hybrid Architecture (`backend/services/market_service_factory.py`)
+```python
+def create_market_service():
+    use_mcp = os.getenv('USE_MCP', 'true').lower() == 'true'
+    if use_mcp:
+        return MarketDataService()  # MCP mode
+    else:
+        return DirectMarketDataService()  # Direct API mode
+```
 
-External MCP servers can be configured via the `MCP_SERVERS` environment variable as a JSON array in the backend `.env` file.
+### Direct Service Benefits (`backend/services/direct_market_service.py`)
+- Native Python Yahoo Finance client (no subprocess)
+- Async HTTP operations with httpx
+- Proper error handling with retries
+- Sub-second response times
 
----
+### MCP Integration (`backend/mcp_client.py`)
+- JSON-RPC over stdio communication
+- Subprocess management for Node.js server
+- Tool abstraction for market data access
+- Best for AI agent interactions
 
-## Implementation guide (end-to-end)
+## Testing Scripts
 
-### 1) Create an ElevenLabs agent (CLI or dashboard)
+- `test_server.py` - API endpoint functionality
+- `test_dual_mcp.py` - Dual MCP server integration
+- `test_alpaca_mcp.py` - Alpaca Markets testing
+- `test_elevenlabs_conversation.py` - Voice conversation
+- `test_supabase.py` - Database connection
 
-- CLI (recommended):
-  1. Install and auth: `npm i -g @elevenlabs/convai-cli` then `export ELEVENLABS_API_KEY=...`
-  2. Initialize: `cd elevenlabs && convai init`
-  3. Create dev agent: `convai add agent "Market Insights Voice" --template minimal --env dev --skip-upload`
-  4. Open the generated JSON in `elevenlabs/agent_configs/dev/` and set:
-     - `conversation_config.agent.prompt`: paste contents of `idealagent.md`
-     - `conversation_config.agent.language`: `en`
-     - `conversation_config.llm.temperature`: `0.3` (or as needed)
-     - `conversation_config.tts`: `{ model: "eleven-multilingual-v1", voice_id: "<your_voice_id>", audio_format: { format: "pcm", sample_rate: 44100 } }`
-     - `conversation_config.asr`: `{ model: "nova-2-general", language: "auto" }`
-     - `conversation_config.conversation.text_only`: `false`
-  5. Sync: `convai sync --env dev` and get the Agent ID: `convai status --agent "Market Insights Voice"`
-  6. Set `ELEVENLABS_AGENT_ID` in `backend/.env`.
+## Common Development Tasks
 
-- Dashboard alternative:
-  - Create an agent at `https://elevenlabs.io/app/conversational-ai`, configure ASR/voice, copy the Agent ID.
+### Switching Between MCP and Direct Mode
+1. Set `USE_MCP=false` in `backend/.env` for Direct mode
+2. Set `USE_MCP=true` for MCP mode
+3. Restart backend server
+4. Check `/health` endpoint to verify mode
 
-### 2) Configure environment variables
+### Adding New Market Data Endpoint
+1. Add method to both `MarketDataService` and `DirectMarketDataService`
+2. Ensure consistent interface between services
+3. Add FastAPI endpoint in `mcp_server.py`
+4. Update frontend service in `marketDataService.ts`
 
-- `backend/.env` must include: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`.
-- `frontend/.env` must include: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `VITE_API_URL`.
+### Modifying Voice Agent
+1. Update prompt in `idealagent.md`
+2. Sync: `cd elevenlabs && convai sync --env dev`
+3. Test: `python test_elevenlabs_conversation.py`
 
-### 3) Backend endpoints
+### Updating Chart Analysis Panel
+1. Modify `TradingDashboardSimple.tsx` (news/analysis sections)
+2. Update styles in `TradingDashboardSimple.css`
+3. Maintain 350px max-height for scrollable container
 
-- `GET /health` → basic health
-- `GET /elevenlabs/signed-url` → returns `{ signed_url }` by proxying ElevenLabs `get-signed-url`
-- `POST /ask` → text-only fallback to Claude (optional for voice path)
+## Architecture Philosophy
 
-### 4) Frontend behavior (what to expect)
+- **Performance First**: Direct API for production, MCP for development
+- **Real Data Only**: All market data from real APIs (Yahoo Finance, CNBC, Alpaca)
+- **Hybrid Intelligence**: Multiple data sources for comprehensive insights
+- **Non-Obstructive UI**: Expandable elements instead of modals
+- **Smart Service Selection**: Automatic environment-based optimization
+- **Voice-First Design**: Natural voice interactions with visual feedback
 
-- The UI shows:
-  - Start Voice Chat / Stop Voice Chat buttons
-  - A text input and Send button (“Or type your message…”) below the voice controls
-  - An audio visualizer that moves while you speak
-  - A scrolling chat history that updates with user and assistant messages
+## Production Deployment
 
-- When you click “Start Voice Chat”:
-  - The app requests mic permission and immediately starts listening and streaming audio to ElevenLabs
-  - You can speak right away; recognized text appears as `user_transcript`
-  - The agent responds with streamed audio and an `agent_response` message
+### Fly.io Configuration
+```toml
+[env]
+  USE_MCP = "false"  # Critical: Use Direct mode in production
+  PORT = "8000"
+```
 
-- When you type in the input box and click Send:
-  - The text is sent to the same ElevenLabs session as a `user_message`
-  - The agent responds as with voice input
+### Performance Metrics (Production)
+| Endpoint | MCP Mode | Direct Mode | Improvement |
+|----------|----------|-------------|-------------|
+| Health | 15s+ timeout | 40ms | 375x faster |
+| Stock Price | 15s+ timeout | 493ms | 30x faster |
+| Stock History | 503 Timeout | 217ms | Fixed |
+| Stock News | 503 Timeout | 653ms | Fixed |
 
-### 5) Persistence
+## Troubleshooting
 
-- Supabase is available to store conversation history. You can persist `user_transcript` and `agent_response` events directly from the frontend using the provided `SupabaseProvider` and client. Ensure RLS policies are set per `database/schema.sql`.
+### Timeout Issues in Production
+- **Solution**: Ensure `USE_MCP=false` in production environment
+- **Verification**: Check `/health` endpoint for "service_mode": "Direct"
 
-### 6) Troubleshooting voice input
+### MCP Server Not Starting
+- **Check**: Node.js installed and in PATH
+- **Verify**: `cd market-mcp-server && npm install`
+- **Alternative**: Switch to Direct mode with `USE_MCP=false`
 
-- Verify backend returns a signed URL:
-  - `curl -s http://localhost:8000/elevenlabs/signed-url`
-- Check browser Network tab:
-  - There should be a WS to `wss://api.elevenlabs.io/v1/convai/conversation?...`
-- Ensure mic permission is granted and no OS-level block is present
-- Ensure your ElevenLabs agent has ASR configured (`nova-2-general`) and is not configured to speak first if you prefer it to wait
-- If using a private agent, ensure allowlist and signed URLs are configured for your domain or `localhost`
+### Voice Not Working
+1. Check ElevenLabs signed URL: `curl http://localhost:8000/elevenlabs/signed-url`
+2. Verify WebSocket connection in browser Network tab
+3. Ensure microphone permissions granted
+4. Check ElevenLabs agent configuration
 
-### 7) Production notes
+## Recent Updates
 
-- Consider reconnect/backoff handling for WS
-- Add jitter buffer or more advanced audio queueing if needed
-- Configure MCP tools in ElevenLabs with “Always Ask” first, then relax to fine-grained approvals as trust grows
+### Production Performance Fix (Latest)
+- Implemented hybrid MCP/Direct architecture
+- 375x performance improvement in production
+- Eliminated subprocess timeout issues
+- Maintained backward compatibility
 
-### 8) Direct Claude usage (optional)
-
-- The `/ask` endpoint remains available for text-only flows to Claude. For a consistent experience, prefer sending text via the ElevenLabs WS (`user_message`) so voice and text share one agent session.
-
-## Trading Dashboard Components
-
-### TradingDashboardSimple (`frontend/src/components/TradingDashboardSimple.tsx`)
-Main dashboard component implementing the GVSES AI Market Analysis Assistant interface:
-- Three-panel layout: Market Insights (left), Interactive Charts with Voice (center), Chart Analysis (right)
-- Tab navigation between Interactive Charts and Voice + Manual Control modes
-- Responsive design with clean white professional styling
-
-### TradingChart (`frontend/src/components/TradingChart.tsx`)
-Candlestick chart component using TradingView Lightweight Charts v5:
-- Real-time price data visualization
-- Technical level overlays (QE, ST, LTB levels)
-- Responsive chart sizing
-- Dark theme configuration
-
-### Voice Assistant Interface
-Interactive voice control with visual feedback:
-- Animated microphone with pulse rings when listening
-- Recording timer display
-- Audio visualizer bars
-- Voice conversation history with user/assistant messages
-- "Control the chart" button for voice commands
-
-### Market Data Display
-- Stock cards with symbols, prices, and percentage changes
-- Color-coded technical indicators (ST, LTB, QE)
-- Real-time chart analysis updates
-- Pattern detection with confidence levels
+### Enhanced News System
+- Hybrid CNBC + Yahoo Finance integration
+- Expandable inline news (no modals)
+- Smart symbol relevance filtering
+- Scrollable container with smooth animations

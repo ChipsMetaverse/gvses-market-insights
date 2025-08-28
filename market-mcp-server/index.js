@@ -5,6 +5,20 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import yahooFinance from 'yahoo-finance2';
+
+// Redirect console.log to stderr for MCP server to prevent stdout pollution
+// This ensures JSON-RPC protocol works correctly while preserving debug messages
+const originalConsoleLog = console.log;
+console.log = (...args) => {
+  const message = args.join(' ');
+  // Only allow JSON-RPC messages to stdout
+  if (message.startsWith('{"jsonrpc"')) {
+    originalConsoleLog(...args);
+  } else {
+    // All other messages (including Yahoo Finance debug) go to stderr
+    console.error('[DEBUG]', ...args);
+  }
+};
 import axios from 'axios';
 import WebSocket from 'ws';
 import * as cheerio from 'cheerio';
@@ -679,7 +693,7 @@ class MarketMCPServer {
             result.dataSources.push('CNBC');
           }
         } catch (cnbcError) {
-          console.log(`CNBC data unavailable for ${args.symbol}`);
+          console.error(`CNBC data unavailable for ${args.symbol}`);
         }
       }
       
@@ -1256,7 +1270,7 @@ class MarketMCPServer {
         newsPromises.push(
           cnbc.getCNBCNews(cnbcCategory, limit)
             .catch(err => {
-              console.log('CNBC news fetch failed:', err.message);
+              console.error('CNBC news fetch failed:', err.message);
               return [];
             })
         );

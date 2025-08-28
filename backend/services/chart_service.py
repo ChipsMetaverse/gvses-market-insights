@@ -25,6 +25,18 @@ def build_chart_data(symbol: str, range_str: str, candles: List[Dict[str, Any]])
     processed_candles = []
     volume_bars = []
     
+    # Handle case where candles is None or empty
+    if not candles:
+        return {
+            "range": range_str,
+            "interval": interval,
+            "timezone": "UTC",
+            "candles": [],
+            "volume_bars": None,
+            "price_min": None,
+            "price_max": None
+        }
+    
     for candle in candles:
         # Handle both dict and object formats
         if hasattr(candle, '__dict__'):

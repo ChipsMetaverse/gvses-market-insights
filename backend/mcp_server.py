@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import uuid
+import datetime
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
@@ -23,6 +24,9 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 import logging
 from market_data_service import MarketDataService
+from routers.dashboard_router import router as dashboard_router
+from mcp_client import get_stock_history as mcp_get_stock_history
+from services.market_service_factory import MarketServiceFactory
 
 # Load environment variables from .env if present
 load_dotenv()
@@ -42,6 +46,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount routers
+app.include_router(dashboard_router)
+
+# Try to mount Alpaca router if available
+try:
+    from routers.alpaca_router import router as alpaca_router
+    app.include_router(alpaca_router)
+    logger.info("Alpaca router mounted successfully")
+except ImportError as e:
+    logger.warning(f"Alpaca router not available: {e}")
+except Exception as e:
+    logger.error(f"Error mounting Alpaca router: {e}")
+
+# Mount enhanced market router for dual MCP support
+try:
+    from routers.enhanced_market_router import router as enhanced_router
+    app.include_router(enhanced_router)
+    logger.info("Enhanced market router mounted successfully")
+except ImportError as e:
+    logger.warning(f"Enhanced market router not available: {e}")
+except Exception as e:
+    logger.error(f"Error mounting enhanced market router: {e}")
 
 # Initialize Supabase client
 def get_supabase_client() -> Client:
@@ -215,12 +242,18 @@ market_service = MarketDataService()
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
-    global supabase, conversation_manager, claude_service
+    global supabase, conversation_manager, claude_service, market_service
     try:
         supabase = get_supabase_client()
         conversation_manager = ConversationManager(supabase)
         claude_service = ClaudeService()
-        logger.info("Services initialized successfully")
+        
+        # Initialize and warm up market service
+        market_service = await MarketServiceFactory.initialize_service()
+        service_mode = MarketServiceFactory.get_service_mode()
+        logger.info(f"Market service initialized in {service_mode} mode")
+        
+        logger.info("All services initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize services: {e}")
         # Services will be None, endpoints will handle gracefully
@@ -229,98 +262,34 @@ async def startup_event():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    return {
+        "status": "healthy",
+        "service_mode": MarketServiceFactory.get_service_mode(),
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
 
 @app.get("/api/stock-price")
 async def get_stock_price(symbol: str):
-    """Get comprehensive stock data for ElevenLabs tool webhook."""
+    """Get comprehensive stock data using the appropriate service."""
     try:
-        # Try to fetch from Yahoo Finance API (free tier)
-        async with httpx.AsyncClient() as client:
-            # Using Yahoo Finance API v8 (unofficial but reliable)
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol.upper()}"
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-            
-            response = await client.get(url, headers=headers, timeout=10.0)
-            
-            if response.status_code == 200:
-                data = response.json()
-                result = data.get("chart", {}).get("result", [{}])[0]
-                meta = result.get("meta", {})
-                
-                current_price = meta.get("regularMarketPrice", 0)
-                prev_close = meta.get("chartPreviousClose", meta.get("previousClose", current_price))
-                change = current_price - prev_close
-                
-                # Get additional quote data
-                quote_url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol.upper()}"
-                quote_response = await client.get(quote_url, headers=headers, timeout=10.0)
-                quote_data = {}
-                if quote_response.status_code == 200:
-                    quotes = quote_response.json().get("quoteResponse", {}).get("result", [])
-                    if quotes:
-                        quote_data = quotes[0]
-                
-                return {
-                    "symbol": symbol.upper(),
-                    "company_name": quote_data.get("longName", meta.get("symbol", symbol.upper())),
-                    "price": round(current_price, 2),
-                    "change": round(change, 2),
-                    "change_percent": round((change / prev_close * 100) if prev_close else 0, 2),
-                    "previous_close": round(prev_close, 2),
-                    "open": round(meta.get("regularMarketOpen", 0), 2),
-                    "day_low": round(meta.get("regularMarketDayLow", 0), 2),
-                    "day_high": round(meta.get("regularMarketDayHigh", 0), 2),
-                    "year_low": round(quote_data.get("fiftyTwoWeekLow", 0), 2),
-                    "year_high": round(quote_data.get("fiftyTwoWeekHigh", 0), 2),
-                    "volume": meta.get("regularMarketVolume", 0),
-                    "avg_volume": quote_data.get("averageDailyVolume3Month", 0),
-                    "market_cap": quote_data.get("marketCap", meta.get("marketCap", 0)),
-                    "pe_ratio": round(quote_data.get("trailingPE", 0), 2),
-                    "eps": round(quote_data.get("epsTrailingTwelveMonths", 0), 2),
-                    "dividend_yield": round(quote_data.get("dividendYield", 0) * 100 if quote_data.get("dividendYield") else 0, 2),
-                    "beta": round(quote_data.get("beta", 0), 2),
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "source": "Yahoo Finance"
-                }
-            else:
-                # Fallback to mock data if API fails
-                import random
-                price = round(150 + random.uniform(-10, 10), 2)
-                change = round(random.uniform(-5, 5), 2)
-                
-                return {
-                    "symbol": symbol.upper(),
-                    "price": price,
-                    "change": change,
-                    "change_percent": round((change / price) * 100, 2),
-                    "volume": random.randint(10000000, 100000000),
-                    "market_cap": random.randint(1000000000, 3000000000000),
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "source": "mock"
-                }
-                
-    except Exception as e:
-        logger.error(f"Error fetching stock price: {e}")
-        # Return mock data on error
-        import random
-        price = round(150 + random.uniform(-10, 10), 2)
-        change = round(random.uniform(-5, 5), 2)
+        # Use the factory-selected service (MCP or Direct)
+        service = MarketServiceFactory.get_service()
+        return await service.get_stock_price(symbol)
         
-        return {
-            "symbol": symbol.upper(),
-            "price": price,
-            "change": change,
-            "change_percent": round((change / price) * 100, 2),
-            "volume": random.randint(10000000, 100000000),
-            "market_cap": random.randint(1000000000, 3000000000000),
-            "timestamp": datetime.utcnow().isoformat(),
-            "source": "mock",
-            "error": str(e)
-        }
+    except TimeoutError:
+        logger.warning(f"Timeout fetching price for {symbol}")
+        # Return a proper error response
+        raise HTTPException(
+            status_code=503,
+            detail=f"Service temporarily unavailable. Request timed out for {symbol}"
+        )
+    except Exception as e:
+        logger.error(f"Error fetching stock price for {symbol}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching stock data: {str(e)}"
+        )
 
 
 @app.get("/api/comprehensive-stock-data")
@@ -334,16 +303,78 @@ async def get_comprehensive_stock_data(symbol: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/stock-news")
-async def get_stock_news(symbol: str):
-    """Get latest news for a stock."""
+@app.get("/api/stock-history")
+async def get_stock_history(symbol: str, days: int = 50):
+    """Get historical stock data using the appropriate service."""
     try:
-        async with httpx.AsyncClient() as client:
-            news = await market_service.get_stock_news(client, symbol)
-            return {"symbol": symbol.upper(), "news": news}
+        logger.info(f"Fetching {days} days of historical data for {symbol}")
+        
+        # Use the factory-selected service (MCP or Direct)
+        service = MarketServiceFactory.get_service()
+        result = await service.get_stock_history(symbol, days)
+        
+        # Ensure we have the expected format for frontend
+        if result and isinstance(result, dict):
+            # Transform 'date' field to 'time' if needed (for TradingView compatibility)
+            if 'candles' in result:
+                for candle in result['candles']:
+                    if 'date' in candle and 'time' not in candle:
+                        candle['time'] = candle.pop('date')
+            
+            return result
+        else:
+            raise ValueError(f"Invalid response format for {symbol}")
+            
+    except TimeoutError:
+        logger.warning(f"Timeout fetching history for {symbol}")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Service temporarily unavailable",
+                "message": f"Request timed out for {symbol}",
+                "symbol": symbol,
+                "days": days
+            }
+        )
     except Exception as e:
-        logger.error(f"Error fetching news: {e}")
-        return {"symbol": symbol.upper(), "news": []}
+        logger.error(f"Error fetching stock history for {symbol}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Historical data error",
+                "message": str(e),
+                "symbol": symbol,
+                "days": days
+            }
+        )
+
+
+@app.get("/api/stock-news")
+async def get_stock_news(symbol: str, limit: int = 10):
+    """Get latest news for a stock using the appropriate service."""
+    try:
+        # Use the factory-selected service (MCP or Direct)
+        service = MarketServiceFactory.get_service()
+        result = await service.get_stock_news(symbol, limit)
+        
+        # Ensure consistent format - keep original "news" field name for frontend compatibility
+        if result and isinstance(result, dict):
+            articles = result.get("articles", result.get("news", result.get("items", [])))
+            return {
+                "symbol": symbol.upper(),
+                "news": articles,  # Keep original field name for frontend
+                "total": len(articles),
+                "source": result.get("data_source", "unknown")
+            }
+        else:
+            return {"symbol": symbol.upper(), "news": [], "total": 0}
+            
+    except TimeoutError:
+        logger.warning(f"Timeout fetching news for {symbol}")
+        return {"symbol": symbol.upper(), "news": [], "error": "Timeout"}
+    except Exception as e:
+        logger.error(f"Error fetching news for {symbol}: {e}")
+        return {"symbol": symbol.upper(), "news": [], "error": str(e)}
 
 
 @app.get("/api/analyst-ratings")
@@ -455,35 +486,6 @@ async def get_elevenlabs_signed_url(agent_id: Optional[str] = Query(default=None
             logger.error(f"ElevenLabs get-signed-url error: {e}")
             raise HTTPException(status_code=500, detail="Internal server error")
 
-
-@app.get("/elevenlabs/signed-url")
-async def get_elevenlabs_signed_url(agent_id: Optional[str] = None):
-    """Get a signed URL for ElevenLabs WebSocket connection."""
-    elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY")
-    default_agent_id = os.environ.get("ELEVENLABS_AGENT_ID")
-    
-    if not elevenlabs_api_key:
-        raise HTTPException(status_code=500, detail="ElevenLabs API key not configured")
-    
-    # Use provided agent_id or fall back to default
-    final_agent_id = agent_id or default_agent_id
-    if not final_agent_id:
-        raise HTTPException(status_code=400, detail="Agent ID required")
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(
-                f"https://api.elevenlabs.io/v1/convai/conversation/get-signed-url",
-                params={"agent_id": final_agent_id},
-                headers={"xi-api-key": elevenlabs_api_key},
-                timeout=10.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            return {"signed_url": data.get("signed_url")}
-        except Exception as e:
-            logger.error(f"ElevenLabs signed URL error: {e}")
-            raise HTTPException(status_code=500, detail="Failed to get signed URL")
 
 
 class ConversationRecordRequest(BaseModel):

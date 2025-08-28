@@ -1,0 +1,4 @@
+# Alpaca MCP Server Requirements
+mcp>=1.0.0
+alpaca-py>=0.33.0
+python-dotenv>=1.0.0

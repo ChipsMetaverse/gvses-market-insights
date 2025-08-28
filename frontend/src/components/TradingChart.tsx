@@ -13,16 +13,23 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
   const candlestickSeriesRef = useRef<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [technicalLevels, setTechnicalLevels] = useState<any>({})
+  const [error, setError] = useState<string | null>(null)
 
   // Fetch real historical data
   const fetchChartData = async (symbol: string) => {
     setIsLoading(true)
+    setError(null)
     try {
       const history = await marketDataService.getStockHistory(symbol, 100)
       
-      // Convert to lightweight-charts format
+      // Check if we have actual candle data
+      if (!history.candles || history.candles.length === 0) {
+        throw new Error(`No historical data available for ${symbol}`)
+      }
+      
+      // Convert to lightweight-charts format (using Unix timestamps from API)
       const chartData = history.candles.map(candle => ({
-        time: Date.parse(candle.date) / 1000,
+        time: candle.time || candle.date, // API returns 'time' field with Unix timestamp
         open: candle.open,
         high: candle.high,
         low: candle.low,
@@ -34,10 +41,12 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
       setTechnicalLevels(levels)
       
       return chartData
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching chart data:', error)
-      // Fall back to sample data if API fails
-      return generateSampleData()
+      // Set error message for display
+      const errorMsg = error?.response?.data?.detail?.message || error?.message || 'Failed to load chart data'
+      setError(errorMsg)
+      return null
     } finally {
       setIsLoading(false)
     }
@@ -154,6 +163,7 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
         
         chart.timeScale().fitContent()
       }
+      // If chartData is null, error state is already set in fetchChartData
     }
 
     loadChartData()
@@ -194,7 +204,39 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
           Loading chart data...
         </div>
       )}
-      <div ref={chartContainerRef} className="w-full" style={{ opacity: isLoading ? 0.5 : 1 }} />
+      
+      {error && !isLoading && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 10,
+          background: 'rgba(255, 255, 255, 0.95)',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+          border: '2px solid #ef4444',
+          maxWidth: '400px',
+          textAlign: 'center' as const
+        }}>
+          <div style={{ color: '#ef4444', fontWeight: 'bold', marginBottom: '10px' }}>
+            Chart Error
+          </div>
+          <div style={{ color: '#666', fontSize: '14px', lineHeight: '1.4' }}>
+            {error}
+          </div>
+        </div>
+      )}
+      
+      <div 
+        ref={chartContainerRef} 
+        className="w-full" 
+        style={{ 
+          opacity: (isLoading || error) ? 0.3 : 1,
+          height: '100%'
+        }} 
+      />
     </div>
   )
 }

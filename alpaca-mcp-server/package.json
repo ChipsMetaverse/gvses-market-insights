@@ -1,0 +1,62 @@
+{
+  "name": "alpaca-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for Alpaca Markets integration",
+  "main": "server.py",
+  "scripts": {
+    "start": "python3 server.py",
+    "install": "pip3 install -r requirements.txt"
+  },
+  "mcp": {
+    "name": "alpaca-mcp-server",
+    "description": "Professional trading data and execution via Alpaca Markets",
+    "tools": [
+      {
+        "name": "get_account",
+        "description": "Get Alpaca account information"
+      },
+      {
+        "name": "get_positions",
+        "description": "Get all open positions"
+      },
+      {
+        "name": "get_orders",
+        "description": "Get orders with specified status"
+      },
+      {
+        "name": "get_stock_quote",
+        "description": "Get latest quote for a stock"
+      },
+      {
+        "name": "get_stock_bars",
+        "description": "Get historical bar data"
+      },
+      {
+        "name": "get_stock_snapshot",
+        "description": "Get comprehensive stock snapshot"
+      },
+      {
+        "name": "get_latest_bar",
+        "description": "Get the latest bar for a stock"
+      },
+      {
+        "name": "place_market_order",
+        "description": "Place a market order (paper trading only)"
+      },
+      {
+        "name": "place_limit_order",
+        "description": "Place a limit order (paper trading only)"
+      },
+      {
+        "name": "cancel_order",
+        "description": "Cancel an open order"
+      },
+      {
+        "name": "get_market_status",
+        "description": "Get current market status"
+      }
+    ]
+  },
+  "author": "",
+  "license": "MIT"
+}

@@ -24,11 +24,25 @@ async def get_dashboard(
     symbol: str = Query(..., description="Stock symbol"),
     range: TimeRange = Query(TimeRange.D1, description="Time range")
 ):
-    """Get complete dashboard data"""
+    """Get complete dashboard data - REAL DATA ONLY"""
     
-    # Fetch quote/snapshot
-    quote = get_quote(symbol)
-    candles = get_ohlcv(symbol, range.value)
+    try:
+        # Fetch quote/snapshot
+        quote = await get_quote(symbol)
+        candles = await get_ohlcv(symbol, range.value)
+    except ValueError as e:
+        # Return error response if real data not available
+        return format_response(
+            data=None,
+            error=str(e),
+            meta={
+                "symbol": symbol.upper(),
+                "requested_range": range.value,
+                "server_time": datetime.now(timezone.utc).isoformat(),
+                "timezone": "UTC",
+                "version": "1.0.0"
+            }
+        )
     
     # Build price header
     price_header = {
@@ -81,7 +95,7 @@ async def get_dashboard(
     insights = get_insights(symbol=symbol, spot=quote["last"], horizon_days=30)
     
     # Get related news
-    news = get_related_news(symbol=symbol, limit=6)
+    news = await get_related_news(symbol=symbol, limit=6)
     
     # Combine all data
     data = {
@@ -113,7 +127,7 @@ async def get_chart(
 ):
     """Get chart data only"""
     
-    candles = get_ohlcv(symbol, range.value)
+    candles = await get_ohlcv(symbol, range.value)
     chart = build_chart_data(symbol, range.value, candles)
     
     meta = {
@@ -134,7 +148,7 @@ async def get_technical(
 ):
     """Get technical analysis overview"""
     
-    candles = get_ohlcv(symbol, range.value)
+    candles = await get_ohlcv(symbol, range.value)
     technical = build_technical_overview(symbol, candles)
     
     meta = {
@@ -155,7 +169,7 @@ async def get_news(
 ):
     """Get related news"""
     
-    news = get_related_news(symbol=symbol, limit=limit)
+    news = await get_related_news(symbol=symbol, limit=limit)
     
     meta = {
         "symbol": symbol.upper(),
@@ -175,7 +189,7 @@ async def get_strategic_insights(
 ):
     """Get options strategy recommendations"""
     
-    quote = get_quote(symbol)
+    quote = await get_quote(symbol)
     insights = get_insights(symbol=symbol, spot=quote["last"], horizon_days=horizon_days)
     
     meta = {
@@ -212,7 +226,7 @@ async def websocket_quotes(websocket: WebSocket, symbol: Optional[str] = None):
     try:
         while True:
             # Get current quote
-            quote = get_quote(symbol)
+            quote = await get_quote(symbol)
             
             # Send quote update
             message = {
