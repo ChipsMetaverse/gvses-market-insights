@@ -186,24 +186,29 @@ export const TradingDashboardSimple: React.FC = () => {
   }, []);
 
   
-  // Single connect/disconnect handler
+  // Single connect/disconnect handler with debounce
   const handleConnectToggle = async () => {
+    const now = Date.now();
+    
+    // Debounce rapid clicks (minimum 1 second between attempts)
+    if (now - connectionAttemptTimeRef.current < 1000) {
+      console.log('Debouncing rapid connection attempt');
+      return;
+    }
+    
+    connectionAttemptTimeRef.current = now;
+    
     if (isConnected) {
       console.log('Disconnecting...');
       // Disconnect everything
       stopVoiceRecording();
       stopConversation();
+      hasStartedRecordingRef.current = false;
     } else {
       console.log('Connecting to ElevenLabs...');
-      // Connect and auto-start listening
+      // Connect (voice recording will auto-start via useEffect when connected)
       try {
         await startConversation();
-        console.log('Connected! Starting voice recording in 1 second...');
-        // Auto-start listening after connection
-        setTimeout(() => {
-          console.log('Starting voice recording now...');
-          startVoiceRecording();
-        }, 1000);
       } catch (error) {
         console.error('Failed to connect:', error);
         alert('Failed to connect to voice assistant. Please check your connection and try again.');
@@ -345,6 +350,38 @@ export const TradingDashboardSimple: React.FC = () => {
     fetchStockAnalysis(selectedSymbol);
   }, [selectedSymbol]);
 
+  // Track if we've already started recording to prevent duplicates
+  const hasStartedRecordingRef = useRef(false);
+  const connectionAttemptTimeRef = useRef<number>(0);
+  
+  // Auto-start voice recording when connected
+  useEffect(() => {
+    let isMounted = true;
+    let timer: NodeJS.Timeout;
+    
+    if (isConnected && !isRecording && !hasStartedRecordingRef.current) {
+      console.log('Connection established, starting voice recording...');
+      hasStartedRecordingRef.current = true;
+      
+      // Small delay to ensure everything is ready
+      timer = setTimeout(() => {
+        if (isMounted && isConnected && !isRecording) {
+          startVoiceRecording();
+        }
+      }, 500);
+    }
+    
+    // Reset flag when disconnected
+    if (!isConnected) {
+      hasStartedRecordingRef.current = false;
+    }
+    
+    return () => {
+      isMounted = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [isConnected, isRecording, startVoiceRecording]); // Include all dependencies
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -400,7 +437,6 @@ export const TradingDashboardSimple: React.FC = () => {
                 >
                   <div className="stock-header">
                     <span className="stock-symbol">{stock.symbol}</span>
-                    <span className={`stock-label ${stock.label.toLowerCase()}`}>{stock.label}</span>
                   </div>
                   <div className="stock-price">
                     <span className="price">${stock.price.toFixed(2)}</span>
@@ -408,7 +444,6 @@ export const TradingDashboardSimple: React.FC = () => {
                       {stock.change >= 0 ? '↑' : '↓'} {Math.abs(stock.changePercent).toFixed(2)}%
                     </span>
                   </div>
-                  <div className="stock-description">{stock.description}</div>
                   {stock.volume && (
                     <div className="stock-volume">Vol: {(stock.volume / 1000000).toFixed(1)}M</div>
                   )}
@@ -423,23 +458,7 @@ export const TradingDashboardSimple: React.FC = () => {
           {/* Chart */}
           <div className="chart-section">
             <div className="chart-wrapper">
-              <TradingChart symbol={selectedSymbol} />
-              
-              {/* Chart Overlays */}
-              <div className="chart-overlays">
-                <div className="level-line qe" style={{ top: '25%' }}>
-                  <span className="level-label">QE $342 - $342.00</span>
-                  <span className="level-value">$340.01</span>
-                </div>
-                <div className="level-line st" style={{ top: '50%' }}>
-                  <span className="level-label">ST $224.61 - $229.90</span>
-                  <span className="level-value">$320.00</span>
-                </div>
-                <div className="level-line ltb" style={{ top: '75%' }}>
-                  <span className="level-label">LTB $168.71 - $183.28</span>
-                  <span className="level-value">$300.00</span>
-                </div>
-              </div>
+              <TradingChart symbol={selectedSymbol} technicalLevels={technicalLevels} />
             </div>
           </div>
 
@@ -450,7 +469,6 @@ export const TradingDashboardSimple: React.FC = () => {
               <div className="listening-animation">
                 <div 
                   className={`mic-icon ${isListening ? 'listening' : ''}`}
-                  onClick={handleConnectToggle}
                 >
                   <div className="pulse-ring"></div>
                   <div className="pulse-ring"></div>

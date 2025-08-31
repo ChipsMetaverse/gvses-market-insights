@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts'
+import { createChart, ColorType, CandlestickSeries, Time } from 'lightweight-charts'
 import { marketDataService } from '../services/marketDataService'
 
 interface TradingChartProps {
   symbol: string
+  technicalLevels?: any
   onChartReady?: (chart: any) => void
 }
 
-export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
+export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<any>(null)
   const candlestickSeriesRef = useRef<any>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [technicalLevels, setTechnicalLevels] = useState<any>({})
   const [error, setError] = useState<string | null>(null)
+  const [levelPositions, setLevelPositions] = useState<{ qe?: number; st?: number; ltb?: number }>({})
 
   // Fetch real historical data
   const fetchChartData = async (symbol: string) => {
@@ -29,16 +30,14 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
       
       // Convert to lightweight-charts format (using Unix timestamps from API)
       const chartData = history.candles.map(candle => ({
-        time: candle.time || candle.date, // API returns 'time' field with Unix timestamp
+        time: (candle.time || candle.date) as Time, // API returns 'time' field with Unix timestamp
         open: candle.open,
         high: candle.high,
         low: candle.low,
         close: candle.close
-      })).sort((a, b) => a.time - b.time)
+      })).sort((a, b) => (a.time as number) - (b.time as number))
       
-      // Calculate technical levels from real data
-      const levels = marketDataService.calculateTechnicalLevels(history.candles)
-      setTechnicalLevels(levels)
+      // Technical levels now come from parent component props
       
       return chartData
     } catch (error: any) {
@@ -99,15 +98,15 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
       if (chartData && chartData.length > 0) {
         candlestickSeries.setData(chartData)
         
-        // Add technical levels as price lines using real calculated levels
+        // Add technical levels as price lines (with price values on right)
         if (technicalLevels.qe_level) {
           candlestickSeries.createPriceLine({
             price: technicalLevels.qe_level,
             color: '#10b981',
             lineWidth: 2,
             lineStyle: 2,
-            axisLabelVisible: true,
-            title: 'QE Level',
+            axisLabelVisible: true,  // Show price value on right
+            title: '',  // No text label, just the price
           })
         }
         
@@ -117,8 +116,8 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
             color: '#eab308',
             lineWidth: 2,
             lineStyle: 2,
-            axisLabelVisible: true,
-            title: 'ST Level',
+            axisLabelVisible: true,  // Show price value on right
+            title: '',  // No text label, just the price
           })
         }
         
@@ -128,10 +127,40 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
             color: '#3b82f6',
             lineWidth: 2,
             lineStyle: 2,
-            axisLabelVisible: true,
-            title: 'LTB Level',
+            axisLabelVisible: true,  // Show price value on right
+            title: '',  // No text label, just the price
           })
         }
+        
+        // Subscribe to chart updates for label position synchronization
+        const updateLabelPositions = () => {
+          if (chartRef.current && candlestickSeriesRef.current) {
+            const positions: any = {}
+            if (technicalLevels.qe_level) {
+              const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.qe_level)
+              if (coord !== null) positions.qe = coord
+            }
+            if (technicalLevels.st_level) {
+              const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.st_level)
+              if (coord !== null) positions.st = coord
+            }
+            if (technicalLevels.ltb_level) {
+              const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.ltb_level)
+              if (coord !== null) positions.ltb = coord
+            }
+            setLevelPositions(positions)
+          }
+        }
+
+        // Initial update
+        setTimeout(updateLabelPositions, 100)
+        
+        // Subscribe to visible range changes for continuous updates
+        const timeScale = chart.timeScale()
+        timeScale.subscribeVisibleLogicalRangeChange(updateLabelPositions)
+        
+        // Also subscribe to crosshair for real-time updates during interactions
+        chart.subscribeCrosshairMove(updateLabelPositions)
         
         chart.timeScale().fitContent()
       }
@@ -157,7 +186,40 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
       window.removeEventListener('resize', handleResize)
       chart.remove()
     }
-  }, [symbol, onChartReady])
+  }, [symbol, technicalLevels, onChartReady])
+
+  // Update positions when window resizes
+  useEffect(() => {
+    if (!chartRef.current || !candlestickSeriesRef.current || !technicalLevels) return
+    
+    const updatePositions = () => {
+      const positions: any = {}
+      if (technicalLevels.qe_level) {
+        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.qe_level)
+        if (coord !== null) positions.qe = coord
+      }
+      if (technicalLevels.st_level) {
+        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.st_level)
+        if (coord !== null) positions.st = coord
+      }
+      if (technicalLevels.ltb_level) {
+        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.ltb_level)
+        if (coord !== null) positions.ltb = coord
+      }
+      setLevelPositions(positions)
+    }
+    
+    // Listen for window resize
+    window.addEventListener('resize', updatePositions)
+    
+    // Initial update
+    const timeoutId = setTimeout(updatePositions, 200)
+    
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener('resize', updatePositions)
+    }
+  }, [technicalLevels])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -209,6 +271,75 @@ export function TradingChart({ symbol, onChartReady }: TradingChartProps) {
           height: '100%'
         }} 
       />
+      
+      {/* Custom left-side labels */}
+      {!isLoading && !error && (
+        <>
+          {levelPositions.qe !== undefined && technicalLevels?.qe_level && (
+            <div
+              style={{
+                position: 'absolute',
+                left: '0px',
+                top: `${levelPositions.qe}px`,
+                transform: 'translateY(-50%)',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                color: '#10b981',  // Green text
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: '600',
+                zIndex: 5,
+                whiteSpace: 'nowrap',
+                border: '1px solid #10b981',
+              }}
+            >
+              QE Level
+            </div>
+          )}
+          {levelPositions.st !== undefined && technicalLevels?.st_level && (
+            <div
+              style={{
+                position: 'absolute',
+                left: '0px',
+                top: `${levelPositions.st}px`,
+                transform: 'translateY(-50%)',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                color: '#eab308',  // Yellow text
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: '600',
+                zIndex: 5,
+                whiteSpace: 'nowrap',
+                border: '1px solid #eab308',
+              }}
+            >
+              ST Level
+            </div>
+          )}
+          {levelPositions.ltb !== undefined && technicalLevels?.ltb_level && (
+            <div
+              style={{
+                position: 'absolute',
+                left: '0px',
+                top: `${levelPositions.ltb}px`,
+                transform: 'translateY(-50%)',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                color: '#3b82f6',  // Blue text
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: '600',
+                zIndex: 5,
+                whiteSpace: 'nowrap',
+                border: '1px solid #3b82f6',
+              }}
+            >
+              LTB Level
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

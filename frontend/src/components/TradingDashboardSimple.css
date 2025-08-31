@@ -309,6 +309,8 @@
   border-top: 1px solid #e5e5e5;
   display: flex;
   gap: 20px;
+  overflow-y: auto;
+  max-height: 400px;
 }
 
 /* Listening Interface */
@@ -472,7 +474,7 @@
 
 .conversation-messages {
   flex: 1;
-  max-height: 150px;
+  max-height: 120px;
   overflow-y: auto;
   margin-bottom: 12px;
 }
