@@ -236,7 +236,7 @@ class ClaudeService:
 supabase = None
 conversation_manager = None
 claude_service = None
-market_service = MarketDataService()
+market_service = None  # Will be initialized in startup event
 
 
 @app.on_event("startup")
@@ -249,9 +249,14 @@ async def startup_event():
         claude_service = ClaudeService()
         
         # Initialize and warm up market service
-        market_service = await MarketServiceFactory.initialize_service()
-        service_mode = MarketServiceFactory.get_service_mode()
-        logger.info(f"Market service initialized in {service_mode} mode")
+        try:
+            market_service = await MarketServiceFactory.initialize_service()
+            service_mode = MarketServiceFactory.get_service_mode()
+            logger.info(f"Market service initialized successfully in {service_mode} mode")
+        except Exception as e:
+            logger.error(f"Failed to initialize market service: {e}")
+            logger.warning("Market service will be unavailable - endpoints will return 503")
+            market_service = None
         
         logger.info("All services initialized successfully")
     except Exception as e:
@@ -273,9 +278,15 @@ async def health_check():
 async def get_stock_price(symbol: str):
     """Get comprehensive stock data using the appropriate service."""
     try:
-        # Use the factory-selected service (MCP or Direct)
-        service = MarketServiceFactory.get_service()
-        return await service.get_stock_price(symbol)
+        # Use the pre-warmed service from startup
+        if market_service is None:
+            logger.error("Market service not initialized - startup may have failed")
+            raise HTTPException(
+                status_code=503, 
+                detail="Market data service not available. Please try again in a moment."
+            )
+        
+        return await market_service.get_stock_price(symbol)
         
     except TimeoutError:
         logger.warning(f"Timeout fetching price for {symbol}")
@@ -296,7 +307,43 @@ async def get_stock_price(symbol: str):
 async def get_comprehensive_stock_data(symbol: str):
     """Get all available data for a stock - matches ChatGPT capabilities."""
     try:
+        # Use the pre-warmed service from startup
+        if market_service is None:
+            logger.error("Market service not initialized - startup may have failed")
+            raise HTTPException(
+                status_code=503, 
+                detail="Market data service not available. Please try again in a moment."
+            )
+        
+        # Use the pre-initialized service instead of factory
         data = await market_service.get_comprehensive_stock_data(symbol)
+        
+        # Map field names for frontend compatibility
+        if "technical_levels" in data:
+            tech_levels = data["technical_levels"]
+            
+            # Handle both old and new field name formats
+            mapped_levels = {}
+            
+            # New format (human readable) -> Old format (abbreviated)
+            if "quick_entry" in tech_levels:
+                mapped_levels["qe_level"] = tech_levels["quick_entry"]
+            elif "qe_level" in tech_levels:
+                mapped_levels["qe_level"] = tech_levels["qe_level"]
+                
+            if "swing_trade" in tech_levels:
+                mapped_levels["st_level"] = tech_levels["swing_trade"]
+            elif "st_level" in tech_levels:
+                mapped_levels["st_level"] = tech_levels["st_level"]
+                
+            if "load_the_boat" in tech_levels:
+                mapped_levels["ltb_level"] = tech_levels["load_the_boat"]
+            elif "ltb_level" in tech_levels:
+                mapped_levels["ltb_level"] = tech_levels["ltb_level"]
+            
+            # Keep all other fields and add mapped ones
+            data["technical_levels"] = {**tech_levels, **mapped_levels}
+        
         return data
     except Exception as e:
         logger.error(f"Error fetching comprehensive data: {e}")
@@ -309,9 +356,15 @@ async def get_stock_history(symbol: str, days: int = 50):
     try:
         logger.info(f"Fetching {days} days of historical data for {symbol}")
         
-        # Use the factory-selected service (MCP or Direct)
-        service = MarketServiceFactory.get_service()
-        result = await service.get_stock_history(symbol, days)
+        # Use the pre-warmed service from startup
+        if market_service is None:
+            logger.error("Market service not initialized - startup may have failed")
+            raise HTTPException(
+                status_code=503, 
+                detail="Market data service not available. Please try again in a moment."
+            )
+        
+        result = await market_service.get_stock_history(symbol, days)
         
         # Ensure we have the expected format for frontend
         if result and isinstance(result, dict):
@@ -353,9 +406,12 @@ async def get_stock_history(symbol: str, days: int = 50):
 async def get_stock_news(symbol: str, limit: int = 10):
     """Get latest news for a stock using the appropriate service."""
     try:
-        # Use the factory-selected service (MCP or Direct)
-        service = MarketServiceFactory.get_service()
-        result = await service.get_stock_news(symbol, limit)
+        # Use the pre-warmed service from startup
+        if market_service is None:
+            logger.error("Market service not initialized - startup may have failed")
+            return {"symbol": symbol.upper(), "news": [], "error": "Service not available"}
+        
+        result = await market_service.get_stock_news(symbol, limit)
         
         # Ensure consistent format - keep original "news" field name for frontend compatibility
         if result and isinstance(result, dict):

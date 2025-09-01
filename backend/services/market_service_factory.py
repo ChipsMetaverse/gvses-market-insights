@@ -1,11 +1,13 @@
 """
 Market Service Factory
 ======================
-Simple factory that returns the MCP-based market service.
-MCP handles all data sources (Yahoo Finance, CNBC, etc).
+Hybrid factory that intelligently routes between Direct API and MCP services.
+- Direct API Mode (Production): Fast Yahoo Finance HTTP calls, sub-second responses
+- MCP Mode (Development): Full MCP capabilities, AI tooling benefits
 """
 
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -173,37 +175,55 @@ class MarketServiceWrapper:
 
 class MarketServiceFactory:
     """
-    Simple factory for the market service.
-    Always returns the MCP-based service.
+    Hybrid factory that intelligently routes between Direct API and MCP services.
+    Routes based on USE_MCP environment variable for optimal performance.
     """
     
     _instance = None
+    _service_mode = None
     
     @classmethod
     def get_service(cls, force_refresh: bool = False):
         """
-        Get the market service (MCP-based).
+        Get the appropriate market service based on environment.
         
         Args:
             force_refresh: Force creation of new instance
             
         Returns:
-            MarketServiceWrapper that uses MCP
+            DirectMarketDataService (fast) or MarketServiceWrapper (MCP)
         """
         if cls._instance is None or force_refresh:
-            logger.info("Initializing MCP-based market service")
-            cls._instance = MarketServiceWrapper()
+            use_mcp = os.getenv('USE_MCP', 'true').lower() == 'true'
+            
+            if use_mcp:
+                logger.info("Initializing MCP-based market service (Development Mode)")
+                cls._instance = MarketServiceWrapper()
+                cls._service_mode = "MCP (Yahoo Finance + CNBC)"
+            else:
+                logger.info("Initializing Direct API market service (Production Mode)")
+                try:
+                    from .direct_market_service import DirectMarketDataService
+                    cls._instance = DirectMarketDataService()
+                    cls._service_mode = "Direct (Yahoo Finance)"
+                    logger.info("DirectMarketDataService initialized successfully")
+                except Exception as e:
+                    logger.error(f"Failed to initialize DirectMarketDataService: {e}")
+                    logger.info("Falling back to MCP service")
+                    cls._instance = MarketServiceWrapper()
+                    cls._service_mode = "MCP (Yahoo Finance + CNBC) - Fallback"
         
         return cls._instance
     
     @classmethod
     async def initialize_service(cls):
         """
-        Initialize and warm up the service.
+        Initialize and warm up the appropriate service.
         Should be called during app startup.
         """
         service = cls.get_service()
         await service.warm_up()
+        logger.info(f"Market service initialized in {cls._service_mode} mode")
         return service
     
     @classmethod
@@ -211,4 +231,8 @@ class MarketServiceFactory:
         """
         Get the current service mode for health checks.
         """
-        return "MCP (Yahoo Finance + CNBC)"
+        if cls._service_mode is None:
+            use_mcp = os.getenv('USE_MCP', 'true').lower() == 'true'
+            cls._service_mode = "MCP (Yahoo Finance + CNBC)" if use_mcp else "Direct (Yahoo Finance)"
+        
+        return cls._service_mode
