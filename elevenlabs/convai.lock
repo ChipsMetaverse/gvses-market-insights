@@ -1,0 +1,15 @@
+{
+    "agents": {
+        "Gsves Market Insights": {
+            "prod": {
+                "id": "agent_4901k2tkkq54f4mvgpndm3pgzm7g",
+                "hash": "cc792607bfe8c2ff1e8debfbd2e400b0"
+            },
+            "dev": {
+                "id": "agent_4901k41gmy4xe6nrpeq4yccmjg8h",
+                "hash": "e96c0fd65238b05fd0e58a67d9aa65b1"
+            }
+        }
+    },
+    "tools": {}
+}

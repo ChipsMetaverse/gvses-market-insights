@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        #logs {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+        .connected { color: green; font-weight: bold; }
+        .disconnected { color: red; font-weight: bold; }
+        .connecting { color: orange; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>ElevenLabs Voice Connection Test</h1>
+    
+    <div id="status">
+        Status: <span id="connectionStatus" class="disconnected">Disconnected</span>
+    </div>
+    
+    <div>
+        <button id="connectBtn">Connect to Voice</button>
+        <button id="disconnectBtn" disabled>Disconnect</button>
+        <button id="sendTestBtn" disabled>Send Test Message</button>
+    </div>
+    
+    <div id="logs"></div>
+    
+    <script>
+        const API_URL = 'http://localhost:8000';
+        const AGENT_ID = 'agent_4901k2tkkq54f4mvgpndm3pgzm7g';
+        
+        let websocket = null;
+        let logs = [];
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logs.push(logEntry);
+            console.log(logEntry);
+            
+            const logsDiv = document.getElementById('logs');
+            logsDiv.innerHTML = logs.join('<br>');
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+        
+        function updateStatus(status) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.className = status;
+            statusEl.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            
+            // Update button states
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            const sendTestBtn = document.getElementById('sendTestBtn');
+            
+            if (status === 'connected') {
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendTestBtn.disabled = false;
+            } else if (status === 'connecting') {
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = true;
+                sendTestBtn.disabled = true;
+            } else {
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendTestBtn.disabled = true;
+            }
+        }
+        
+        async function getSignedUrl() {
+            log('Fetching signed URL from backend...');
+            const url = `${API_URL}/elevenlabs/signed-url?agent_id=${AGENT_ID}`;
+            
+            try {
+                const response = await fetch(url);
+                log(`Response status: ${response.status}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                log('Successfully received signed URL');
+                return data.signed_url;
+            } catch (error) {
+                log(`Error fetching signed URL: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+        
+        async function connect() {
+            updateStatus('connecting');
+            
+            try {
+                const signedUrl = await getSignedUrl();
+                log('Creating WebSocket connection...');
+                
+                websocket = new WebSocket(signedUrl);
+                
+                websocket.onopen = () => {
+                    log('WebSocket connected successfully!', 'success');
+                    updateStatus('connected');
+                    
+                    // Send initialization message
+                    const initMessage = {
+                        type: 'conversation_initiation_client_data'
+                    };
+                    websocket.send(JSON.stringify(initMessage));
+                    log('Sent initialization message');
+                };
+                
+                websocket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log(`Received message type: ${data.type}`);
+                        
+                        if (data.type === 'ping') {
+                            // Respond to ping
+                            const pongMessage = {
+                                type: 'pong',
+                                event_id: data.ping_event?.event_id
+                            };
+                            websocket.send(JSON.stringify(pongMessage));
+                            log('Responded to ping');
+                        }
+                    } catch (error) {
+                        log(`Error parsing message: ${error.message}`, 'error');
+                    }
+                };
+                
+                websocket.onerror = (error) => {
+                    log(`WebSocket error occurred`, 'error');
+                    console.error('WebSocket error:', error);
+                };
+                
+                websocket.onclose = () => {
+                    log('WebSocket disconnected');
+                    updateStatus('disconnected');
+                    websocket = null;
+                };
+                
+            } catch (error) {
+                log(`Connection failed: ${error.message}`, 'error');
+                updateStatus('disconnected');
+            }
+        }
+        
+        function disconnect() {
+            if (websocket) {
+                log('Closing WebSocket connection...');
+                websocket.close();
+            }
+        }
+        
+        function sendTestMessage() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'user_message',
+                    text: 'Hello, this is a test message!'
+                };
+                websocket.send(JSON.stringify(message));
+                log('Sent test message');
+            } else {
+                log('WebSocket is not connected', 'error');
+            }
+        }
+        
+        // Button event listeners
+        document.getElementById('connectBtn').addEventListener('click', connect);
+        document.getElementById('disconnectBtn').addEventListener('click', disconnect);
+        document.getElementById('sendTestBtn').addEventListener('click', sendTestMessage);
+        
+        // Initial log
+        log('Voice connection test page loaded');
+        log(`API URL: ${API_URL}`);
+        log(`Agent ID: ${AGENT_ID}`);
+    </script>
+</body>
+</html>

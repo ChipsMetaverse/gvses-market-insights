@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { ElevenLabsConnectionManager } from '../services/ElevenLabsConnectionManager';
 
 interface ElevenLabsMessage {
   role: 'user' | 'assistant';
@@ -28,22 +29,10 @@ export const useElevenLabsConversation = (config: UseElevenLabsConfig = {}) => {
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ElevenLabsMessage[]>([]);
   
-  const websocketRef = useRef<WebSocket | null>(null);
+  const connectionManager = useRef(ElevenLabsConnectionManager.getInstance());
+  const listenerId = useRef(crypto.randomUUID());
   const audioQueueRef = useRef<string[]>([]);
   const isPlayingRef = useRef(false);
-
-  // Get signed URL from backend
-  const getSignedUrl = async (agentId?: string): Promise<string> => {
-    const params = agentId ? `?agent_id=${agentId}` : '';
-    const response = await fetch(`${apiUrl}/elevenlabs/signed-url${params}`);
-    
-    if (!response.ok) {
-      throw new Error('Failed to get signed URL');
-    }
-    
-    const data = await response.json();
-    return data.signed_url;
-  };
 
   // Play audio queue - handles PCM audio from ElevenLabs
   const playNextAudio = useCallback(async () => {
@@ -134,170 +123,91 @@ export const useElevenLabsConversation = (config: UseElevenLabsConfig = {}) => {
     }
   }, []);
 
+  // Register callbacks with connection manager
+  useEffect(() => {
+    const id = listenerId.current;
+    
+    connectionManager.current.addListener(id, {
+      apiUrl: apiUrl,
+      onUserTranscript: (transcript) => {
+        const message: ElevenLabsMessage = {
+          role: 'user',
+          content: transcript,
+          timestamp: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, message]);
+        onUserTranscript?.(transcript);
+      },
+      onAgentResponse: (response) => {
+        const message: ElevenLabsMessage = {
+          role: 'assistant',
+          content: response,
+          timestamp: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, message]);
+        onAgentResponse?.(response);
+      },
+      onAudioChunk: (audioBase64) => {
+        audioQueueRef.current.push(audioBase64);
+        playNextAudio();
+        onAudioChunk?.(audioBase64);
+      },
+      onConnectionChange: (connected) => {
+        setIsConnected(connected);
+        onConnectionChange?.(connected);
+        if (!connected) {
+          setIsLoading(false);
+        }
+      }
+    });
+    
+    // Check if already connected
+    if (connectionManager.current.isConnected()) {
+      setIsConnected(true);
+    }
+    
+    return () => {
+      connectionManager.current.removeListener(id);
+    };
+  }, [apiUrl, onUserTranscript, onAgentResponse, onAudioChunk, onConnectionChange, playNextAudio]);
+
   // Start conversation
   const startConversation = useCallback(async (agentId?: string) => {
-    if (isConnected) return;
+    if (isConnected) {
+      console.log('Already connected');
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      // Get signed URL from backend
-      const signedUrl = await getSignedUrl(agentId);
-      
-      // Create WebSocket connection
-      const ws = new WebSocket(signedUrl);
-      
-      ws.onopen = () => {
-        console.log('ElevenLabs WebSocket connected!');
-        setIsConnected(true);
-        setIsLoading(false);
-        onConnectionChange?.(true);
-        
-        // Send initialization message
-        const initMessage = {
-          type: 'conversation_initiation_client_data'
-        };
-        console.log('Sending init message:', initMessage);
-        ws.send(JSON.stringify(initMessage));
-      };
-      
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('ElevenLabs message:', data.type);
-        
-        switch (data.type) {
-          case 'user_transcript':
-            const userTranscript = data.user_transcription_event?.user_transcript;
-            if (userTranscript) {
-              const message: ElevenLabsMessage = {
-                role: 'user',
-                content: userTranscript,
-                timestamp: new Date().toISOString()
-              };
-              setMessages(prev => [...prev, message]);
-              onUserTranscript?.(userTranscript);
-            }
-            break;
-            
-          case 'agent_response':
-            const agentResponse = data.agent_response_event?.agent_response;
-            if (agentResponse) {
-              const message: ElevenLabsMessage = {
-                role: 'assistant',
-                content: agentResponse,
-                timestamp: new Date().toISOString()
-              };
-              setMessages(prev => [...prev, message]);
-              onAgentResponse?.(agentResponse);
-            }
-            break;
-            
-          case 'agent_response_correction':
-            const correctedResponse = data.agent_response_correction_event?.corrected_agent_response;
-            if (correctedResponse) {
-              // Update the last assistant message
-              setMessages(prev => {
-                const updated = [...prev];
-                for (let i = updated.length - 1; i >= 0; i--) {
-                  if (updated[i].role === 'assistant') {
-                    updated[i].content = correctedResponse;
-                    break;
-                  }
-                }
-                return updated;
-              });
-              onAgentResponse?.(correctedResponse);
-            }
-            break;
-            
-          case 'audio':
-            const audioBase64 = data.audio_event?.audio_base_64;
-            if (audioBase64) {
-              audioQueueRef.current.push(audioBase64);
-              playNextAudio();
-              onAudioChunk?.(audioBase64);
-            }
-            break;
-            
-          case 'ping':
-            // Respond to ping to keep connection alive
-            const eventId = data.ping_event?.event_id;
-            const pingMs = data.ping_event?.ping_ms || 0;
-            
-            setTimeout(() => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                  type: 'pong',
-                  event_id: eventId
-                }));
-              }
-            }, pingMs);
-            break;
-            
-          case 'interruption':
-            console.log('Conversation interrupted:', data.interruption_event?.reason);
-            break;
-        }
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setError('Connection error occurred');
-      };
-      
-      ws.onclose = () => {
-        setIsConnected(false);
-        onConnectionChange?.(false);
-        websocketRef.current = null;
-      };
-      
-      websocketRef.current = ws;
-      
+      await connectionManager.current.getConnection(apiUrl, agentId);
+      // Connection status will be updated via the listener
+      setIsLoading(false); // Clear loading state after successful connection
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start conversation');
       setIsLoading(false);
     }
-  }, [isConnected, apiUrl, onUserTranscript, onAgentResponse, onAudioChunk, onConnectionChange, playNextAudio]);
+  }, [isConnected, apiUrl]);
 
   // Stop conversation
   const stopConversation = useCallback(() => {
-    if (websocketRef.current) {
-      websocketRef.current.close();
-      websocketRef.current = null;
-    }
-    setIsConnected(false);
-    onConnectionChange?.(false);
+    connectionManager.current.closeConnection();
     audioQueueRef.current = [];
-  }, [onConnectionChange]);
+  }, []);
 
-  // Send text message (corrected format per API docs)
+  // Send text message
   const sendTextMessage = useCallback((text: string) => {
-    if (websocketRef.current?.readyState === WebSocket.OPEN) {
-      websocketRef.current.send(JSON.stringify({
-        type: 'user_message',
-        text: text
-      }));
-    }
+    connectionManager.current.sendTextMessage(text);
   }, []);
 
   // Send audio chunk
   const sendAudioChunk = useCallback((audioBase64: string) => {
-    if (websocketRef.current?.readyState === WebSocket.OPEN) {
-      websocketRef.current.send(JSON.stringify({
-        user_audio_chunk: audioBase64
-      }));
-    }
+    connectionManager.current.sendAudioChunk(audioBase64);
   }, []);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (websocketRef.current) {
-        websocketRef.current.close();
-      }
-    };
-  }, []);
+  // No cleanup needed - connection persists via singleton
 
   return {
     isConnected,

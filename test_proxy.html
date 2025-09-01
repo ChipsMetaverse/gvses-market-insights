@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Proxy Test</title>
+    <style>
+        body { background: #1a1a1a; color: #fff; font-family: monospace; padding: 20px; }
+        button { padding: 10px; margin: 5px; background: #2792dc; color: white; border: none; cursor: pointer; }
+        #log { background: #000; padding: 20px; border-radius: 4px; margin-top: 20px; height: 400px; overflow-y: auto; white-space: pre-wrap; }
+        .error { color: #ff4444; }
+        .success { color: #44ff44; }
+        .info { color: #4444ff; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Proxy Test</h1>
+    <p>Testing proxy connection from browser to backend WebSocket proxy</p>
+    <button onclick="testProxy()">Test Proxy Connection</button>
+    <button onclick="clearLog()">Clear</button>
+    <div id="log"></div>
+    
+    <script>
+        let websocket = null;
+        
+        function log(msg, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `[${new Date().toISOString().substring(11, 23)}] ${msg}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(msg);
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        function testProxy() {
+            clearLog();
+            log('Starting proxy test...', 'info');
+            log('Origin: ' + window.location.origin, 'info');
+            
+            // Connect to proxy WebSocket
+            const proxyUrl = 'ws://localhost:8000/ws/elevenlabs-proxy?agent_id=agent_4901k2tkkq54f4mvgpndm3pgzm7g';
+            log('Connecting to proxy: ' + proxyUrl, 'info');
+            
+            try {
+                websocket = new WebSocket(proxyUrl);
+                
+                websocket.onopen = () => {
+                    log('✅ Proxy WebSocket opened!', 'success');
+                    log('  State: ' + websocket.readyState, 'info');
+                    
+                    // Send init message
+                    const init = {
+                        type: 'conversation_initiation_client_data',
+                        custom_llm_extra_body: {}
+                    };
+                    log('Sending init: ' + JSON.stringify(init), 'info');
+                    websocket.send(JSON.stringify(init));
+                    log('✅ Init sent', 'success');
+                };
+                
+                websocket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log('📥 Message: ' + data.type, 'success');
+                        if (data.type === 'conversation_initiation_metadata') {
+                            log('🎉 SUCCESS! Proxy works! Conversation initialized!', 'success');
+                            const eventData = data.conversation_initiation_metadata_event;
+                            if (eventData) {
+                                log('  Conversation ID: ' + eventData.conversation_id, 'success');
+                            }
+                        } else if (data.type === 'agent_response') {
+                            log('🤖 Agent response: ' + data.agent_response_event?.agent_response?.substring(0, 100), 'success');
+                        }
+                    } catch (e) {
+                        log('📥 Non-JSON: ' + event.data.substring(0, 100), 'info');
+                    }
+                };
+                
+                websocket.onerror = (error) => {
+                    log('❌ WebSocket error', 'error');
+                    log('  Type: ' + error.type, 'error');
+                };
+                
+                websocket.onclose = (event) => {
+                    log('⚠️ WebSocket closed', 'error');
+                    log('  Code: ' + event.code, 'error');
+                    log('  Reason: ' + event.reason, 'error');
+                    log('  Clean: ' + event.wasClean, 'error');
+                };
+                
+            } catch (error) {
+                log('❌ Error creating WebSocket: ' + error.message, 'error');
+            }
+        }
+        
+        log('Ready. Click "Test Proxy Connection" to begin.', 'info');
+    </script>
+</body>
+</html>

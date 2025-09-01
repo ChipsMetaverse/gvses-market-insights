@@ -1,0 +1,134 @@
+.command-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 14px;
+  font-weight: 500;
+  background: white;
+  border: 1px solid;
+  max-width: 300px;
+  transition: all 0.3s ease;
+}
+
+.toast-icon {
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.toast-message {
+  flex: 1;
+  color: #333;
+}
+
+/* Success styling */
+.toast-success {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-color: #22c55e;
+}
+
+.toast-success .toast-icon {
+  color: #22c55e;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(34, 197, 94, 0.2);
+}
+
+/* Error styling */
+.toast-error {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border-color: #ef4444;
+}
+
+.toast-error .toast-icon {
+  color: #ef4444;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.2);
+}
+
+/* Info styling */
+.toast-info {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: #3b82f6;
+}
+
+.toast-info .toast-icon {
+  color: #3b82f6;
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+}
+
+.toast-enter {
+  animation: slideIn 0.3s ease forwards;
+}
+
+.toast-exit {
+  animation: slideOut 0.3s ease forwards;
+}
+
+/* Pulse effect for new commands */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+  }
+  100% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+.toast-info {
+  animation: slideIn 0.3s ease forwards, pulse 1s ease-in-out;
+}
+
+/* Multiple toasts stacking */
+.command-toast:nth-child(2) {
+  top: 80px;
+}
+
+.command-toast:nth-child(3) {
+  top: 140px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .command-toast {
+    right: 10px;
+    left: 10px;
+    max-width: calc(100% - 20px);
+  }
+}

@@ -1,0 +1,220 @@
+{
+  "name": "Gsves Market Insights",
+  "conversation_config": {
+    "asr": {
+      "quality": "high",
+      "provider": "elevenlabs",
+      "user_input_audio_format": "pcm_16000",
+      "keywords": [
+        "LTB",
+        "QE",
+        "ST",
+        "SPY",
+        "QQQ",
+        "NVDA",
+        "TSLA",
+        "AAPL",
+        "RSI",
+        "MACD",
+        "options",
+        "calls",
+        "puts",
+        "Fibonacci",
+        "moving average",
+        "Bitcoin",
+        "BTC",
+        "Ethereum",
+        "ETH",
+        "crypto",
+        "cryptocurrency",
+        "Solana",
+        "SOL"
+      ]
+    },
+    "turn": {
+      "turn_timeout": 5,
+      "silence_end_call_timeout": 30,
+      "mode": "turn"
+    },
+    "tts": {
+      "model_id": "eleven_turbo_v2",
+      "voice_id": "9BWtsMINqrJLrRacOk9x",
+      "supported_voices": [],
+      "agent_output_audio_format": "pcm_16000",
+      "optimize_streaming_latency": 3,
+      "stability": 0.8,
+      "speed": 1,
+      "similarity_boost": 0.8,
+      "pronunciation_dictionary_locators": []
+    },
+    "conversation": {
+      "text_only": false,
+      "max_duration_seconds": 300,
+      "client_events": [
+        "audio",
+        "interruption",
+        "user_transcript",
+        "agent_response"
+      ]
+    },
+    "language_presets": {},
+    "agent": {
+      "first_message": "",
+      "language": "en",
+      "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+      },
+      "prompt": {
+        "prompt": "# G'sves Market Insights AI\n\nYou are G'sves, a senior portfolio manager with 30+ years experience at top investment firms. You provide actionable market insights and trading strategies.\n\n## Core Expertise\n- Real-time stock, crypto, and index analysis\n- Options trading: weekly setups, strike selection, risk management\n- Technical analysis: Support/resistance, moving averages, RSI, MACD\n- Trading levels: LTB (deep support, 61.8% Fib), ST (swing trade, 50-day MA), QE (quick entry, breakout zones)\n\n## IMPORTANT: Cryptocurrency Symbol Mappings\nWhen users ask about cryptocurrencies, ALWAYS use these exact symbols:\n- \"Bitcoin\" or \"BTC\" \u2192 use symbol: \"BTC-USD\"\n- \"Ethereum\" or \"ETH\" \u2192 use symbol: \"ETH-USD\"\n- \"Solana\" or \"SOL\" \u2192 use symbol: \"SOL-USD\"\n- \"Ripple\" or \"XRP\" \u2192 use symbol: \"XRP-USD\"\n- \"Dogecoin\" or \"DOGE\" \u2192 use symbol: \"DOGE-USD\"\n- \"Cardano\" or \"ADA\" \u2192 use symbol: \"ADA-USD\"\n- \"Binance Coin\" or \"BNB\" \u2192 use symbol: \"BNB-USD\"\n\nCRITICAL: When a user asks \"What is the price of Bitcoin?\", you MUST call get_stock_price with symbol=\"BTC-USD\"\n\n## Communication Style\n- Concise bullet points for clarity\n- Reference real-time data timestamps\n- Include risk management (stop-loss, position sizing)\n- Provide two risk-adjusted suggestions per response\n- Respond to \"Good morning\" with market brief\n\n## Available Tools\n\n### Market Data (USE THESE FOR ALL QUERIES)\n- get_stock_price: Real-time prices - ALWAYS use this for price queries\n  * For stocks: Use ticker directly (AAPL, TSLA, NVDA)\n  * For crypto: Use -USD suffix (BTC-USD, ETH-USD)\n  * For indices: Use ticker (SPY, QQQ, DIA)\n- get_stock_history: Historical OHLC data for technical analysis\n- get_comprehensive_stock_data: Full company profile and financials\n- get_market_overview: Major indices and market movers\n- get_market_movers: Trending stocks and unusual activity\n\n### Analysis Tools\n- get_stock_news: Latest news with sentiment analysis\n- get_analyst_ratings: Professional recommendations and price targets\n- get_technical_indicators: RSI, MACD, moving averages\n- analyze_technical_confluence: Multi-indicator validation\n\n### Options Tools\n- get_options_chain: Complete chain with Greeks\n- suggest_options_trades: High-probability setups\n- get_options_strategic_insights: Advanced strategies (spreads, straddles)\n\n### Account Tools\n- get_account_info: Balance and buying power\n- get_positions: Current holdings and P&L\n- get_orders: Order history and status\n- get_bars: Price bars for any timeframe\n\n### Performance Tools\n- generate_watchlist: Daily picks based on setups\n- review_trade_performance: Win rate and recommendations\n\n## Chart Control Commands\nYou can control the trading chart display using these commands in your responses:\n- **Symbol Change**: Say \"CHART:TSLA\" or \"Show AAPL chart\" to change the displayed symbol\n- **Timeframe**: Say \"TIMEFRAME:1D\" or \"Switch to weekly view\" (1D, 5D, 1M, 3M, 6M, 1Y)\n- **Indicators**: Say \"ADD:RSI\" or \"Show MACD\" to toggle indicators\n- **Zoom**: Say \"ZOOM:IN\" or \"Zoom out\" to adjust chart zoom\n- **Scroll**: Say \"SCROLL:2024-01-15\" or \"Go to last week\" to navigate time\n- **Style**: Say \"STYLE:LINE\" to change chart type (CANDLES, LINE, AREA)\n\nWhen users ask to see a specific stock, automatically include the chart command.\nExample: \"Let me show you NVDA. CHART:NVDA Here's the analysis...\"\n\n## Trading Process\n1. Analyze market conditions\n2. Identify LTB/ST/QE levels\n3. Validate with technical indicators\n4. Suggest risk-managed trades\n5. Provide clear entry/exit points\n\n## Key Rules\n- ALWAYS use tools for data - never guess or make up prices\n- When asked about Bitcoin, Ethereum, or any crypto, use the -USD suffix\n- State \"past performance is not indicative of future results\"\n- No guarantees of profit\n- Focus on risk management\n- Be factual and neutral\n\n## Response Format\n**Market Context:** [Current conditions]\n**Key Levels:** LTB/ST/QE with prices\n**Action Items:**\n\u2022 Entry: [price]\n\u2022 Stop: [price]\n\u2022 Target: [price]\n\u2022 Risk/Reward: [ratio]\n**Options Setup:** [If requested]\n**Risk Management:** [Position sizing]\n**Two Suggestions:**\n1. Conservative: [Lower risk approach]\n2. Aggressive: [Higher risk/reward]",
+        "llm": "gpt-4o",
+        "temperature": 0.3,
+        "max_tokens": 500,
+        "tool_ids": [
+          "tool_0101k3w6qy2wfn399ftkfjn8k2m6",
+          "tool_2201k3w6qvy5epbazavdb8r2nf2w",
+          "tool_2801k3w6qx0he099jc2qkzhb77h2",
+          "tool_3501k3w6qxcaf0ds5y3mdxfc0kre",
+          "tool_5401k3w6qxqdfstvcmvv7ew3rjy4",
+          "tool_6901k3w6qw9gfs2829n49x0sncfh",
+          "tool_7101k3w6qwn5e2ts2bkds5s9n3pf",
+          "tool_8001k3w6qyeqf8pvfev3r0pc4a3c"
+        ],
+        "built_in_tools": {},
+        "mcp_server_ids": [],
+        "native_mcp_server_ids": [],
+        "knowledge_base": [
+          {
+            "id": "lsBT1M95ifxCezXb8Zx9",
+            "type": "file",
+            "name": "GVSES Trading Guidelines"
+          },
+          {
+            "id": "TyDQIY5A3ajYhabxsVQX",
+            "type": "file",
+            "name": "Encyclopedia of Chart Patterns"
+          },
+          {
+            "id": "tLl1ZmTqeMec2iBkVTdl",
+            "type": "file",
+            "name": "THE CANDLESTICK TRADING BIBLE"
+          },
+          {
+            "id": "ohYBBvoIOSiwp24GAyv2",
+            "type": "file",
+            "name": "Yahoo Finance - Stock Market Live, Quotes, Business & Finance News"
+          },
+          {
+            "id": "D9xiACmtim4fR6cibouX",
+            "type": "file",
+            "name": "Cryptocurrency Prices, Charts And Market Capitalizations | CoinMarketCap"
+          }
+        ],
+        "ignore_default_personality": false,
+        "rag": {
+          "enabled": true,
+          "embedding_model": "e5_mistral_7b_instruct",
+          "max_vector_distance": 0.6,
+          "max_documents_length": 50000,
+          "max_retrieved_rag_chunks_count": 20
+        }
+      }
+    }
+  },
+  "platform_settings": {
+    "auth": {
+      "enable_auth": false,
+      "allowlist": []
+    },
+    "evaluation": {
+      "criteria": []
+    },
+    "widget": {
+      "variant": "full",
+      "placement": "bottom-right",
+      "expandable": "never",
+      "avatar": {
+        "type": "orb",
+        "color1": "#2792dc",
+        "color2": "#9ce6e6"
+      },
+      "feedback_mode": "none",
+      "bg_color": "#1a1a2e",
+      "text_color": "#eaeaea",
+      "btn_color": "#2792dc",
+      "btn_text_color": "#ffffff",
+      "border_color": "#2792dc",
+      "focus_color": "#2792dc",
+      "shareable_page_show_terms": true,
+      "show_avatar_when_collapsed": false,
+      "disable_banner": false,
+      "mic_muting_enabled": false,
+      "transcript_enabled": true,
+      "text_input_enabled": true,
+      "default_expanded": false,
+      "always_expanded": false,
+      "text_contents": {},
+      "styles": {},
+      "language_selector": false,
+      "supports_text_only": true,
+      "language_presets": {}
+    },
+    "data_collection": {},
+    "overrides": {
+      "conversation_config_override": {
+        "tts": {
+          "voice_id": false,
+          "stability": false,
+          "speed": false,
+          "similarity_boost": false
+        },
+        "conversation": {
+          "text_only": false
+        },
+        "agent": {
+          "first_message": false,
+          "language": false,
+          "prompt": {
+            "prompt": false,
+            "native_mcp_server_ids": false
+          }
+        }
+      },
+      "custom_llm_extra_body": false,
+      "enable_conversation_initiation_client_data_from_webhook": false
+    },
+    "call_limits": {
+      "agent_concurrency_limit": -1,
+      "daily_limit": 100000,
+      "bursting_enabled": true
+    },
+    "ban": null,
+    "privacy": {
+      "record_voice": true,
+      "retention_days": 30,
+      "delete_transcript_and_pii": false,
+      "delete_audio": false,
+      "apply_to_existing_conversations": false,
+      "zero_retention_mode": false
+    },
+    "workspace_overrides": {
+      "webhooks": {
+        "send_audio": false
+      }
+    },
+    "testing": {
+      "attached_tests": [],
+      "referenced_tests_ids": []
+    },
+    "safety": {
+      "is_blocked_ivc": false,
+      "is_blocked_non_ivc": false,
+      "ignore_safety_evaluation": false
+    }
+  },
+  "tags": [
+    "environment:dev",
+    "trading",
+    "market-analysis",
+    "dev"
+  ]
+}

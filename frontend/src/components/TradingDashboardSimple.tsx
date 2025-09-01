@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TradingChart } from './TradingChart';
 import { marketDataService } from '../services/marketDataService';
 import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
+import { ProviderSelector } from './ProviderSelector';
+import { chartControlService } from '../services/chartControlService';
+import { CommandToast } from './CommandToast';
 import './TradingDashboardSimple.css';
 
 interface StockData {
@@ -36,13 +39,17 @@ export const TradingDashboardSimple: React.FC = () => {
   const [technicalLevels, setTechnicalLevels] = useState<any>({});
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
+  const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
   
   // Audio processing refs
   const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const audioWorkletRef = useRef<AudioWorkletNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Chart control ref
+  const chartRef = useRef<any>(null);
   
   // Stock symbols to track
   const watchlist = ['TSLA', 'AAPL', 'NVDA', 'SPY'];
@@ -74,6 +81,12 @@ export const TradingDashboardSimple: React.FC = () => {
         timestamp: new Date().toLocaleTimeString()
       };
       setMessages(prev => [...prev, message]);
+      
+      // Process agent response for chart commands
+      const commands = chartControlService.processAgentResponse(response);
+      if (commands.length > 0) {
+        console.log('Chart commands executed:', commands);
+      }
     },
     onConnectionChange: (connected) => {
       if (!connected) {
@@ -106,31 +119,39 @@ export const TradingDashboardSimple: React.FC = () => {
       streamRef.current = stream;
       
       audioContextRef.current = new AudioContext({ sampleRate: 16000 });
-      sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
-      processorRef.current = audioContextRef.current.createScriptProcessor(2048, 1, 1);
       
-      processorRef.current.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        
-        // Calculate audio level for visualization
-        let sum = 0;
-        for (let i = 0; i < inputData.length; i++) {
-          sum += Math.abs(inputData[i]);
-        }
-        const level = sum / inputData.length;
-        setAudioLevel(level);
-        
-        // Only send audio if there's actual sound (not silence)
-        if (level > 0.001) {
-          // Convert and send audio
-          const pcm16 = convertFloat32ToInt16(inputData);
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
-          sendAudioChunk(base64);
+      // Load the AudioWorklet module
+      await audioContextRef.current.audioWorklet.addModule('/audio-processor.js');
+      
+      // Create AudioWorklet node
+      audioWorkletRef.current = new AudioWorkletNode(audioContextRef.current, 'audio-processor');
+      
+      // Set up message handling from the audio processor
+      audioWorkletRef.current.port.onmessage = (event) => {
+        if (event.data.type === 'audio') {
+          // Process audio buffer
+          const inputData = event.data.buffer;
+          
+          // Only send audio if there's actual sound (not silence)
+          const sum = inputData.reduce((acc, val) => acc + Math.abs(val), 0);
+          const level = sum / inputData.length;
+          
+          if (level > 0.001) {
+            // Convert and send audio
+            const pcm16 = convertFloat32ToInt16(inputData);
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
+            sendAudioChunk(base64);
+          }
+        } else if (event.data.type === 'volume') {
+          // Update audio level visualization
+          setAudioLevel(event.data.level);
         }
       };
       
-      sourceRef.current.connect(processorRef.current);
-      processorRef.current.connect(audioContextRef.current.destination);
+      // Connect audio nodes
+      sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
+      sourceRef.current.connect(audioWorkletRef.current);
+      audioWorkletRef.current.connect(audioContextRef.current.destination);
       
       setIsRecording(true);
       setIsListening(true);
@@ -152,9 +173,10 @@ export const TradingDashboardSimple: React.FC = () => {
   // Stop voice recording
   const stopVoiceRecording = useCallback(() => {
     // Clean up audio nodes
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
+    if (audioWorkletRef.current) {
+      audioWorkletRef.current.disconnect();
+      audioWorkletRef.current.port.close();
+      audioWorkletRef.current = null;
     }
     
     if (sourceRef.current) {
@@ -349,6 +371,50 @@ export const TradingDashboardSimple: React.FC = () => {
   useEffect(() => {
     fetchStockAnalysis(selectedSymbol);
   }, [selectedSymbol]);
+  
+  // Register chart control callbacks
+  useEffect(() => {
+    chartControlService.registerCallbacks({
+      onSymbolChange: (symbol: string) => {
+        setSelectedSymbol(symbol);
+        fetchStockAnalysis(symbol);
+      },
+      onTimeframeChange: (timeframe: string) => {
+        console.log('Timeframe changed to:', timeframe);
+        // Future: Add timeframe state and pass to chart
+      },
+      onIndicatorToggle: (indicator: string, enabled: boolean) => {
+        console.log(`Indicator ${indicator} ${enabled ? 'enabled' : 'disabled'}`);
+        // Future: Add indicator management
+      },
+      onZoomChange: (level: number) => {
+        console.log('Zoom level:', level);
+        // Handled directly by chart ref in service
+      },
+      onScrollToTime: (time: number) => {
+        console.log('Scrolling to time:', time);
+        // Handled directly by chart ref in service
+      },
+      onStyleChange: (style: 'candles' | 'line' | 'area') => {
+        console.log('Chart style changed to:', style);
+        // Future: Add chart style state
+      },
+      onCommandExecuted: (command, success, message) => {
+        // Show toast notification for command execution
+        setToastCommand({
+          command: message,
+          type: success ? 'success' : 'error'
+        });
+      },
+      onCommandError: (error) => {
+        // Show error toast
+        setToastCommand({
+          command: error,
+          type: 'error'
+        });
+      }
+    });
+  }, []);
 
   // Track if we've already started recording to prevent duplicates
   const hasStartedRecordingRef = useRef(false);
@@ -394,6 +460,16 @@ export const TradingDashboardSimple: React.FC = () => {
 
   return (
     <div className="trading-dashboard-simple">
+      {/* Command Toast Notifications */}
+      {toastCommand && (
+        <CommandToast
+          command={toastCommand.command}
+          type={toastCommand.type}
+          duration={2500}
+          onClose={() => setToastCommand(null)}
+        />
+      )}
+      
       {/* Header */}
       <header className="dashboard-header">
         <div className="header-left">
@@ -458,7 +534,15 @@ export const TradingDashboardSimple: React.FC = () => {
           {/* Chart */}
           <div className="chart-section">
             <div className="chart-wrapper">
-              <TradingChart symbol={selectedSymbol} technicalLevels={technicalLevels} />
+              <TradingChart 
+                symbol={selectedSymbol} 
+                technicalLevels={technicalLevels}
+                onChartReady={(chart: any) => {
+                  chartRef.current = chart;
+                  chartControlService.setChartRef(chart);
+                  console.log('Chart ready for agent control');
+                }}
+              />
             </div>
           </div>
 
@@ -505,11 +589,20 @@ export const TradingDashboardSimple: React.FC = () => {
 
             {/* Voice Conversation */}
             <div className="voice-conversation">
-              <h3>Voice Conversation</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <h3 style={{ margin: 0 }}>Voice Conversation</h3>
+                <ProviderSelector compact={true} showCapabilities={false} className="compact-provider-selector" />
+              </div>
               <div className="conversation-messages">
                 {messages.length === 0 ? (
                   <div className="no-messages">
-                    <p>Start a conversation by clicking the microphone or typing a message</p>
+                    <p style={{ fontSize: '14px', color: '#666' }}>Click mic to connect • Speak anytime when connected</p>
+                    <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '5px' }}>
+                      <p style={{ fontSize: '12px', margin: '5px 0', color: '#888' }}>Try these commands:</p>
+                      <p style={{ fontSize: '11px', margin: '3px 0', color: '#666' }}>"What's the price of Tesla?"</p>
+                      <p style={{ fontSize: '11px', margin: '3px 0', color: '#666' }}>"Show me Apple's chart"</p>
+                      <p style={{ fontSize: '11px', margin: '3px 0', color: '#666' }}>"What's the market sentiment?"</p>
+                    </div>
                   </div>
                 ) : (
                   messages.map((msg) => (

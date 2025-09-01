@@ -1,0 +1,154 @@
+{
+  "tools": [
+    {
+      "name": "get_stock_price",
+      "type": "webhook",
+      "description": "Fetches real-time stock, cryptocurrency, or index prices",
+      "api_schema": {
+        "url": "http://localhost:8000/api/stock-price",
+        "method": "GET",
+        "query_params_schema": {
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Stock/crypto/index symbol (e.g., AAPL, BTC-USD, SPY)"
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
+      },
+      "response_timeout_secs": 5
+    },
+    {
+      "name": "get_stock_history",
+      "type": "webhook",
+      "description": "Retrieves historical price data for technical analysis",
+      "api_schema": {
+        "url": "http://localhost:8000/api/stock-history",
+        "method": "GET",
+        "query_params_schema": {
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Stock symbol"
+            },
+            "days": {
+              "type": "integer",
+              "description": "Number of days of history (default 100)"
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
+      },
+      "response_timeout_secs": 5
+    },
+    {
+      "name": "get_comprehensive_stock_data",
+      "type": "webhook",
+      "description": "Provides complete stock information including fundamentals and technicals",
+      "api_schema": {
+        "url": "http://localhost:8000/api/comprehensive-stock-data",
+        "method": "GET",
+        "query_params_schema": {
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Stock symbol"
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
+      },
+      "response_timeout_secs": 5
+    },
+    {
+      "name": "get_market_overview",
+      "type": "webhook",
+      "description": "Gets overall market status including major indices",
+      "api_schema": {
+        "url": "http://localhost:8000/api/market-overview",
+        "method": "GET"
+      },
+      "response_timeout_secs": 5
+    },
+    {
+      "name": "get_market_movers",
+      "type": "webhook",
+      "description": "Identifies trending stocks and unusual market activity",
+      "api_schema": {
+        "url": "http://localhost:8000/api/market-movers",
+        "method": "GET"
+      },
+      "response_timeout_secs": 5
+    },
+    {
+      "name": "get_stock_news",
+      "type": "webhook",
+      "description": "Retrieves latest news for specific stocks",
+      "api_schema": {
+        "url": "http://localhost:8000/api/stock-news",
+        "method": "GET",
+        "query_params_schema": {
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Stock symbol for news lookup"
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
+      },
+      "response_timeout_secs": 5
+    },
+    {
+      "name": "get_analyst_ratings",
+      "type": "webhook",
+      "description": "Gets professional analyst recommendations and price targets",
+      "api_schema": {
+        "url": "http://localhost:8000/api/analyst-ratings",
+        "method": "GET",
+        "query_params_schema": {
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Stock symbol"
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
+      },
+      "response_timeout_secs": 5
+    },
+    {
+      "name": "get_options_chain",
+      "type": "webhook",
+      "description": "Retrieves complete options chain with strikes and expiries",
+      "api_schema": {
+        "url": "http://localhost:8000/api/options-chain",
+        "method": "GET",
+        "query_params_schema": {
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Stock symbol"
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
+      },
+      "response_timeout_secs": 5
+    }
+  ]
+}

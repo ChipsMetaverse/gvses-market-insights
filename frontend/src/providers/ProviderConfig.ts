@@ -145,6 +145,50 @@ export class ProviderConfigManager {
             }
           }
         },
+        'openai-realtime': {
+          development: {
+            type: 'openai-realtime',
+            name: 'OpenAI Realtime Voice (Dev)',
+            apiUrl: import.meta.env.VITE_WEBSOCKET_RELAY_URL || 'ws://localhost:3004',
+            model: 'gpt-4o-realtime-preview',
+            voice: 'alloy',
+            capabilities: {
+              voiceConversation: true,
+              textChat: true,
+              textToSpeech: true,
+              speechToText: true,
+              streaming: true,
+              tools: true
+            },
+            settings: {
+              audioFormat: 'pcm',
+              sampleRate: 24000,
+              channels: 1,
+              turnDetection: 'server_vad'
+            }
+          },
+          production: {
+            type: 'openai-realtime',
+            name: 'OpenAI Realtime Voice',
+            apiUrl: import.meta.env.VITE_WEBSOCKET_RELAY_URL || 'wss://g-vses.fly.dev/stream',
+            model: 'gpt-4o-realtime-preview',
+            voice: 'alloy',
+            capabilities: {
+              voiceConversation: true,
+              textChat: true,
+              textToSpeech: true,
+              speechToText: true,
+              streaming: true,
+              tools: true
+            },
+            settings: {
+              audioFormat: 'pcm',
+              sampleRate: 24000,
+              channels: 1,
+              turnDetection: 'server_vad'
+            }
+          }
+        },
         claude: {
           development: {
             type: 'claude',
@@ -292,6 +336,10 @@ export class ProviderConfigManager {
       case 'openai':
       case 'claude':
         return !!config.apiKey;
+      
+      case 'openai-realtime':
+        // OpenAI Realtime uses WebSocket relay - no API key required
+        return true;
       
       default:
         return true;

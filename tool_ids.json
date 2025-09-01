@@ -1,0 +1,22 @@
+{
+  "tool_ids": [
+    "tool_7001k3t333e6ejktsrpht14ab0jf",
+    "tool_4201k3t333xkfet9w9zteq4tzvt2",
+    "tool_8301k3t334byfpd91sgbg1q5rw5t",
+    "tool_0801k3t334tvfkmrj3epg5kapxdz",
+    "tool_7501k3t3359hejgbdemab3ywgf4x",
+    "tool_9301k3t335rffk9aat8vw67ah89x",
+    "tool_1701k3t3367hfjjvgdbcc3m2fhy0",
+    "tool_5701k3t336p6e3tajvxppc4as8ph"
+  ],
+  "tool_names": [
+    "get_stock_price",
+    "get_market_overview",
+    "get_stock_news",
+    "get_stock_history",
+    "get_comprehensive_stock_data",
+    "get_market_movers",
+    "get_analyst_ratings",
+    "get_options_chain"
+  ]
+}

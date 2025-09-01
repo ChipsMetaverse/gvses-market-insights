@@ -24,6 +24,7 @@ export function ProviderSelector({
     switchProvider,
     switchToElevenLabs,
     switchToOpenAI,
+    switchToOpenAIRealtime,
     switchToClaude,
     isConnected,
     isConnecting,
@@ -53,6 +54,11 @@ export function ProviderSelector({
             return;
           }
           await switchToOpenAI(apiKeys.openai);
+          break;
+        
+        case 'openai-realtime':
+          // OpenAI Realtime doesn't need an API key (uses relay)
+          await switchToOpenAIRealtime();
           break;
         
         case 'claude':
@@ -225,6 +231,7 @@ export function ProviderSelector({
               <div className="w-6 h-6 flex items-center justify-center">
                 {provider.type === 'elevenlabs' && '🎤'}
                 {provider.type === 'openai' && '🤖'}
+                {provider.type === 'openai-realtime' && '🎙️'}
                 {provider.type === 'claude' && '🧠'}
               </div>
               <div>
@@ -234,7 +241,7 @@ export function ProviderSelector({
             </div>
             
             <div className="flex items-center gap-2">
-              {!provider.available && (
+              {!provider.available && provider.type !== 'openai-realtime' && (
                 <span className="text-xs text-orange-600">API Key Required</span>
               )}
               
@@ -247,7 +254,7 @@ export function ProviderSelector({
                 className={`px-3 py-1 text-xs rounded ${
                   currentProvider?.config.type === provider.type
                     ? 'bg-green-100 text-green-700'
-                    : provider.available
+                    : provider.available || provider.type === 'openai-realtime'
                     ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}

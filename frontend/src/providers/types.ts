@@ -35,7 +35,7 @@ export interface ProviderCapabilities {
 
 // Provider configuration
 export interface ProviderConfig {
-  type: 'elevenlabs' | 'openai' | 'claude' | 'custom';
+  type: 'elevenlabs' | 'openai' | 'openai-realtime' | 'claude' | 'custom';
   name: string;
   apiKey?: string;
   apiUrl?: string;

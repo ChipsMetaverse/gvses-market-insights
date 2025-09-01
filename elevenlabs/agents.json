@@ -1,0 +1,8 @@
+{
+    "agents": [
+        {
+            "name": "Gsves Market Insights",
+            "config": "agent_configs/gsves_market_insights.json"
+        }
+    ]
+}

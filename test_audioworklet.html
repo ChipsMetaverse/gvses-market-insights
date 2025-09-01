@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioWorklet Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background: #e8f5e9;
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .volume-meter {
+            margin-top: 20px;
+            height: 30px;
+            background: #f0f0f0;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        .volume-bar {
+            height: 100%;
+            background: linear-gradient(to right, #4CAF50, #8BC34A);
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff3e0;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 AudioWorklet Implementation Test</h1>
+        
+        <div class="info">
+            This test verifies that the AudioWorkletNode implementation is working correctly
+            and the deprecated ScriptProcessorNode warning is resolved.
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <button id="startBtn" onclick="startRecording()">Start Recording</button>
+            <button id="stopBtn" onclick="stopRecording()" disabled>Stop Recording</button>
+        </div>
+        
+        <div id="status" class="status">
+            Ready to test AudioWorklet
+        </div>
+        
+        <div class="volume-meter">
+            <div id="volumeBar" class="volume-bar"></div>
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <small>Audio Samples Processed: <span id="sampleCount">0</span></small>
+        </div>
+    </div>
+
+    <script>
+        let audioContext;
+        let audioWorklet;
+        let stream;
+        let source;
+        let sampleCount = 0;
+
+        async function startRecording() {
+            const statusEl = document.getElementById('status');
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            try {
+                statusEl.className = 'status';
+                statusEl.textContent = 'Requesting microphone access...';
+                
+                // Get microphone access
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                statusEl.textContent = 'Initializing AudioContext...';
+                
+                // Create AudioContext
+                audioContext = new AudioContext({ sampleRate: 16000 });
+                
+                statusEl.textContent = 'Loading AudioWorklet module...';
+                
+                // Load AudioWorklet module
+                await audioContext.audioWorklet.addModule('/audio-processor.js');
+                
+                statusEl.textContent = 'Creating AudioWorklet node...';
+                
+                // Create AudioWorklet node
+                audioWorklet = new AudioWorkletNode(audioContext, 'audio-processor');
+                
+                // Handle messages from the processor
+                audioWorklet.port.onmessage = (event) => {
+                    if (event.data.type === 'audio') {
+                        sampleCount += event.data.buffer.length;
+                        document.getElementById('sampleCount').textContent = sampleCount.toLocaleString();
+                    } else if (event.data.type === 'volume') {
+                        const volumeBar = document.getElementById('volumeBar');
+                        volumeBar.style.width = (event.data.level * 100) + '%';
+                    }
+                };
+                
+                // Connect audio nodes
+                source = audioContext.createMediaStreamSource(stream);
+                source.connect(audioWorklet);
+                audioWorklet.connect(audioContext.destination);
+                
+                statusEl.className = 'status success';
+                statusEl.innerHTML = '✅ <strong>AudioWorklet is working!</strong><br>No deprecation warnings - modern implementation active';
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                
+                // Check console for warnings
+                console.log('✅ AudioWorklet successfully initialized - no ScriptProcessorNode deprecation warning!');
+                
+            } catch (error) {
+                statusEl.className = 'status error';
+                statusEl.textContent = '❌ Error: ' + error.message;
+                console.error('AudioWorklet test failed:', error);
+            }
+        }
+
+        function stopRecording() {
+            const statusEl = document.getElementById('status');
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            // Clean up
+            if (audioWorklet) {
+                audioWorklet.disconnect();
+                audioWorklet.port.close();
+                audioWorklet = null;
+            }
+            
+            if (source) {
+                source.disconnect();
+                source = null;
+            }
+            
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            // Reset UI
+            document.getElementById('volumeBar').style.width = '0%';
+            statusEl.className = 'status';
+            statusEl.textContent = 'Recording stopped. Ready to test again.';
+            
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', stopRecording);
+    </script>
+</body>
+</html>

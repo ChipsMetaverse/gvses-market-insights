@@ -12,6 +12,7 @@ export { AbstractBaseProvider } from './BaseProvider';
 // Provider implementations
 export { ElevenLabsProvider } from './ElevenLabsProvider';
 export { OpenAIProvider } from './OpenAIProvider';
+export { OpenAIRealtimeProvider } from './OpenAIRealtimeProvider';
 
 // Factory and management
 export { providerFactory, ProviderFactory } from './ProviderFactory';
@@ -46,6 +47,12 @@ export const setupElevenLabs = async (agentId: string, apiUrl?: string) => {
 
 export const setupOpenAI = async (apiKey: string, model?: string) => {
   const config = providerFactory.createOpenAIConfig(apiKey, model);
+  await providerManager.switchProvider(config);
+  return providerManager.getCurrentProvider();
+};
+
+export const setupOpenAIRealtime = async (apiUrl?: string, model?: string, voice?: string) => {
+  const config = providerFactory.createOpenAIRealtimeConfig(apiUrl, model, voice);
   await providerManager.switchProvider(config);
   return providerManager.getCurrentProvider();
 };

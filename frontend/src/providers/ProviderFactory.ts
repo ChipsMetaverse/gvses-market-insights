@@ -11,6 +11,7 @@ import {
 } from './types';
 import { ElevenLabsProvider } from './ElevenLabsProvider';
 import { OpenAIProvider } from './OpenAIProvider';
+import { OpenAIRealtimeProvider } from './OpenAIRealtimeProvider';
 
 // Provider registry type
 type ProviderConstructor = new (config: ProviderConfig) => BaseProvider;
@@ -35,6 +36,7 @@ export class ProviderFactory implements IProviderFactory {
     // Register built-in providers
     this.registerProvider('elevenlabs', ElevenLabsProvider);
     this.registerProvider('openai', OpenAIProvider);
+    this.registerProvider('openai-realtime', OpenAIRealtimeProvider);
 
     // Register default configurations
     this.registerProviderConfig({
@@ -55,6 +57,18 @@ export class ProviderFactory implements IProviderFactory {
       settings: {
         temperature: 0.7,
         maxTokens: 1000
+      }
+    });
+
+    this.registerProviderConfig({
+      type: 'openai-realtime',
+      name: 'OpenAI Realtime Voice',
+      capabilities: OpenAIRealtimeProvider.getDefaultCapabilities(),
+      settings: {
+        audioFormat: 'pcm',
+        sampleRate: 24000,
+        channels: 1,
+        voice: 'alloy'
       }
     });
   }
@@ -134,6 +148,23 @@ export class ProviderFactory implements IProviderFactory {
     };
   }
 
+  createOpenAIRealtimeConfig(apiUrl?: string, model?: string, voice?: string): ProviderConfig {
+    return {
+      type: 'openai-realtime',
+      name: 'OpenAI Realtime Voice',
+      apiUrl: apiUrl || window.location.origin,
+      model: model || 'gpt-4o-realtime-preview',
+      voice: voice || 'alloy',
+      capabilities: OpenAIRealtimeProvider.getDefaultCapabilities(),
+      settings: {
+        audioFormat: 'pcm',
+        sampleRate: 24000,
+        channels: 1,
+        turnDetection: 'server_vad'
+      }
+    };
+  }
+
   createClaudeConfig(apiKey: string, model?: string): ProviderConfig {
     return {
       type: 'claude',
@@ -184,6 +215,13 @@ export class ProviderFactory implements IProviderFactory {
       case 'openai':
         if (!config.apiKey) {
           errors.push('OpenAI API key is required');
+        }
+        break;
+      
+      case 'openai-realtime':
+        // OpenAI Realtime uses backend proxy, so no API key needed in frontend
+        if (!config.apiUrl) {
+          errors.push('OpenAI Realtime API URL is required');
         }
         break;
       

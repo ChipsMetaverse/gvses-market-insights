@@ -82,7 +82,7 @@ Returns everything in one call:
 
 ### 🎯 How G'sves Uses These Tools
 
-When you ask G'sves about a stock, the agent will:
+When you ask G'sves about a stock[text]/Users/MarcoPolo/workspace/COMPLETE_MCP_ECOSYSTEM.md(../../../Users/MarcoPolo/workspace/mcp-servers-dashboard), the agent will:
 
 1. **Fetch comprehensive data** using the enhanced tools
 2. **Analyze the information** with 30+ years of "experience"

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Voice Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .pending { background-color: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        #log {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>ElevenLabs Voice Connection Test</h1>
+    
+    <div id="status" class="status pending">Ready to test</div>
+    
+    <button onclick="testBackendEndpoint()">1. Test Backend Endpoint</button>
+    <button onclick="testWebSocketConnection()">2. Test WebSocket Connection</button>
+    <button onclick="testFullFlow()">3. Test Full Voice Flow</button>
+    <button onclick="clearLog()">Clear Log</button>
+    
+    <h3>Test Log:</h3>
+    <div id="log"></div>
+    
+    <h3>WebSocket Status:</h3>
+    <pre id="wsStatus">Not connected</pre>
+
+    <script>
+        let ws = null;
+        let audioContext = null;
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            const color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            logDiv.innerHTML += `<div style="color: ${color}">[${time}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function updateStatus(message, type = 'pending') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+        
+        async function testBackendEndpoint() {
+            log('Testing backend endpoint...');
+            updateStatus('Testing backend endpoint...', 'pending');
+            
+            try {
+                const response = await fetch('http://localhost:8000/elevenlabs/signed-url');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                log(`✅ Backend responded with signed URL`, 'success');
+                log(`URL: ${data.signed_url.substring(0, 100)}...`);
+                updateStatus('Backend endpoint working!', 'success');
+                
+                return data.signed_url;
+            } catch (error) {
+                log(`❌ Backend test failed: ${error.message}`, 'error');
+                updateStatus('Backend test failed!', 'error');
+                throw error;
+            }
+        }
+        
+        async function testWebSocketConnection() {
+            log('Testing WebSocket connection...');
+            updateStatus('Testing WebSocket connection...', 'pending');
+            
+            try {
+                // First get the signed URL
+                const signedUrl = await testBackendEndpoint();
+                
+                // Close existing connection if any
+                if (ws) {
+                    ws.close();
+                    ws = null;
+                }
+                
+                // Create WebSocket connection
+                log('Creating WebSocket connection...');
+                ws = new WebSocket(signedUrl);
+                
+                ws.onopen = () => {
+                    log('✅ WebSocket connected!', 'success');
+                    updateStatus('WebSocket connected!', 'success');
+                    document.getElementById('wsStatus').textContent = 'Connected';
+                    
+                    // Send initialization message
+                    const initMessage = {
+                        type: 'conversation_initiation_client_data',
+                        custom_llm_data: {
+                            timestamp: new Date().toISOString()
+                        }
+                    };
+                    ws.send(JSON.stringify(initMessage));
+                    log('Sent initialization message');
+                };
+                
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    log(`📨 Received: ${data.type}`);
+                    
+                    if (data.type === 'conversation_initiation_metadata') {
+                        log('✅ Conversation initialized successfully!', 'success');
+                    }
+                };
+                
+                ws.onerror = (error) => {
+                    log(`❌ WebSocket error: ${error}`, 'error');
+                    updateStatus('WebSocket error!', 'error');
+                    document.getElementById('wsStatus').textContent = 'Error';
+                };
+                
+                ws.onclose = () => {
+                    log('WebSocket closed');
+                    document.getElementById('wsStatus').textContent = 'Disconnected';
+                };
+                
+            } catch (error) {
+                log(`❌ WebSocket test failed: ${error.message}`, 'error');
+                updateStatus('WebSocket test failed!', 'error');
+            }
+        }
+        
+        async function testFullFlow() {
+            log('Starting full voice flow test...');
+            updateStatus('Testing full voice flow...', 'pending');
+            
+            try {
+                // Test WebSocket connection first
+                await testWebSocketConnection();
+                
+                // Wait for connection to establish
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    log('Testing audio context...');
+                    
+                    // Initialize audio context
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: 16000
+                    });
+                    log(`✅ Audio context created (sample rate: ${audioContext.sampleRate}Hz)`);
+                    
+                    // Test sending a text message
+                    const testMessage = {
+                        type: 'user_message',
+                        message: 'Hello, this is a test message'
+                    };
+                    ws.send(JSON.stringify(testMessage));
+                    log('✅ Sent test message to ElevenLabs', 'success');
+                    
+                    updateStatus('Full flow test complete!', 'success');
+                } else {
+                    throw new Error('WebSocket not connected');
+                }
+                
+            } catch (error) {
+                log(`❌ Full flow test failed: ${error.message}`, 'error');
+                updateStatus('Full flow test failed!', 'error');
+            }
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+            log('Log cleared');
+        }
+        
+        // Initial status
+        log('Voice connection test page loaded');
+        log('Backend URL: http://localhost:8000');
+        log('Click the buttons in order to test each component');
+    </script>
+</body>
+</html>

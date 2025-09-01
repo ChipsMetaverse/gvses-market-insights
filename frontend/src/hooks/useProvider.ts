@@ -33,6 +33,7 @@ export interface UseProviderReturn {
   switchProvider: (config: ProviderConfig) => Promise<void>;
   switchToElevenLabs: (agentId: string, apiUrl?: string) => Promise<void>;
   switchToOpenAI: (apiKey: string, model?: string) => Promise<void>;
+  switchToOpenAIRealtime: (model?: string, voice?: string) => Promise<void>;
   switchToClaude: (apiKey: string, model?: string) => Promise<void>;
   disconnect: () => Promise<void>;
   connect: () => Promise<void>;
@@ -158,6 +159,11 @@ export function useProvider(options: UseProviderOptions = {}): UseProviderReturn
     setCurrentProvider(providerManager.getCurrentProvider());
   }, []);
 
+  const switchToOpenAIRealtime = useCallback(async (model?: string, voice?: string) => {
+    await providerManager.switchToOpenAIRealtime(model, voice);
+    setCurrentProvider(providerManager.getCurrentProvider());
+  }, []);
+
   const switchToClaude = useCallback(async (apiKey: string, model?: string) => {
     await providerManager.switchToClaude(apiKey, model);
     setCurrentProvider(providerManager.getCurrentProvider());
@@ -262,6 +268,7 @@ export function useProvider(options: UseProviderOptions = {}): UseProviderReturn
     switchProvider,
     switchToElevenLabs,
     switchToOpenAI,
+    switchToOpenAIRealtime,
     switchToClaude,
     disconnect,
     connect,

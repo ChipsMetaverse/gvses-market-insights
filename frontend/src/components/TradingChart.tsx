@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import { createChart, ColorType, CandlestickSeries, Time } from 'lightweight-charts'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { createChart, ColorType, CandlestickSeries, Time, IChartApi, ISeriesApi } from 'lightweight-charts'
 import { marketDataService } from '../services/marketDataService'
+import { chartControlService } from '../services/chartControlService'
 
 interface TradingChartProps {
   symbol: string
@@ -10,51 +11,223 @@ interface TradingChartProps {
 
 export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<any>(null)
-  const candlestickSeriesRef = useRef<any>(null)
+  const chartRef = useRef<IChartApi | null>(null)
+  const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [levelPositions, setLevelPositions] = useState<{ qe?: number; st?: number; ltb?: number }>({})
-
-  // Fetch real historical data
-  const fetchChartData = async (symbol: string) => {
+  const [isChartReady, setIsChartReady] = useState(false)
+  
+  // Lifecycle management refs
+  const isMountedRef = useRef(true)
+  const isChartDisposedRef = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const priceLineRefsRef = useRef<Array<any>>([])
+  const currentSymbolRef = useRef(symbol)
+  
+  // Update label positions to sync with chart
+  const updateLabelPositions = useCallback(() => {
+    if (isChartDisposedRef.current || !chartRef.current || !candlestickSeriesRef.current) {
+      return
+    }
+    
+    try {
+      const newPositions: any = {}
+      
+      if (technicalLevels?.qe_level) {
+        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.qe_level)
+        if (coord !== null && coord !== undefined && !isNaN(coord)) {
+          newPositions.qe = coord
+        }
+      }
+      if (technicalLevels?.st_level) {
+        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.st_level)
+        if (coord !== null && coord !== undefined && !isNaN(coord)) {
+          newPositions.st = coord
+        }
+      }
+      if (technicalLevels?.ltb_level) {
+        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.ltb_level)
+        if (coord !== null && coord !== undefined && !isNaN(coord)) {
+          newPositions.ltb = coord
+        }
+      }
+      
+      if (isMountedRef.current) {
+        setLevelPositions(newPositions)
+      }
+    } catch (error) {
+      console.debug('Error updating label positions:', error)
+    }
+  }, [technicalLevels])
+  
+  // Create a ref to always have the latest updateLabelPositions function
+  const updateLabelPositionsRef = useRef(updateLabelPositions)
+  useEffect(() => {
+    updateLabelPositionsRef.current = updateLabelPositions
+  }, [updateLabelPositions])
+  
+  // Fetch chart data with proper cancellation
+  const fetchChartData = useCallback(async (symbolToFetch: string) => {
+    // Cancel any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController()
+    
     setIsLoading(true)
     setError(null)
+    
     try {
-      const history = await marketDataService.getStockHistory(symbol, 100)
+      const history = await marketDataService.getStockHistory(symbolToFetch, 100)
+      
+      // Check if component is still mounted and request wasn't aborted
+      if (!isMountedRef.current || abortControllerRef.current.signal.aborted) {
+        return null
+      }
       
       // Check if we have actual candle data
       if (!history.candles || history.candles.length === 0) {
-        throw new Error(`No historical data available for ${symbol}`)
+        throw new Error(`No historical data available for ${symbolToFetch}`)
       }
       
-      // Convert to lightweight-charts format (using Unix timestamps from API)
+      // Convert to lightweight-charts format
       const chartData = history.candles.map(candle => ({
-        time: (candle.time || candle.date) as Time, // API returns 'time' field with Unix timestamp
+        time: (candle.time || candle.date) as Time,
         open: candle.open,
         high: candle.high,
         low: candle.low,
         close: candle.close
       })).sort((a, b) => (a.time as number) - (b.time as number))
       
-      // Technical levels now come from parent component props
-      
       return chartData
     } catch (error: any) {
+      if (error.name === 'AbortError' || !isMountedRef.current) {
+        return null
+      }
+      
       console.error('Error fetching chart data:', error)
-      // Set error message for display
       const errorMsg = error?.response?.data?.detail?.message || error?.message || 'Failed to load chart data'
-      setError(errorMsg)
+      
+      if (isMountedRef.current) {
+        setError(errorMsg)
+      }
       return null
     } finally {
-      setIsLoading(false)
+      if (isMountedRef.current) {
+        setIsLoading(false)
+      }
     }
-  }
-
-
+  }, [])
+  
+  // Update only the chart data without recreating the chart
+  const updateChartData = useCallback(async (symbolToUpdate: string) => {
+    if (isChartDisposedRef.current || !candlestickSeriesRef.current) {
+      return
+    }
+    
+    const chartData = await fetchChartData(symbolToUpdate)
+    
+    if (chartData && chartData.length > 0 && !isChartDisposedRef.current && candlestickSeriesRef.current) {
+      try {
+        candlestickSeriesRef.current.setData(chartData)
+        
+        if (chartRef.current) {
+          chartRef.current.timeScale().fitContent()
+        }
+      } catch (error) {
+        console.debug('Error updating chart data:', error)
+      }
+    }
+  }, [fetchChartData])
+  
+  // Update technical level lines without recreating the chart
+  const updateTechnicalLevels = useCallback(() => {
+    if (isChartDisposedRef.current || !candlestickSeriesRef.current) {
+      return
+    }
+    
+    try {
+      // Remove old price lines
+      priceLineRefsRef.current.forEach(priceLine => {
+        try {
+          candlestickSeriesRef.current?.removePriceLine(priceLine)
+        } catch (e) {
+          // Ignore errors when removing lines
+        }
+      })
+      priceLineRefsRef.current = []
+      
+      // Add new price lines without titles (labels will be on left side)
+      if (technicalLevels?.qe_level) {
+        const line = candlestickSeriesRef.current.createPriceLine({
+          price: technicalLevels.qe_level,
+          color: '#10b981',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: '',
+        })
+        priceLineRefsRef.current.push(line)
+      }
+      
+      if (technicalLevels?.st_level) {
+        const line = candlestickSeriesRef.current.createPriceLine({
+          price: technicalLevels.st_level,
+          color: '#eab308',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: '',
+        })
+        priceLineRefsRef.current.push(line)
+      }
+      
+      if (technicalLevels?.ltb_level) {
+        const line = candlestickSeriesRef.current.createPriceLine({
+          price: technicalLevels.ltb_level,
+          color: '#3b82f6',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: '',
+        })
+        priceLineRefsRef.current.push(line)
+      }
+      
+      // Update label positions after adding lines
+      setTimeout(() => updateLabelPositionsRef.current(), 100)
+    } catch (error) {
+      console.debug('Error updating technical levels:', error)
+    }
+  }, [technicalLevels])
+  
+  // Handle resize
+  const handleResize = useCallback(() => {
+    if (isChartDisposedRef.current || !chartRef.current || !chartContainerRef.current) {
+      return
+    }
+    
+    try {
+      chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth })
+      updateLabelPositionsRef.current()
+    } catch (error) {
+      console.debug('Error handling resize:', error)
+    }
+  }, [])
+  
+  // Create and initialize the chart (only once per symbol)
   useEffect(() => {
     if (!chartContainerRef.current) return
-
+    
+    // Mark as mounted
+    isMountedRef.current = true
+    isChartDisposedRef.current = false
+    currentSymbolRef.current = symbol
+    
+    // Create the chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'white' },
@@ -78,7 +251,7 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
         secondsVisible: false,
       },
     })
-
+    
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
@@ -87,140 +260,115 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       wickDownColor: '#ef4444',
       wickUpColor: '#22c55e',
     })
-
+    
     chartRef.current = chart
     candlestickSeriesRef.current = candlestickSeries
-
-    // Load real chart data
-    const loadChartData = async () => {
-      const chartData = await fetchChartData(symbol)
-      
-      if (chartData && chartData.length > 0) {
-        candlestickSeries.setData(chartData)
-        
-        // Add technical levels as price lines (with price values on right)
-        if (technicalLevels.qe_level) {
-          candlestickSeries.createPriceLine({
-            price: technicalLevels.qe_level,
-            color: '#10b981',
-            lineWidth: 2,
-            lineStyle: 2,
-            axisLabelVisible: true,  // Show price value on right
-            title: '',  // No text label, just the price
-          })
-        }
-        
-        if (technicalLevels.st_level) {
-          candlestickSeries.createPriceLine({
-            price: technicalLevels.st_level,
-            color: '#eab308',
-            lineWidth: 2,
-            lineStyle: 2,
-            axisLabelVisible: true,  // Show price value on right
-            title: '',  // No text label, just the price
-          })
-        }
-        
-        if (technicalLevels.ltb_level) {
-          candlestickSeries.createPriceLine({
-            price: technicalLevels.ltb_level,
-            color: '#3b82f6',
-            lineWidth: 2,
-            lineStyle: 2,
-            axisLabelVisible: true,  // Show price value on right
-            title: '',  // No text label, just the price
-          })
-        }
-        
-        // Subscribe to chart updates for label position synchronization
-        const updateLabelPositions = () => {
-          if (chartRef.current && candlestickSeriesRef.current) {
-            const positions: any = {}
-            if (technicalLevels.qe_level) {
-              const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.qe_level)
-              if (coord !== null) positions.qe = coord
-            }
-            if (technicalLevels.st_level) {
-              const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.st_level)
-              if (coord !== null) positions.st = coord
-            }
-            if (technicalLevels.ltb_level) {
-              const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.ltb_level)
-              if (coord !== null) positions.ltb = coord
-            }
-            setLevelPositions(positions)
-          }
-        }
-
-        // Initial update
-        setTimeout(updateLabelPositions, 100)
-        
-        // Subscribe to visible range changes for continuous updates
-        const timeScale = chart.timeScale()
-        timeScale.subscribeVisibleLogicalRangeChange(updateLabelPositions)
-        
-        // Also subscribe to crosshair for real-time updates during interactions
-        chart.subscribeCrosshairMove(updateLabelPositions)
-        
-        chart.timeScale().fitContent()
-      }
-      // If chartData is null, error state is already set in fetchChartData
-    }
-
-    loadChartData()
-
-    if (onChartReady) {
+    
+    // Mark chart as ready for event subscriptions
+    setIsChartReady(true)
+    
+    // Add resize listener
+    window.addEventListener('resize', handleResize)
+    
+    // Load initial data
+    updateChartData(symbol).then(() => {
+      updateTechnicalLevels()
+      setTimeout(() => updateLabelPositionsRef.current(), 200)
+    })
+    
+    // Notify parent that chart is ready
+    if (onChartReady && !isChartDisposedRef.current) {
       onChartReady(chart)
     }
-
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth })
-      }
-    }
-
-    window.addEventListener('resize', handleResize)
-
+    
+    // Cleanup function
     return () => {
+      isMountedRef.current = false
+      isChartDisposedRef.current = true
+      setIsChartReady(false)
+      
+      // Cancel any pending requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      
+      // Remove event listener
       window.removeEventListener('resize', handleResize)
-      chart.remove()
+      
+      // Clear price lines
+      priceLineRefsRef.current = []
+      
+      // Clear chart control service reference
+      if (chartControlService) {
+        chartControlService.setChartRef(null)
+      }
+      
+      // Dispose the chart
+      try {
+        chart.remove()
+      } catch (e) {
+        // Ignore errors during disposal
+      }
+      
+      chartRef.current = null
+      candlestickSeriesRef.current = null
     }
-  }, [symbol, technicalLevels, onChartReady])
-
-  // Update positions when window resizes
+  }, [symbol]) // Only recreate chart when symbol changes
+  
+  // Subscribe to chart events for label synchronization
   useEffect(() => {
-    if (!chartRef.current || !candlestickSeriesRef.current || !technicalLevels) return
-    
-    const updatePositions = () => {
-      const positions: any = {}
-      if (technicalLevels.qe_level) {
-        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.qe_level)
-        if (coord !== null) positions.qe = coord
-      }
-      if (technicalLevels.st_level) {
-        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.st_level)
-        if (coord !== null) positions.st = coord
-      }
-      if (technicalLevels.ltb_level) {
-        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.ltb_level)
-        if (coord !== null) positions.ltb = coord
-      }
-      setLevelPositions(positions)
+    if (!isChartReady || !chartRef.current || isChartDisposedRef.current) {
+      return
     }
     
-    // Listen for window resize
-    window.addEventListener('resize', updatePositions)
+    const chart = chartRef.current
+    const timeScale = chart.timeScale()
     
-    // Initial update
-    const timeoutId = setTimeout(updatePositions, 200)
+    // Event handler that uses the ref to get the latest function
+    const handleChartUpdate = () => {
+      if (!isChartDisposedRef.current && isMountedRef.current) {
+        updateLabelPositionsRef.current()
+      }
+    }
     
-    return () => {
-      clearTimeout(timeoutId)
-      window.removeEventListener('resize', updatePositions)
+    // Subscribe to chart events
+    timeScale.subscribeVisibleLogicalRangeChange(handleChartUpdate)
+    chart.subscribeCrosshairMove(handleChartUpdate)
+    timeScale.subscribeVisibleTimeRangeChange(handleChartUpdate)
+    
+    // Cleanup not needed since chart disposal handles event cleanup
+  }, [isChartReady]) // Re-subscribe when chart is ready
+  
+  // Update data when symbol changes (without recreating chart)
+  useEffect(() => {
+    if (currentSymbolRef.current !== symbol && chartRef.current && !isChartDisposedRef.current) {
+      currentSymbolRef.current = symbol
+      updateChartData(symbol)
+    }
+  }, [symbol, updateChartData])
+  
+  // Update technical levels when they change (without recreating chart)
+  useEffect(() => {
+    if (chartRef.current && !isChartDisposedRef.current) {
+      updateTechnicalLevels()
+    }
+  }, [technicalLevels, updateTechnicalLevels])
+  
+  // Update label positions when technical levels change
+  useEffect(() => {
+    if (chartRef.current && !isChartDisposedRef.current && technicalLevels) {
+      // Multiple retries to ensure labels appear
+      const timeouts: NodeJS.Timeout[] = []
+      timeouts.push(setTimeout(() => updateLabelPositionsRef.current(), 100))
+      timeouts.push(setTimeout(() => updateLabelPositionsRef.current(), 300))
+      timeouts.push(setTimeout(() => updateLabelPositionsRef.current(), 600))
+      
+      return () => {
+        timeouts.forEach(timeout => clearTimeout(timeout))
+      }
     }
   }, [technicalLevels])
-
+  
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       {isLoading && (
@@ -279,18 +427,18 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
             <div
               style={{
                 position: 'absolute',
-                left: '0px',
+                left: '2px',
                 top: `${levelPositions.qe}px`,
                 transform: 'translateY(-50%)',
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                color: '#10b981',  // Green text
-                padding: '2px 6px',
+                backgroundColor: 'rgba(255, 255, 255, 0.75)',
+                color: '#10b981',
+                padding: '2px 8px',
+                border: '1px solid #10b981',
                 borderRadius: '4px',
                 fontSize: '11px',
-                fontWeight: '600',
-                zIndex: 5,
+                fontWeight: '700',
+                zIndex: 10,
                 whiteSpace: 'nowrap',
-                border: '1px solid #10b981',
               }}
             >
               QE Level
@@ -300,18 +448,18 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
             <div
               style={{
                 position: 'absolute',
-                left: '0px',
+                left: '2px',
                 top: `${levelPositions.st}px`,
                 transform: 'translateY(-50%)',
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                color: '#eab308',  // Yellow text
-                padding: '2px 6px',
+                backgroundColor: 'rgba(255, 255, 255, 0.75)',
+                color: '#eab308',
+                padding: '2px 8px',
+                border: '1px solid #eab308',
                 borderRadius: '4px',
                 fontSize: '11px',
-                fontWeight: '600',
-                zIndex: 5,
+                fontWeight: '700',
+                zIndex: 10,
                 whiteSpace: 'nowrap',
-                border: '1px solid #eab308',
               }}
             >
               ST Level
@@ -321,18 +469,18 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
             <div
               style={{
                 position: 'absolute',
-                left: '0px',
+                left: '2px',
                 top: `${levelPositions.ltb}px`,
                 transform: 'translateY(-50%)',
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                color: '#3b82f6',  // Blue text
-                padding: '2px 6px',
+                backgroundColor: 'rgba(255, 255, 255, 0.75)',
+                color: '#3b82f6',
+                padding: '2px 8px',
+                border: '1px solid #3b82f6',
                 borderRadius: '4px',
                 fontSize: '11px',
-                fontWeight: '600',
-                zIndex: 5,
+                fontWeight: '700',
+                zIndex: 10,
                 whiteSpace: 'nowrap',
-                border: '1px solid #3b82f6',
               }}
             >
               LTB Level

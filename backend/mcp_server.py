@@ -487,7 +487,6 @@ async def get_elevenlabs_signed_url(agent_id: Optional[str] = Query(default=None
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
-
 class ConversationRecordRequest(BaseModel):
     """Request model for recording conversation messages."""
     session_id: str

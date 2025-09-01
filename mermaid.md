@@ -1100,6 +1100,11 @@ sequenceDiagram
 - **Chart Component**: `frontend/src/components/TradingChart.tsx`
   - Implements TradingView Lightweight Charts v5
   - Real-time candlestick data visualization
+  - **Label Synchronization Fix** (Sep 1, 2025):
+    - Left-side technical level labels (QE, ST, LTB) now sync instantly with chart movements
+    - Removed requestAnimationFrame wrapper for instant updates
+    - Uses ref pattern to avoid React closure issues
+    - Event subscriptions properly managed with isChartReady state
   
 - **Styling**: `frontend/src/components/TradingDashboardSimple.css`
   - Lines 574-601: Scrollable container styles
@@ -1207,3 +1212,58 @@ sequenceDiagram
 - ✅ **Real-time Data**: All news sourced from live CNBC and Yahoo Finance APIs
 - ✅ **MCP Integration**: Full integration with market-mcp-server for real historical data from Yahoo Finance
 - ✅ **Chart Data Pipeline**: Backend MCP client → Market MCP Server → Yahoo Finance API → TradingView Charts
+
+## Voice-Controlled Chart System
+
+### Architecture
+```mermaid
+graph LR
+    subgraph "Voice Control Flow"
+        User[User Voice/Text] --> ElevenLabs[ElevenLabs Agent]
+        ElevenLabs --> Response[Agent Response]
+        Response --> ChartControl[chartControlService]
+        ChartControl --> CommandParser[Command Parser]
+        CommandParser --> CommandExecutor[Command Executor]
+        CommandExecutor --> ChartAPI[Chart API]
+        CommandExecutor --> Toast[Toast Notification]
+    end
+    
+    subgraph "Visual Feedback"
+        Toast --> Success[Success Toast]
+        Toast --> Error[Error Toast]
+        Toast --> Info[Info Toast]
+    end
+    
+    subgraph "Supported Commands"
+        Commands[Commands]
+        Commands --> Symbol[CHART:SYMBOL]
+        Commands --> Timeframe[TIMEFRAME:1D/5D/1M]
+        Commands --> Indicators[ADD/REMOVE:RSI/MACD]
+        Commands --> Zoom[ZOOM:IN/OUT]
+        Commands --> Scroll[SCROLL:date]
+        Commands --> Style[STYLE:CANDLES/LINE]
+    end
+```
+
+### Components
+- **chartControlService.ts**: Central service for parsing and executing chart commands
+- **CommandToast.tsx**: Visual feedback component with animations
+- **TradingDashboardSimple.tsx**: Integration point with callbacks
+- **ElevenLabs Agent**: Trained to include chart commands in responses
+
+### Features
+- ✅ **Natural Language Processing**: Agent understands conversational chart requests
+- ✅ **Visual Feedback**: Toast notifications confirm command execution
+- ✅ **Error Handling**: Clear error messages for failed commands
+- ✅ **Instant Updates**: Zero-delay chart synchronization
+- ✅ **Command Validation**: Robust parsing with fallback handling
+
+## Recent Updates (September 1, 2025)
+
+**Voice Control Enhancements:**
+- ✅ **Visual Command Feedback**: Added toast notifications for all chart commands
+- ✅ **Enhanced Error Handling**: Improved error messages and command validation
+- ✅ **Chart Label Fix**: Fixed disappearing technical level labels with instant sync
+- ✅ **Ref Pattern Implementation**: Resolved React closure issues in event handlers
+- ✅ **Performance Optimization**: Removed requestAnimationFrame for instant updates
+

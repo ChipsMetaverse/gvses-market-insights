@@ -22,6 +22,10 @@ FastAPI server with hybrid MCP/Direct API architecture for optimal performance:
 React + TypeScript + Vite application with professional trading interface:
 - **TradingDashboardSimple**: Three-panel layout (Market Insights, Interactive Charts, Chart Analysis)
 - **TradingChart**: TradingView Lightweight Charts v5 with real-time candlestick visualization
+  - **Technical Level Labels**: Left-side labels (QE, ST, LTB) that sync instantly with chart movements
+  - **Label Synchronization**: Uses ref pattern to avoid React closure issues in event handlers
+  - **Instant Updates**: Direct event handling without requestAnimationFrame for zero-delay tracking
+  - **Chart Events**: Subscribes to pan, zoom, and crosshair events for continuous label positioning
 - **Voice Assistant**: ElevenLabs Conversational AI with visual feedback
 - **Market Insights Panel**: Stock tickers with technical indicators (ST, LTB, QE)
 - **Chart Analysis Panel**: Scrollable expandable news feed (CNBC + Yahoo Finance hybrid)
@@ -234,7 +238,14 @@ def create_market_service():
 
 ## Recent Updates
 
-### Production Performance Fix (Latest)
+### Chart Label Synchronization Fix (Latest)
+- Fixed technical level labels (QE, ST, LTB) disappearing from chart
+- Implemented instant label tracking with chart pan/zoom movements
+- Resolved React closure issues using ref pattern for event handlers
+- Removed requestAnimationFrame wrapper for zero-delay updates
+- Labels now positioned on left side only for cleaner interface
+
+### Production Performance Fix
 - Implemented hybrid MCP/Direct architecture
 - 375x performance improvement in production
 - Eliminated subprocess timeout issues

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElevenLabs WebSocket Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            background: #2792dc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1a6bb0;
+        }
+        #log {
+            background: #000;
+            padding: 20px;
+            border-radius: 4px;
+            margin-top: 20px;
+            height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .error { color: #ff4444; }
+        .success { color: #44ff44; }
+        .info { color: #4444ff; }
+        .warning { color: #ffaa44; }
+    </style>
+</head>
+<body>
+    <h1>ElevenLabs WebSocket Connection Test</h1>
+    
+    <div>
+        <button onclick="getSignedUrl()">1. Get Signed URL</button>
+        <button onclick="connectWebSocket()">2. Connect WebSocket</button>
+        <button onclick="sendInitMessage()">3. Send Init Message</button>
+        <button onclick="disconnectWebSocket()">4. Disconnect</button>
+        <button onclick="fullTest()">Run Full Test</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+    
+    <div id="log"></div>
+    
+    <script>
+        let websocket = null;
+        let signedUrl = null;
+        const BACKEND_URL = 'http://localhost:8000';
+        const AGENT_ID = 'agent_4901k2tkkq54f4mvgpndm3pgzm7g';
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toISOString().substring(11, 23);
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        async function getSignedUrl() {
+            log('Fetching signed URL from backend...', 'info');
+            try {
+                const response = await fetch(`${BACKEND_URL}/elevenlabs/signed-url?agent_id=${AGENT_ID}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                signedUrl = data.signed_url;
+                log(`✅ Got signed URL: ${signedUrl.substring(0, 100)}...`, 'success');
+                return signedUrl;
+            } catch (error) {
+                log(`❌ Failed to get signed URL: ${error.message}`, 'error');
+                return null;
+            }
+        }
+        
+        function connectWebSocket(url = null) {
+            if (!url && !signedUrl) {
+                log('❌ No signed URL available. Get one first!', 'error');
+                return;
+            }
+            
+            const wsUrl = url || signedUrl;
+            log(`Connecting to WebSocket: ${wsUrl.substring(0, 100)}...`, 'info');
+            
+            try {
+                websocket = new WebSocket(wsUrl);
+                
+                websocket.onopen = (event) => {
+                    log('✅ WebSocket opened!', 'success');
+                    log(`  ReadyState: ${websocket.readyState}`, 'info');
+                    log(`  Protocol: ${websocket.protocol}`, 'info');
+                    log(`  URL: ${websocket.url.substring(0, 100)}...`, 'info');
+                };
+                
+                websocket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log(`📥 Message received: ${data.type}`, 'success');
+                        
+                        if (data.type === 'conversation_initiation_metadata') {
+                            log('🎉 Conversation initialized successfully!', 'success');
+                            log(`  Conversation ID: ${data.conversation_id}`, 'info');
+                        } else if (data.type === 'ping') {
+                            log('🏓 Ping received, sending pong...', 'info');
+                            const pong = {
+                                type: 'pong',
+                                event_id: data.ping_event?.event_id
+                            };
+                            websocket.send(JSON.stringify(pong));
+                            log('✅ Pong sent', 'success');
+                        }
+                        
+                        log(`  Full message: ${JSON.stringify(data).substring(0, 200)}...`, 'info');
+                    } catch (error) {
+                        log(`📥 Non-JSON message: ${event.data}`, 'warning');
+                    }
+                };
+                
+                websocket.onerror = (error) => {
+                    log(`❌ WebSocket error: ${error.type}`, 'error');
+                    log(`  ReadyState: ${websocket?.readyState}`, 'error');
+                };
+                
+                websocket.onclose = (event) => {
+                    log(`⚠️ WebSocket closed`, 'warning');
+                    log(`  Code: ${event.code}`, 'warning');
+                    log(`  Reason: ${event.reason || 'No reason provided'}`, 'warning');
+                    log(`  Clean: ${event.wasClean}`, 'warning');
+                    
+                    // Interpret close codes
+                    const closeCodeMeanings = {
+                        1000: 'Normal closure',
+                        1001: 'Going away',
+                        1002: 'Protocol error',
+                        1003: 'Unsupported data',
+                        1006: 'Abnormal closure (no close frame)',
+                        1007: 'Invalid frame payload',
+                        1008: 'Policy violation',
+                        1009: 'Message too big',
+                        1010: 'Mandatory extension',
+                        1011: 'Internal error',
+                        1015: 'TLS handshake failure'
+                    };
+                    
+                    const meaning = closeCodeMeanings[event.code] || 'Unknown code';
+                    log(`  Meaning: ${meaning}`, 'warning');
+                    
+                    websocket = null;
+                };
+                
+            } catch (error) {
+                log(`❌ Failed to create WebSocket: ${error.message}`, 'error');
+            }
+        }
+        
+        function sendInitMessage() {
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not open. Connect first!', 'error');
+                return;
+            }
+            
+            const initMessage = {
+                type: 'conversation_initiation_client_data',
+                custom_llm_extra_body: {}
+            };
+            
+            log(`📤 Sending init message: ${JSON.stringify(initMessage)}`, 'info');
+            websocket.send(JSON.stringify(initMessage));
+            log('✅ Init message sent', 'success');
+        }
+        
+        function disconnectWebSocket() {
+            if (websocket) {
+                log('Closing WebSocket...', 'info');
+                websocket.close();
+                websocket = null;
+            } else {
+                log('No WebSocket to close', 'warning');
+            }
+        }
+        
+        async function fullTest() {
+            clearLog();
+            log('🚀 Starting full connection test...', 'info');
+            
+            // Step 1: Get signed URL
+            const url = await getSignedUrl();
+            if (!url) {
+                log('❌ Test failed: Could not get signed URL', 'error');
+                return;
+            }
+            
+            // Step 2: Connect WebSocket
+            connectWebSocket(url);
+            
+            // Step 3: Wait for connection and send init
+            setTimeout(() => {
+                if (websocket && websocket.readyState === WebSocket.OPEN) {
+                    sendInitMessage();
+                } else {
+                    log('❌ WebSocket did not open in time', 'error');
+                }
+            }, 1000);
+        }
+        
+        // Run test on page load
+        window.onload = () => {
+            log('Test page loaded. Click "Run Full Test" to begin.', 'info');
+        };
+    </script>
+</body>
+</html>

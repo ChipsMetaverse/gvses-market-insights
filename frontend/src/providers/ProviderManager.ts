@@ -251,6 +251,15 @@ export class ProviderManager implements IProviderManager {
     await this.switchProvider(config);
   }
 
+  async switchToOpenAIRealtime(model?: string, voice?: string): Promise<void> {
+    const config = providerFactory.createOpenAIRealtimeConfig(
+      undefined, // apiUrl will use default from environment
+      model,
+      voice
+    );
+    await this.switchProvider(config);
+  }
+
   async switchToClaude(apiKey: string, model?: string): Promise<void> {
     const config = providerFactory.createClaudeConfig(apiKey, model);
     await this.switchProvider(config);
