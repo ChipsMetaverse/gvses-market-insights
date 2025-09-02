@@ -169,6 +169,114 @@ class MarketServiceWrapper:
             logger.info("Market service ready")
         except Exception as e:
             logger.warning(f"Market service warm-up failed: {e}")
+    
+    async def get_market_overview(self) -> dict:
+        """Get market overview using Alpaca ETF proxies with MCP fallback."""
+        from datetime import datetime
+        
+        # ETF proxy symbols for market indices
+        ETF_PROXIES = {
+            "SPY": "sp500",    # S&P 500
+            "QQQ": "nasdaq",   # NASDAQ
+            "DIA": "dow",      # Dow Jones
+            "VXX": "vix"       # Volatility Index
+        }
+        
+        # Try Alpaca first for real-time ETF data
+        try:
+            from services.market_service import ALPACA_AVAILABLE, get_alpaca_service
+            
+            if ALPACA_AVAILABLE:
+                logger.info("Using Alpaca for market overview (ETF proxies)")
+                
+                # Get Alpaca service instance
+                alpaca_service = get_alpaca_service()
+                
+                # Fetch batch snapshots for all ETF proxies
+                symbols = list(ETF_PROXIES.keys())
+                snapshots = await alpaca_service.get_batch_snapshots(symbols)
+                
+                # Build indices data from ETF snapshots
+                indices = {}
+                for etf_symbol, index_name in ETF_PROXIES.items():
+                    if etf_symbol in snapshots and "error" not in snapshots[etf_symbol]:
+                        snapshot = snapshots[etf_symbol]
+                        
+                        # Get current price from latest trade
+                        current_price = 0
+                        if "latest_trade" in snapshot:
+                            current_price = snapshot["latest_trade"]["price"]
+                        elif "daily_bar" in snapshot:
+                            current_price = snapshot["daily_bar"]["close"]
+                        
+                        # Calculate change from previous close
+                        prev_close = 0
+                        change = 0
+                        change_percent = 0
+                        
+                        if "previous_daily_bar" in snapshot:
+                            prev_close = snapshot["previous_daily_bar"]["close"]
+                            if current_price and prev_close:
+                                change = round(current_price - prev_close, 2)
+                                change_percent = round((change / prev_close) * 100, 2)
+                        
+                        indices[index_name] = {
+                            "value": current_price,
+                            "change": change,
+                            "change_percent": change_percent
+                        }
+                    else:
+                        logger.warning(f"No Alpaca data for {etf_symbol}")
+                
+                # If we got at least some indices data, return it
+                if indices:
+                    # Try to get movers from MCP
+                    movers = {}
+                    try:
+                        from mcp_client import get_mcp_client
+                        client = get_mcp_client()
+                        
+                        if not client._initialized:
+                            await client.start()
+                        
+                        # Get CNBC pre-market movers
+                        cnbc_movers = await client.call_tool("get_cnbc_movers", {})
+                        if cnbc_movers:
+                            movers = cnbc_movers
+                    except Exception as e:
+                        logger.warning(f"Failed to get CNBC movers: {e}")
+                    
+                    return {
+                        "indices": indices,
+                        "movers": movers,
+                        "data_source": "alpaca",
+                        "timestamp": datetime.utcnow().isoformat() + "Z"
+                    }
+        
+        except Exception as e:
+            logger.warning(f"Alpaca market overview failed: {e}, falling back to MCP")
+        
+        # Fallback to MCP market overview
+        try:
+            logger.info("Using MCP for market overview (Yahoo Finance)")
+            from mcp_client import get_mcp_client
+            client = get_mcp_client()
+            
+            if not client._initialized:
+                await client.start()
+            
+            # Get comprehensive market overview from MCP
+            overview = await client.call_tool("get_market_overview", {})
+            
+            if overview:
+                overview["data_source"] = "yahoo_mcp"
+                return overview
+            
+        except Exception as e:
+            logger.error(f"MCP market overview failed: {e}")
+        
+        # Return error if both methods fail
+        raise ValueError("Unable to fetch market overview from any source")
 
 
 class MarketServiceFactory:
