@@ -394,6 +394,17 @@ class HybridMarketService:
         
         return results
     
+    async def get_market_overview(self) -> dict:
+        """Get market overview - delegate to MCP service which has Alpaca-first implementation."""
+        if self.mcp_available:
+            try:
+                return await self.mcp_service.get_market_overview()
+            except Exception as e:
+                logger.error(f"MCP market overview failed: {e}")
+                raise
+        else:
+            raise RuntimeError("Market overview not available - MCP service required")
+    
     async def warm_up(self):
         """Warm up both services, don't fail if one doesn't work."""
         tasks = []
