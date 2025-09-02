@@ -294,6 +294,12 @@ async def health_check():
         "service_initialized": market_service is not None,
         "timestamp": datetime.utcnow().isoformat()
     }
+    
+    # Add detailed service status if available
+    service_status = MarketServiceFactory.get_service_status()
+    if service_status:
+        response["services"] = service_status
+    
     if market_service_error:
         response["service_error"] = market_service_error
     return response

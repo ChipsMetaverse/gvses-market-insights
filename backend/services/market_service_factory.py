@@ -1,14 +1,15 @@
 """
 Market Service Factory
 ======================
-Hybrid factory that intelligently routes between Direct API and MCP services.
-- Direct API Mode (Production): Fast Yahoo Finance HTTP calls, sub-second responses
-- MCP Mode (Development): Full MCP capabilities, AI tooling benefits
+Hybrid factory that provides BOTH Direct API and MCP services for optimal performance.
+- Direct API: Fast Yahoo Finance HTTP calls for price/history queries
+- MCP: Comprehensive news from CNBC + Yahoo, Alpaca data support
 """
 
 import logging
 import os
-from typing import Any
+from typing import Any, Optional
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -173,10 +174,160 @@ class MarketServiceWrapper:
             logger.warning(f"Market service warm-up failed: {e}")
 
 
+class HybridMarketService:
+    """
+    Hybrid service that intelligently uses BOTH Direct and MCP services.
+    - Direct API for fast price/history queries
+    - MCP for comprehensive news (CNBC + Yahoo)
+    - Best of both worlds: speed AND comprehensive data
+    """
+    
+    def __init__(self):
+        self.direct_service = None
+        self.mcp_service = None
+        self.direct_available = False
+        self.mcp_available = False
+        self._initialize_services()
+    
+    def _initialize_services(self):
+        """Initialize both services, allowing graceful degradation if one fails."""
+        # Initialize Direct service
+        try:
+            from .direct_market_service import DirectMarketDataService
+            self.direct_service = DirectMarketDataService()
+            self.direct_available = True
+            logger.info("Direct market service initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Direct service: {e}")
+            self.direct_available = False
+        
+        # Initialize MCP service
+        try:
+            self.mcp_service = MarketServiceWrapper()
+            self.mcp_available = True
+            logger.info("MCP market service initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize MCP service: {e}")
+            self.mcp_available = False
+        
+        if not self.direct_available and not self.mcp_available:
+            raise RuntimeError("Failed to initialize any market service")
+    
+    async def get_stock_price(self, symbol: str) -> dict:
+        """Get stock price - prefer Direct for speed, fallback to MCP."""
+        if self.direct_available:
+            try:
+                return await self.direct_service.get_stock_price(symbol)
+            except Exception as e:
+                logger.warning(f"Direct price fetch failed: {e}")
+                if self.mcp_available:
+                    return await self.mcp_service.get_stock_price(symbol)
+                raise
+        elif self.mcp_available:
+            return await self.mcp_service.get_stock_price(symbol)
+        else:
+            raise RuntimeError("No market service available")
+    
+    async def get_stock_history(self, symbol: str, days: int = 50) -> dict:
+        """Get stock history - prefer Direct for speed, fallback to MCP."""
+        if self.direct_available:
+            try:
+                return await self.direct_service.get_stock_history(symbol, days)
+            except Exception as e:
+                logger.warning(f"Direct history fetch failed: {e}")
+                if self.mcp_available:
+                    return await self.mcp_service.get_stock_history(symbol, days)
+                raise
+        elif self.mcp_available:
+            return await self.mcp_service.get_stock_history(symbol, days)
+        else:
+            raise RuntimeError("No market service available")
+    
+    async def get_stock_news(self, symbol: str, limit: int = 10) -> dict:
+        """Get stock news - prefer MCP for CNBC + Yahoo, fallback to Direct."""
+        if self.mcp_available:
+            try:
+                return await self.mcp_service.get_stock_news(symbol, limit)
+            except Exception as e:
+                logger.warning(f"MCP news fetch failed: {e}")
+                if self.direct_available:
+                    return await self.direct_service.get_stock_news(symbol, limit)
+                raise
+        elif self.direct_available:
+            return await self.direct_service.get_stock_news(symbol, limit)
+        else:
+            raise RuntimeError("No market service available")
+    
+    async def get_comprehensive_stock_data(self, symbol: str) -> dict:
+        """Get comprehensive data - use Direct for price, MCP for enhanced data."""
+        results = {}
+        
+        # Get price data from Direct (fast)
+        if self.direct_available:
+            try:
+                data = await self.direct_service.get_comprehensive_stock_data(symbol)
+                results = data
+            except Exception as e:
+                logger.warning(f"Direct comprehensive data failed: {e}")
+                if self.mcp_available:
+                    data = await self.mcp_service.get_comprehensive_stock_data(symbol)
+                    results = data
+        elif self.mcp_available:
+            data = await self.mcp_service.get_comprehensive_stock_data(symbol)
+            results = data
+        
+        # Try to enhance with MCP news if available and not already included
+        if self.mcp_available and "news" not in results:
+            try:
+                news_data = await self.mcp_service.get_stock_news(symbol, 5)
+                results["news"] = news_data.get("articles", [])
+            except Exception as e:
+                logger.warning(f"Failed to add MCP news to comprehensive data: {e}")
+        
+        return results
+    
+    async def warm_up(self):
+        """Warm up both services, don't fail if one doesn't work."""
+        tasks = []
+        
+        if self.direct_available and self.direct_service:
+            tasks.append(self._warm_up_direct())
+        
+        if self.mcp_available and self.mcp_service:
+            tasks.append(self._warm_up_mcp())
+        
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        
+        logger.info(f"Hybrid service warm-up complete - Direct: {self.direct_available}, MCP: {self.mcp_available}")
+    
+    async def _warm_up_direct(self):
+        """Warm up Direct service."""
+        try:
+            await self.direct_service.warm_up()
+        except Exception as e:
+            logger.warning(f"Direct service warm-up failed: {e}")
+    
+    async def _warm_up_mcp(self):
+        """Warm up MCP service."""
+        try:
+            await self.mcp_service.warm_up()
+        except Exception as e:
+            logger.warning(f"MCP service warm-up failed: {e}")
+    
+    def get_service_status(self) -> dict:
+        """Get status of both services for health checks."""
+        return {
+            "direct": "operational" if self.direct_available else "unavailable",
+            "mcp": "operational" if self.mcp_available else "unavailable",
+            "mode": "hybrid"
+        }
+
+
 class MarketServiceFactory:
     """
-    Hybrid factory that intelligently routes between Direct API and MCP services.
-    Routes based on USE_MCP environment variable for optimal performance.
+    Factory that provides the HybridMarketService with BOTH Direct and MCP capabilities.
+    No more either/or - we use both services intelligently!
     """
     
     _instance = None
@@ -185,33 +336,18 @@ class MarketServiceFactory:
     @classmethod
     def get_service(cls, force_refresh: bool = False):
         """
-        Get the appropriate market service based on environment.
+        Get the hybrid market service that uses both Direct and MCP.
         
         Args:
             force_refresh: Force creation of new instance
             
         Returns:
-            DirectMarketDataService (fast) or MarketServiceWrapper (MCP)
+            HybridMarketService with both Direct and MCP capabilities
         """
         if cls._instance is None or force_refresh:
-            use_mcp = os.getenv('USE_MCP', 'true').lower() == 'true'
-            
-            if use_mcp:
-                logger.info("Initializing MCP-based market service (Development Mode)")
-                cls._instance = MarketServiceWrapper()
-                cls._service_mode = "MCP (Yahoo Finance + CNBC)"
-            else:
-                logger.info("Initializing Direct API market service (Production Mode)")
-                try:
-                    from .direct_market_service import DirectMarketDataService
-                    cls._instance = DirectMarketDataService()
-                    cls._service_mode = "Direct (Yahoo Finance)"
-                    logger.info("DirectMarketDataService initialized successfully")
-                except Exception as e:
-                    logger.error(f"Failed to initialize DirectMarketDataService: {e}")
-                    logger.info("Falling back to MCP service")
-                    cls._instance = MarketServiceWrapper()
-                    cls._service_mode = "MCP (Yahoo Finance + CNBC) - Fallback"
+            logger.info("Initializing Hybrid market service with both Direct and MCP capabilities")
+            cls._instance = HybridMarketService()
+            cls._service_mode = "Hybrid (Direct + MCP)"
         
         return cls._instance
     
@@ -239,7 +375,19 @@ class MarketServiceFactory:
         Get the current service mode for health checks.
         """
         if cls._service_mode is None:
-            use_mcp = os.getenv('USE_MCP', 'true').lower() == 'true'
-            cls._service_mode = "MCP (Yahoo Finance + CNBC)" if use_mcp else "Direct (Yahoo Finance)"
+            cls._service_mode = "Hybrid (Direct + MCP)"
         
         return cls._service_mode
+    
+    @classmethod
+    def get_service_status(cls) -> dict:
+        """
+        Get detailed status of both services.
+        """
+        if cls._instance and hasattr(cls._instance, 'get_service_status'):
+            return cls._instance.get_service_status()
+        return {
+            "direct": "unknown",
+            "mcp": "unknown",
+            "mode": "not_initialized"
+        }
