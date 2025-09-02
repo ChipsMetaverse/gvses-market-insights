@@ -43,9 +43,14 @@ class MCPClient:
             # Configure environment for production
             env = os.environ.copy()
             env['NODE_ENV'] = 'production'
-            env['NODE_OPTIONS'] = '--max-old-space-size=512'  # Limit memory usage
+            env['NODE_OPTIONS'] = '--max-old-space-size=256'  # Reduce memory usage for Docker
             
-            # Start the MCP server as a subprocess
+            # Log the attempt
+            logger.info(f"Attempting to start MCP server at {self.server_path}")
+            logger.info(f"Working directory: {self.server_path.parent}")
+            logger.info(f"Node.js path check: {os.path.exists('/usr/local/bin/node')}")
+            
+            # Start the MCP server as a subprocess with longer startup time
             self.process = await asyncio.create_subprocess_exec(
                 'node',
                 str(self.server_path),
@@ -53,10 +58,14 @@ class MCPClient:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self.server_path.parent,
-                env=env
+                env=env,
+                limit=1024*1024  # Increase buffer size to 1MB
             )
             
-            logger.info(f"Started MCP server at {self.server_path}")
+            logger.info(f"MCP server process started with PID: {self.process.pid}")
+            
+            # Give it more time to start in production
+            await asyncio.sleep(2.0)
             
             # Initialize communication
             await self._initialize()
@@ -65,8 +74,15 @@ class MCPClient:
             # Start reading responses
             asyncio.create_task(self._read_responses())
             
+            logger.info("MCP server initialized successfully")
+            
         except Exception as e:
             logger.error(f"Failed to start MCP server: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
+            if self.process and self.process.stderr:
+                stderr_output = await self.process.stderr.read(1000)
+                if stderr_output:
+                    logger.error(f"MCP server stderr: {stderr_output.decode('utf-8', errors='ignore')}")
             raise
     
     async def _initialize(self):
