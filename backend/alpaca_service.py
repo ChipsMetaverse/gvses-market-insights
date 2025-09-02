@@ -151,6 +151,70 @@ class AlpacaService:
             logger.error(f"Error fetching bars for {symbol}: {e}")
             return {"error": str(e)}
     
+    async def get_batch_snapshots(self, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Get comprehensive snapshots for multiple stock symbols."""
+        try:
+            # Alpaca API accepts multiple symbols in a single request
+            request = StockSnapshotRequest(symbol_or_symbols=symbols)
+            snapshots = self.data_client.get_stock_snapshot(request)
+            
+            results = {}
+            for symbol in symbols:
+                if symbol in snapshots:
+                    snapshot = snapshots[symbol]
+                    result = {
+                        "symbol": symbol,
+                        "source": "alpaca"
+                    }
+                    
+                    # Add latest trade
+                    if snapshot.latest_trade:
+                        result["latest_trade"] = {
+                            "price": float(snapshot.latest_trade.price),
+                            "size": snapshot.latest_trade.size,
+                            "timestamp": snapshot.latest_trade.timestamp.isoformat()
+                        }
+                    
+                    # Add latest quote
+                    if snapshot.latest_quote:
+                        result["latest_quote"] = {
+                            "ask_price": float(snapshot.latest_quote.ask_price) if snapshot.latest_quote.ask_price else None,
+                            "bid_price": float(snapshot.latest_quote.bid_price) if snapshot.latest_quote.bid_price else None,
+                            "ask_size": snapshot.latest_quote.ask_size,
+                            "bid_size": snapshot.latest_quote.bid_size
+                        }
+                    
+                    # Add daily bar
+                    if snapshot.daily_bar:
+                        result["daily_bar"] = {
+                            "open": float(snapshot.daily_bar.open),
+                            "high": float(snapshot.daily_bar.high),
+                            "low": float(snapshot.daily_bar.low),
+                            "close": float(snapshot.daily_bar.close),
+                            "volume": snapshot.daily_bar.volume,
+                            "timestamp": snapshot.daily_bar.timestamp.isoformat()
+                        }
+                    
+                    # Add previous daily bar
+                    if snapshot.previous_daily_bar:
+                        result["previous_daily_bar"] = {
+                            "open": float(snapshot.previous_daily_bar.open),
+                            "high": float(snapshot.previous_daily_bar.high),
+                            "low": float(snapshot.previous_daily_bar.low),
+                            "close": float(snapshot.previous_daily_bar.close),
+                            "volume": snapshot.previous_daily_bar.volume,
+                            "timestamp": snapshot.previous_daily_bar.timestamp.isoformat()
+                        }
+                    
+                    results[symbol] = result
+                else:
+                    results[symbol] = {"error": f"No snapshot data for {symbol}"}
+            
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching batch snapshots: {e}")
+            return {symbol: {"error": str(e)} for symbol in symbols}
+    
     async def get_snapshot(self, symbol: str) -> Dict[str, Any]:
         """Get comprehensive snapshot data for a symbol."""
         try:

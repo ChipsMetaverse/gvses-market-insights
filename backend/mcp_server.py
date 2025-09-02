@@ -520,42 +520,19 @@ async def get_market_movers():
 async def get_market_overview():
     """Get market overview for ElevenLabs tool webhook."""
     try:
-        # Mock response - replace with actual market data
-        import random
-        
-        return {
-            "indices": {
-                "sp500": {
-                    "value": 4500 + random.uniform(-50, 50),
-                    "change": random.uniform(-1, 1),
-                    "change_percent": random.uniform(-2, 2)
-                },
-                "nasdaq": {
-                    "value": 14000 + random.uniform(-100, 100),
-                    "change": random.uniform(-1, 1),
-                    "change_percent": random.uniform(-2, 2)
-                },
-                "dow": {
-                    "value": 35000 + random.uniform(-200, 200),
-                    "change": random.uniform(-1, 1),
-                    "change_percent": random.uniform(-2, 2)
-                }
-            },
-            "top_gainers": [
-                {"symbol": "NVDA", "change_percent": 5.2},
-                {"symbol": "TSLA", "change_percent": 4.8},
-                {"symbol": "AMD", "change_percent": 3.9}
-            ],
-            "top_losers": [
-                {"symbol": "META", "change_percent": -3.1},
-                {"symbol": "NFLX", "change_percent": -2.8},
-                {"symbol": "DIS", "change_percent": -2.5}
-            ],
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        # Use the market service factory to get real data
+        market_service = MarketServiceFactory.get_service()
+        overview = await market_service.get_market_overview()
+        return overview
     except Exception as e:
-        logger.error(f"Error fetching market overview: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch market overview")
+        logger.error(f"Failed to get market overview: {e}")
+        # Return a minimal response on error
+        return {
+            "indices": {},
+            "movers": {},
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }
 
 
 @app.get("/elevenlabs/signed-url")

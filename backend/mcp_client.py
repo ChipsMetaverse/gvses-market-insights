@@ -40,17 +40,32 @@ class MCPClient:
             return
             
         try:
-            # Start the MCP server as a subprocess
+            # Configure environment for production
+            env = os.environ.copy()
+            env['NODE_ENV'] = 'production'
+            env['NODE_OPTIONS'] = '--max-old-space-size=256'  # Reduce memory usage for Docker
+            
+            # Log the attempt
+            logger.info(f"Attempting to start MCP server at {self.server_path}")
+            logger.info(f"Working directory: {self.server_path.parent}")
+            logger.info(f"Node.js path check: {os.path.exists('/usr/local/bin/node')}")
+            
+            # Start the MCP server as a subprocess with longer startup time
             self.process = await asyncio.create_subprocess_exec(
                 'node',
                 str(self.server_path),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.server_path.parent
+                cwd=self.server_path.parent,
+                env=env,
+                limit=1024*1024  # Increase buffer size to 1MB
             )
             
-            logger.info(f"Started MCP server at {self.server_path}")
+            logger.info(f"MCP server process started with PID: {self.process.pid}")
+            
+            # Give it more time to start in production
+            await asyncio.sleep(2.0)
             
             # Initialize communication
             await self._initialize()
@@ -59,8 +74,15 @@ class MCPClient:
             # Start reading responses
             asyncio.create_task(self._read_responses())
             
+            logger.info("MCP server initialized successfully")
+            
         except Exception as e:
             logger.error(f"Failed to start MCP server: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
+            if self.process and self.process.stderr:
+                stderr_output = await self.process.stderr.read(1000)
+                if stderr_output:
+                    logger.error(f"MCP server stderr: {stderr_output.decode('utf-8', errors='ignore')}")
             raise
     
     async def _initialize(self):
@@ -128,8 +150,14 @@ class MCPClient:
         # Wait for response if this is a request (not a notification)
         if request_id:
             try:
-                # Increase timeout significantly for MCP server startup and Yahoo Finance setup
-                timeout = 120.0 if request_id == "1" else 90.0  # Much longer timeouts
+                # Production-ready timeouts: longer for initialization, reasonable for operations
+                if request_id == "1":
+                    timeout = 30.0  # Initial connection
+                elif "news" in str(request).lower():
+                    timeout = 15.0  # News queries can be slower
+                else:
+                    timeout = 10.0  # Normal operations
+                
                 response = await asyncio.wait_for(future, timeout=timeout)
                 return response
             except asyncio.TimeoutError:

@@ -1,5 +1,5 @@
 # Multi-stage build for optimized image size
-FROM node:18-slim AS frontend-builder
+FROM node:22-slim AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -28,8 +28,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Install Node.js 18 (minimal install)
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+# Install Node.js 22 (minimal install)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
