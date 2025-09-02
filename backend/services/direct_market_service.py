@@ -230,9 +230,11 @@ class DirectMarketDataService:
         try:
             logger.info("Warming up direct market service...")
             result = await self.get_stock_price("SPY")
-            if not result or "price" not in result:
-                raise ValueError(f"Invalid warm-up response: {result}")
-            logger.info(f"Direct market service ready - SPY price: ${result.get('price', 'N/A')}")
+            if result and "price" in result:
+                logger.info(f"Direct market service ready - SPY price: ${result.get('price', 'N/A')}")
+            else:
+                logger.warning(f"Direct market service warm-up returned unexpected result: {result}")
         except Exception as e:
-            logger.error(f"Direct market service warm-up failed: {e}")
-            raise  # Re-raise to fail startup if service can't initialize
+            logger.warning(f"Direct market service warm-up failed: {e}")
+            # Don't re-raise - allow service to initialize even if warm-up fails
+            logger.info("Direct market service initialized despite warm-up failure")
