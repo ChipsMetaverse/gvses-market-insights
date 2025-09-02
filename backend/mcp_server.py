@@ -267,7 +267,7 @@ async def startup_event():
         # Services will be None, endpoints will handle gracefully
 
 
-@app.get("/debug/test-direct")
+@app.get("/api/debug/test-direct")
 async def test_direct_service():
     """Debug endpoint to test Direct service initialization."""
     try:
