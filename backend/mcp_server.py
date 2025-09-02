@@ -237,12 +237,13 @@ supabase = None
 conversation_manager = None
 claude_service = None
 market_service = None  # Will be initialized in startup event
+market_service_error = None  # Track initialization errors for debugging
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
-    global supabase, conversation_manager, claude_service, market_service
+    global supabase, conversation_manager, claude_service, market_service, market_service_error
     try:
         supabase = get_supabase_client()
         conversation_manager = ConversationManager(supabase)
@@ -253,10 +254,12 @@ async def startup_event():
             market_service = await MarketServiceFactory.initialize_service()
             service_mode = MarketServiceFactory.get_service_mode()
             logger.info(f"Market service initialized successfully in {service_mode} mode")
+            market_service_error = None
         except Exception as e:
             logger.error(f"Failed to initialize market service: {e}")
             logger.warning("Market service will be unavailable - endpoints will return 503")
             market_service = None
+            market_service_error = str(e)  # Store error for debugging
         
         logger.info("All services initialized successfully")
     except Exception as e:
@@ -267,11 +270,16 @@ async def startup_event():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {
+    global market_service, market_service_error
+    response = {
         "status": "healthy",
         "service_mode": MarketServiceFactory.get_service_mode(),
+        "service_initialized": market_service is not None,
         "timestamp": datetime.utcnow().isoformat()
     }
+    if market_service_error:
+        response["service_error"] = market_service_error
+    return response
 
 
 @app.get("/api/stock-price")
