@@ -40,6 +40,11 @@ class MCPClient:
             return
             
         try:
+            # Configure environment for production
+            env = os.environ.copy()
+            env['NODE_ENV'] = 'production'
+            env['NODE_OPTIONS'] = '--max-old-space-size=512'  # Limit memory usage
+            
             # Start the MCP server as a subprocess
             self.process = await asyncio.create_subprocess_exec(
                 'node',
@@ -47,7 +52,8 @@ class MCPClient:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.server_path.parent
+                cwd=self.server_path.parent,
+                env=env
             )
             
             logger.info(f"Started MCP server at {self.server_path}")
@@ -128,8 +134,14 @@ class MCPClient:
         # Wait for response if this is a request (not a notification)
         if request_id:
             try:
-                # Increase timeout significantly for MCP server startup and Yahoo Finance setup
-                timeout = 120.0 if request_id == "1" else 90.0  # Much longer timeouts
+                # Production-ready timeouts: longer for initialization, reasonable for operations
+                if request_id == "1":
+                    timeout = 30.0  # Initial connection
+                elif "news" in str(request).lower():
+                    timeout = 15.0  # News queries can be slower
+                else:
+                    timeout = 10.0  # Normal operations
+                
                 response = await asyncio.wait_for(future, timeout=timeout)
                 return response
             except asyncio.TimeoutError:
