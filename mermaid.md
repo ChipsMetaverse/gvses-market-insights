@@ -676,60 +676,92 @@ sequenceDiagram
     Frontend-->>User: Display news
 ```
 
-## Hybrid MCP/Direct Architecture (Performance Optimized)
+## Current Architecture Evolution
+
+### Phase 1: Alpaca-First with MCP Fallback (Current - Commit 6753c2e)
 
 ```mermaid
 graph TB
-    subgraph "Production Performance Fix"
-        Request[API Request] --> Factory{MarketServiceFactory<br/>USE_MCP?}
+    subgraph "Current Localhost Architecture"
+        Request[API Request] --> Factory[MarketServiceFactory]
         
-        Factory -->|false<br/>Production| Direct[DirectMarketDataService]
-        Factory -->|true<br/>Development| MCP[MarketDataService]
+        Factory -->|Stock Quotes/History| AlpacaTry[Try Alpaca First]
+        AlpacaTry -->|Success| AlpacaData[Professional Data<br/>Sub-second response]
+        AlpacaTry -->|Fail| MCPFallback[Yahoo via MCP<br/>3-15s response]
         
-        Direct --> DirectAPI[Direct HTTP to Yahoo Finance]
-        MCP --> Subprocess[Node.js MCP Server Subprocess]
-        Subprocess --> JSONRPC[JSON-RPC Protocol]
-        JSONRPC --> YahooAPI[Yahoo Finance API]
+        Factory -->|News| MCPNews[MCP Service<br/>CNBC + Yahoo Hybrid]
         
-        DirectAPI -->|40-700ms| Response[Fast Response]
-        YahooAPI -->|15s+ timeout| SlowResponse[Slow/Timeout]
+        style AlpacaData fill:#90EE90
+        style MCPFallback fill:#FFB74D
+        style MCPNews fill:#90CAF9
     end
-    
-    style Direct fill:#90EE90
-    style DirectAPI fill:#90EE90
-    style Response fill:#90EE90
-    style MCP fill:#FFB74D
-    style Subprocess fill:#FFB74D
-    style SlowResponse fill:#FF6B6B
+```
+
+### Phase 2: Triple Hybrid Architecture (Production - Commit b152f15)
+
+```mermaid
+graph TB
+    subgraph "Production Triple Hybrid Architecture"
+        Request[API Request] --> HybridService[HybridMarketService<br/>Runs ALL services concurrently]
+        
+        HybridService -->|Fast Queries| Direct[DirectMarketDataService<br/>Direct Yahoo API<br/>40-700ms]
+        HybridService -->|Professional Data| Alpaca[AlpacaService<br/>Licensed Data<br/>Sub-second]
+        HybridService -->|News & Complex| MCP[MarketServiceWrapper<br/>MCP Subprocess<br/>3-15s]
+        
+        Direct -->|Primary for speed| Response[Intelligent Routing<br/>Best source selected]
+        Alpaca -->|Primary for quality| Response
+        MCP -->|Fallback & News| Response
+        
+        style Direct fill:#90EE90
+        style Alpaca fill:#81C784
+        style MCP fill:#FFB74D
+        style Response fill:#64B5F6
+    end
 ```
 
 ## Performance Metrics Comparison
 
 ```mermaid
 graph LR
-    subgraph "Before: MCP Only"
-        Health1[Health Check<br/>15s+ timeout] 
-        Price1[Stock Price<br/>15s+ timeout]
-        History1[Stock History<br/>503 Timeout]
-        News1[Stock News<br/>503 Timeout]
+    subgraph "Phase 0: MCP Only (Old)"
+        Health0[Health Check<br/>15s+ timeout] 
+        Price0[Stock Price<br/>15s+ timeout]
+        History0[Stock History<br/>503 Timeout]
+        News0[Stock News<br/>503 Timeout]
     end
     
-    subgraph "After: Hybrid Architecture"
+    subgraph "Phase 1: Alpaca-First (Current)"
+        Health1[Health Check<br/>~500ms]
+        Price1[Stock Price<br/>~300ms Alpaca<br/>3-15s MCP fallback]
+        History1[Stock History<br/>~400ms Alpaca<br/>3-15s MCP fallback]
+        News1[Stock News<br/>3-5s MCP]
+    end
+    
+    subgraph "Phase 2: Triple Hybrid (Production)"
         Health2[Health Check<br/>40ms ✅]
-        Price2[Stock Price<br/>493ms ✅]
-        History2[Stock History<br/>217ms ✅]
+        Price2[Stock Price<br/>217ms ✅]
+        History2[Stock History<br/>493ms ✅]
         News2[Stock News<br/>653ms ✅]
     end
     
-    Health1 -.->|375x faster| Health2
-    Price1 -.->|30x faster| Price2
-    History1 -.->|Fixed| History2
-    News1 -.->|Fixed| News2
+    Health0 -.->|30x faster| Health1
+    Price0 -.->|50x faster| Price1
+    History0 -.->|Fixed| History1
+    News0 -.->|Fixed| News1
     
-    style Health1 fill:#FF6B6B
-    style Price1 fill:#FF6B6B
-    style History1 fill:#FF6B6B
-    style News1 fill:#FF6B6B
+    Health1 -.->|12x faster| Health2
+    Price1 -.->|Optimized| Price2
+    History1 -.->|Consistent| History2
+    News1 -.->|5x faster| News2
+    
+    style Health0 fill:#FF6B6B
+    style Price0 fill:#FF6B6B
+    style History0 fill:#FF6B6B
+    style News0 fill:#FF6B6B
+    style Health1 fill:#FFB74D
+    style Price1 fill:#FFB74D
+    style History1 fill:#FFB74D
+    style News1 fill:#FFB74D
     style Health2 fill:#90EE90
     style Price2 fill:#90EE90
     style History2 fill:#90EE90
@@ -1156,18 +1188,25 @@ sequenceDiagram
   - API URL configuration (port 8000)
   - Supabase connection settings
 
-*Last Updated: 2025-08-28*
+*Last Updated: 2025-09-02*
 
-*This document represents the current architecture of the GVSES AI Market Analysis Assistant application.*
+*This document represents the architecture evolution of the GVSES AI Market Analysis Assistant application.*
 
-**Latest Updates (Aug 28, 2025 - Alpaca Integration):**
-- ✅ **Alpaca-First Architecture**: Integrated Alpaca Markets as primary data source for quotes and charts
-- ✅ **Professional Market Data**: Using licensed Alpaca data for production-ready trading information
-- ✅ **Automatic Fallback**: Yahoo Finance via MCP serves as automatic fallback when Alpaca unavailable
-- ✅ **Transparent Upgrade**: Same API endpoints, upgraded data sources behind the scenes
-- ✅ **Source Attribution**: All responses include `data_source` field ("alpaca" or "yahoo_mcp")
-- ✅ **Improved Data Quality**: Alpaca provides more accurate intraday bars and real-time quotes
-- ✅ **Backward Compatible**: No frontend changes required, seamless transition
+## Architecture Evolution Timeline
+
+**Phase 1 - Current Localhost (Commit 6753c2e - Sep 1, 2025 10:12 AM):**
+- ✅ **Alpaca-First Architecture**: Alpaca Markets as primary data source with MCP fallback
+- ✅ **Professional Market Data**: Licensed Alpaca data for production-ready trading
+- ✅ **Automatic Fallback**: Yahoo Finance via MCP when Alpaca unavailable
+- ✅ **CNBC News Integration**: Real-time news via MCP subprocess
+- ✅ **Voice Control**: Enhanced chart system with visual feedback
+
+**Phase 2 - Production Deployment (Commit b152f15 - Sep 1, 2025 20:14 PM):**
+- ✅ **Triple Hybrid Architecture**: Direct API + Alpaca + MCP all running concurrently
+- ✅ **Intelligent Routing**: Direct for speed, Alpaca for quality, MCP for comprehensiveness
+- ✅ **375x Performance Improvement**: Health check from 15s+ to 40ms
+- ✅ **No More Either/Or**: All services active simultaneously, automatic selection
+- ✅ **Production Optimized**: Eliminated subprocess timeouts in Fly.io deployment
 
 **Earlier Updates (Aug 27, 2025 - Production Performance Fix):**
 - ✅ **Hybrid MCP/Direct Architecture**: Implemented intelligent service selection based on environment

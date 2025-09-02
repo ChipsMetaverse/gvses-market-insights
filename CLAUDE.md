@@ -8,15 +8,28 @@ GVSES AI Market Analysis Assistant - A professional trading dashboard with voice
 
 ## Key Architecture
 
-### Backend (`backend/`)
-FastAPI server with hybrid MCP/Direct API architecture for optimal performance:
-- **Hybrid Data Service**: Automatically selects best service based on environment
-  - **Direct API Mode** (Production): Sub-second Yahoo Finance responses, no subprocess overhead
-  - **MCP Mode** (Development): AI tooling benefits, JSON-RPC communication
-- **Service Factory Pattern**: `MarketServiceFactory` intelligently routes based on `USE_MCP` environment variable
-- **Dual MCP Support**: market-mcp-server (Node.js) and alpaca-mcp-server (Python) for extended capabilities
+### Current Architecture Evolution
+
+#### Phase 1: Alpaca-First with MCP Fallback (Current Localhost - Commit 6753c2e)
+FastAPI server with Alpaca-first architecture and intelligent fallback:
+- **MarketServiceWrapper**: Primary routing through Alpaca, fallback to MCP
+  - **Stock Quotes/History**: Alpaca Markets (300-400ms) → Yahoo via MCP (3-15s) on failure
+  - **News**: Always uses MCP for CNBC + Yahoo hybrid (3-5s)
+  - **Source Attribution**: All responses include `data_source` field
+- **Service Factory Pattern**: `MarketServiceFactory` manages service lifecycle
+- **Dual MCP Support**: market-mcp-server (Node.js) and alpaca-mcp-server (Python)
 - **ElevenLabs Proxy**: Signed URL generation for WebSocket voice streaming
 - **Claude Integration**: Text-only `/ask` endpoint fallback
+
+#### Phase 2: Triple Hybrid Architecture (Production - Commit b152f15)
+Enhanced production architecture with concurrent services:
+- **HybridMarketService**: ALL services run simultaneously
+  - **Direct API**: Yahoo Finance direct HTTP (40-700ms) - No subprocess overhead
+  - **Alpaca Service**: Professional market data (sub-second) - Licensed data
+  - **MCP Service**: Comprehensive tooling (3-15s) - CNBC news, complex queries
+  - **Intelligent Routing**: Automatic selection of best source per request
+- **375x Performance Improvement**: Eliminated production timeout issues
+- **No USE_MCP Variable**: All services always active in production
 
 ### Frontend (`frontend/`)
 React + TypeScript + Vite application with professional trading interface:
@@ -82,14 +95,19 @@ SUPABASE_ANON_KEY=eyJhbGciOi...
 ELEVENLABS_API_KEY=your_key
 ELEVENLABS_AGENT_ID=your_agent_id
 
-# Performance Control
-USE_MCP=false    # Set to false in production for Direct API mode
-                 # Set to true in development for MCP benefits
+# Architecture Control (Production only - from commit b152f15)
+# Current localhost (6753c2e) uses Alpaca-first architecture without this variable
+USE_MCP=false    # Production: Enables Direct API mode
+                 # Not used in current localhost version
+
+# Market Data Sources
+ALPACA_API_KEY=your_alpaca_key      # Primary data source
+ALPACA_SECRET_KEY=your_alpaca_secret
+ALPACA_BASE_URL=https://paper-api.alpaca.markets
 
 # Optional
-ALPACA_API_KEY=your_alpaca_key
-ALPACA_SECRET_KEY=your_alpaca_secret
 MODEL=claude-3-sonnet-20240229
+PORT=8080        # Production port (nginx proxy)
 ```
 
 ### Frontend (`frontend/.env` and `frontend/.env.development`)
@@ -125,41 +143,48 @@ All endpoints support both MCP and Direct modes transparently:
 
 ## Performance Characteristics
 
-### Production (Direct Mode)
-- **Response Times**: 40-700ms (375x faster than MCP)
-- **Cold Start**: None (direct HTTP calls)
-- **Reliability**: No subprocess management issues
-- **Memory**: Minimal overhead
+### Phase 1: Current Localhost (Alpaca-First + MCP)
+- **Alpaca Quotes**: 300-400ms (professional data)
+- **Alpaca History**: 400-500ms (licensed bars)
+- **MCP Fallback**: 3-15s (when Alpaca unavailable)
+- **News (MCP)**: 3-5s (CNBC + Yahoo hybrid)
+- **Architecture**: Primary Alpaca, fallback to MCP
 
-### Development (MCP Mode)
-- **Response Times**: 3-15+ seconds (subprocess overhead)
-- **Cold Start**: 3-5 seconds per subprocess
-- **Benefits**: AI tooling integration, unified protocol
-- **Use Case**: Development and AI agent interactions
+### Phase 2: Production (Triple Hybrid)
+- **Direct API**: 40-700ms (Yahoo direct HTTP)
+- **Alpaca API**: Sub-second (professional grade)
+- **MCP Service**: 3-15s (comprehensive tooling)
+- **Intelligent Routing**: Automatic best source selection
+- **Performance**: 375x improvement over MCP-only
 
 ## Key Implementation Details
 
-### Hybrid Architecture (`backend/services/market_service_factory.py`)
+### Current Architecture (`backend/services/market_service_factory.py`)
 ```python
-def create_market_service():
-    use_mcp = os.getenv('USE_MCP', 'true').lower() == 'true'
-    if use_mcp:
-        return MarketDataService()  # MCP mode
-    else:
-        return DirectMarketDataService()  # Direct API mode
+class MarketServiceWrapper:
+    async def get_stock_price(self, symbol: str):
+        # Try Alpaca first (professional data)
+        try:
+            if ALPACA_AVAILABLE:
+                quote = await get_quote_from_alpaca(symbol)
+                quote["data_source"] = "alpaca"
+                return quote
+        except Exception:
+            # Fallback to Yahoo via MCP
+            quote = await self._get_quote(symbol)
+            quote["data_source"] = "yahoo_mcp"
+            return quote
 ```
 
-### Direct Service Benefits (`backend/services/direct_market_service.py`)
-- Native Python Yahoo Finance client (no subprocess)
-- Async HTTP operations with httpx
-- Proper error handling with retries
-- Sub-second response times
+### Production Triple Hybrid (commit b152f15)
+- **HybridMarketService**: Runs all services concurrently
+- **DirectMarketDataService**: Direct Yahoo API (no subprocess)
+- **AlpacaService**: Professional market data
+- **MarketServiceWrapper**: MCP for comprehensive tools
 
-### MCP Integration (`backend/mcp_client.py`)
-- JSON-RPC over stdio communication
-- Subprocess management for Node.js server
-- Tool abstraction for market data access
-- Best for AI agent interactions
+### Service Selection Logic
+- **Current**: Alpaca → MCP fallback per request
+- **Production**: All services active, intelligent per-query routing
 
 ## Testing Scripts
 
@@ -171,15 +196,20 @@ def create_market_service():
 
 ## Common Development Tasks
 
-### Switching Between MCP and Direct Mode
-1. Set `USE_MCP=false` in `backend/.env` for Direct mode
-2. Set `USE_MCP=true` for MCP mode
+### Understanding Service Mode
+- **Current Localhost**: Alpaca-first with MCP fallback (no USE_MCP variable)
+- **Production**: Triple hybrid with Direct + Alpaca + MCP (USE_MCP controls Direct mode)
+- Check `/health` endpoint to see active service mode
+
+### Upgrading to Production Architecture
+1. Checkout master branch: `git checkout master`
+2. Set `USE_MCP=false` in `backend/.env` for Direct mode
 3. Restart backend server
-4. Check `/health` endpoint to verify mode
+4. Verify with `/health` endpoint
 
 ### Adding New Market Data Endpoint
-1. Add method to both `MarketDataService` and `DirectMarketDataService`
-2. Ensure consistent interface between services
+1. Add method to `MarketServiceWrapper` (current) or `HybridMarketService` (production)
+2. Implement Alpaca integration if applicable
 3. Add FastAPI endpoint in `mcp_server.py`
 4. Update frontend service in `marketDataService.ts`
 
