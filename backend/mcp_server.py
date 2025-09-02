@@ -267,6 +267,23 @@ async def startup_event():
         # Services will be None, endpoints will handle gracefully
 
 
+@app.get("/debug/test-direct")
+async def test_direct_service():
+    """Debug endpoint to test Direct service initialization."""
+    try:
+        from services.direct_market_service import DirectMarketDataService
+        service = DirectMarketDataService()
+        result = await service.get_stock_price("SPY")
+        return {"success": True, "data": result}
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
