@@ -678,18 +678,18 @@ sequenceDiagram
 
 ## Current Architecture Evolution
 
-### Phase 1: Alpaca-First with MCP Fallback (Current - Commit 6753c2e)
+### Current Production: Alpaca-First with MCP Fallback (Commit e009f62 - Sep 2, 2025)
 
 ```mermaid
 graph TB
-    subgraph "Current Localhost Architecture"
+    subgraph "Production Architecture (Node.js 22)"
         Request[API Request] --> Factory[MarketServiceFactory]
         
         Factory -->|Stock Quotes/History| AlpacaTry[Try Alpaca First]
         AlpacaTry -->|Success| AlpacaData[Professional Data<br/>Sub-second response]
-        AlpacaTry -->|Fail| MCPFallback[Yahoo via MCP<br/>3-15s response]
+        AlpacaTry -->|Fail| MCPFallback[Yahoo via MCP<br/>Node.js 22 subprocess]
         
-        Factory -->|News| MCPNews[MCP Service<br/>CNBC + Yahoo Hybrid]
+        Factory -->|News| MCPNews[MCP Service<br/>CNBC + Yahoo Hybrid<br/>Node.js 22]
         
         style AlpacaData fill:#90EE90
         style MCPFallback fill:#FFB74D
@@ -1194,19 +1194,23 @@ sequenceDiagram
 
 ## Architecture Evolution Timeline
 
-**Phase 1 - Current Localhost (Commit 6753c2e - Sep 1, 2025 10:12 AM):**
-- ✅ **Alpaca-First Architecture**: Alpaca Markets as primary data source with MCP fallback
+**Current Production (Commit e009f62 - Sep 2, 2025):**
+- ✅ **Alpaca-First Architecture**: Successfully deployed to production
+- ✅ **Node.js 22 Fix**: Updated Docker to Node.js 22 to fix undici compatibility issue
+- ✅ **MCP News Working**: CNBC + Yahoo news now functioning in production (was returning 0 articles)
+- ✅ **Simplified Architecture**: Removed complex triple hybrid, using cleaner Alpaca-first approach
 - ✅ **Professional Market Data**: Licensed Alpaca data for production-ready trading
 - ✅ **Automatic Fallback**: Yahoo Finance via MCP when Alpaca unavailable
+- ✅ **Voice Control**: Enhanced chart system with visual feedback and UI improvements
+
+**Previous Phase 1 - Localhost (Commit 6753c2e - Sep 1, 2025 10:12 AM):**
+- ✅ **Alpaca-First Architecture**: Alpaca Markets as primary data source with MCP fallback
 - ✅ **CNBC News Integration**: Real-time news via MCP subprocess
 - ✅ **Voice Control**: Enhanced chart system with visual feedback
 
-**Phase 2 - Production Deployment (Commit b152f15 - Sep 1, 2025 20:14 PM):**
-- ✅ **Triple Hybrid Architecture**: Direct API + Alpaca + MCP all running concurrently
-- ✅ **Intelligent Routing**: Direct for speed, Alpaca for quality, MCP for comprehensiveness
-- ✅ **375x Performance Improvement**: Health check from 15s+ to 40ms
-- ✅ **No More Either/Or**: All services active simultaneously, automatic selection
-- ✅ **Production Optimized**: Eliminated subprocess timeouts in Fly.io deployment
+**Previous Phase 2 - Production Attempt (Commit b152f15 - Sep 1, 2025 20:14 PM):**
+- ❌ **Triple Hybrid Architecture**: Over-engineered, removed in favor of simpler approach
+- ❌ **Complex Routing**: Direct API + Alpaca + MCP - too complex for maintenance
 
 **Earlier Updates (Aug 27, 2025 - Production Performance Fix):**
 - ✅ **Hybrid MCP/Direct Architecture**: Implemented intelligent service selection based on environment
@@ -1296,6 +1300,15 @@ graph LR
 - ✅ **Error Handling**: Clear error messages for failed commands
 - ✅ **Instant Updates**: Zero-delay chart synchronization
 - ✅ **Command Validation**: Robust parsing with fallback handling
+
+## Recent Updates (September 2, 2025)
+
+**Production MCP Fix:**
+- ✅ **Node.js 22 Upgrade**: Fixed MCP server startup issue in production
+- ✅ **Undici Compatibility**: Resolved `File is not defined` error in Node.js 18
+- ✅ **Docker Update**: Both builder and runtime now use Node.js 22
+- ✅ **MCP News Working**: News endpoint now returns articles (was returning 0)
+- ✅ **Simplified Architecture**: Deployed Alpaca-first approach instead of complex triple hybrid
 
 ## Recent Updates (September 1, 2025)
 

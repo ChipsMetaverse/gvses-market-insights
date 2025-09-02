@@ -8,28 +8,28 @@ GVSES AI Market Analysis Assistant - A professional trading dashboard with voice
 
 ## Key Architecture
 
-### Current Architecture Evolution
+### Current Production Architecture (Commit e009f62 - Sep 2, 2025)
 
-#### Phase 1: Alpaca-First with MCP Fallback (Current Localhost - Commit 6753c2e)
 FastAPI server with Alpaca-first architecture and intelligent fallback:
 - **MarketServiceWrapper**: Primary routing through Alpaca, fallback to MCP
   - **Stock Quotes/History**: Alpaca Markets (300-400ms) → Yahoo via MCP (3-15s) on failure
-  - **News**: Always uses MCP for CNBC + Yahoo hybrid (3-5s)
+  - **News**: Always uses MCP for CNBC + Yahoo hybrid (now working with Node.js 22)
   - **Source Attribution**: All responses include `data_source` field
+- **Node.js 22 Requirement**: Docker updated to Node.js 22 to fix undici compatibility
 - **Service Factory Pattern**: `MarketServiceFactory` manages service lifecycle
 - **Dual MCP Support**: market-mcp-server (Node.js) and alpaca-mcp-server (Python)
 - **ElevenLabs Proxy**: Signed URL generation for WebSocket voice streaming
 - **Claude Integration**: Text-only `/ask` endpoint fallback
 
-#### Phase 2: Triple Hybrid Architecture (Production - Commit b152f15)
-Enhanced production architecture with concurrent services:
-- **HybridMarketService**: ALL services run simultaneously
-  - **Direct API**: Yahoo Finance direct HTTP (40-700ms) - No subprocess overhead
-  - **Alpaca Service**: Professional market data (sub-second) - Licensed data
-  - **MCP Service**: Comprehensive tooling (3-15s) - CNBC news, complex queries
-  - **Intelligent Routing**: Automatic selection of best source per request
-- **375x Performance Improvement**: Eliminated production timeout issues
-- **No USE_MCP Variable**: All services always active in production
+### Previous Architecture Attempts
+
+#### Phase 1: Alpaca-First with MCP Fallback (Localhost - Commit 6753c2e)
+- Initial implementation of Alpaca-first architecture
+- Worked locally but MCP news returned 0 articles in production due to Node.js 18 issue
+
+#### Phase 2: Triple Hybrid Architecture (Production Attempt - Commit b152f15)
+- Over-engineered solution with Direct API + Alpaca + MCP running concurrently
+- Removed in favor of simpler Alpaca-first approach
 
 ### Frontend (`frontend/`)
 React + TypeScript + Vite application with professional trading interface:
@@ -84,6 +84,8 @@ docker-compose logs -f        # View logs
 docker-compose down           # Stop services
 ```
 
+**Important**: Docker uses Node.js 22 for both builder and runtime stages to ensure MCP server compatibility
+
 ## Environment Configuration
 
 ### Backend (`backend/.env`)
@@ -95,10 +97,8 @@ SUPABASE_ANON_KEY=eyJhbGciOi...
 ELEVENLABS_API_KEY=your_key
 ELEVENLABS_AGENT_ID=your_agent_id
 
-# Architecture Control (Production only - from commit b152f15)
-# Current localhost (6753c2e) uses Alpaca-first architecture without this variable
-USE_MCP=false    # Production: Enables Direct API mode
-                 # Not used in current localhost version
+# Alpaca-first architecture is now default in production
+# No USE_MCP variable needed - simplified architecture
 
 # Market Data Sources
 ALPACA_API_KEY=your_alpaca_key      # Primary data source
@@ -251,14 +251,16 @@ class MarketServiceWrapper:
 
 ## Troubleshooting
 
-### Timeout Issues in Production
-- **Solution**: Ensure `USE_MCP=false` in production environment
-- **Verification**: Check `/health` endpoint for "service_mode": "Direct"
+### MCP News Returns 0 Articles in Production
+- **Root Cause**: Node.js 18 has undici library compatibility issues
+- **Solution**: Docker updated to use Node.js 22 in both builder and runtime
+- **Error**: `ReferenceError: File is not defined` in undici/lib/web/webidl/index.js
+- **Fixed**: Commit e009f62 - Sep 2, 2025
 
 ### MCP Server Not Starting
-- **Check**: Node.js installed and in PATH
+- **Check**: Node.js version (must be 22+ for undici compatibility)
 - **Verify**: `cd market-mcp-server && npm install`
-- **Alternative**: Switch to Direct mode with `USE_MCP=false`
+- **Local**: Run `node --version` (should be v22.x.x or higher)
 
 ### Voice Not Working
 1. Check ElevenLabs signed URL: `curl http://localhost:8000/elevenlabs/signed-url`
@@ -268,20 +270,20 @@ class MarketServiceWrapper:
 
 ## Recent Updates
 
-### Chart Label Synchronization Fix (Latest)
+### Production MCP Fix (Sep 2, 2025 - Commit e009f62)
+- **Fixed MCP News**: Updated Docker to Node.js 22 to resolve undici compatibility
+- **Simplified Architecture**: Deployed Alpaca-first approach to production
+- **Node.js 22 Requirement**: Both builder and runtime stages now use Node.js 22
+- **MCP Working**: News endpoint now returns CNBC + Yahoo articles (was returning 0)
+
+### Chart Label Synchronization Fix (Sep 1, 2025)
 - Fixed technical level labels (QE, ST, LTB) disappearing from chart
 - Implemented instant label tracking with chart pan/zoom movements
 - Resolved React closure issues using ref pattern for event handlers
 - Removed requestAnimationFrame wrapper for zero-delay updates
 - Labels now positioned on left side only for cleaner interface
 
-### Production Performance Fix
-- Implemented hybrid MCP/Direct architecture
-- 375x performance improvement in production
-- Eliminated subprocess timeout issues
-- Maintained backward compatibility
-
-### Enhanced News System
+### Enhanced News System (Aug 26, 2025)
 - Hybrid CNBC + Yahoo Finance integration
 - Expandable inline news (no modals)
 - Smart symbol relevance filtering
