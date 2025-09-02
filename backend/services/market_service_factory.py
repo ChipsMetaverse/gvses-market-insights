@@ -221,10 +221,15 @@ class MarketServiceFactory:
         Initialize and warm up the appropriate service.
         Should be called during app startup.
         """
-        service = cls.get_service()
-        await service.warm_up()
-        logger.info(f"Market service initialized in {cls._service_mode} mode")
-        return service
+        try:
+            service = cls.get_service()
+            logger.info(f"Attempting to warm up service in {cls._service_mode} mode...")
+            await service.warm_up()
+            logger.info(f"Market service initialized successfully in {cls._service_mode} mode")
+            return service
+        except Exception as e:
+            logger.error(f"Failed to initialize market service in {cls._service_mode} mode: {e}")
+            raise  # Re-raise to handle in startup event
     
     @classmethod
     def get_service_mode(cls) -> str:

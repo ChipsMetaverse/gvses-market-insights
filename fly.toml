@@ -8,8 +8,8 @@ kill_timeout = "5s"
   dockerfile = "Dockerfile"
 
 [env]
-  # Hybrid mode - both MCP and Direct services available
-  # MCP for news and comprehensive data, Direct for fast price queries
+  # Direct API mode for production performance
+  USE_MCP = "false"
   PORT = "8080"
 
 [[services]]
