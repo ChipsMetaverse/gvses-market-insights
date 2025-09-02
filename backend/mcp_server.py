@@ -299,19 +299,34 @@ async def health_check():
     return response
 
 
+async def get_market_service():
+    """Get or initialize market service."""
+    global market_service
+    if market_service is None:
+        # Try to initialize service on demand
+        try:
+            market_service = MarketServiceFactory.get_service()
+            logger.info(f"Market service initialized on-demand in {MarketServiceFactory.get_service_mode()} mode")
+        except Exception as e:
+            logger.error(f"Failed to initialize market service on-demand: {e}")
+            return None
+    return market_service
+
+
 @app.get("/api/stock-price")
 async def get_stock_price(symbol: str):
     """Get comprehensive stock data using the appropriate service."""
     try:
-        # Use the pre-warmed service from startup
-        if market_service is None:
+        # Get or initialize service
+        service = await get_market_service()
+        if service is None:
             logger.error("Market service not initialized - startup may have failed")
             raise HTTPException(
                 status_code=503, 
                 detail="Market data service not available. Please try again in a moment."
             )
         
-        return await market_service.get_stock_price(symbol)
+        return await service.get_stock_price(symbol)
         
     except TimeoutError:
         logger.warning(f"Timeout fetching price for {symbol}")
@@ -332,16 +347,17 @@ async def get_stock_price(symbol: str):
 async def get_comprehensive_stock_data(symbol: str):
     """Get all available data for a stock - matches ChatGPT capabilities."""
     try:
-        # Use the pre-warmed service from startup
-        if market_service is None:
+        # Get or initialize service
+        service = await get_market_service()
+        if service is None:
             logger.error("Market service not initialized - startup may have failed")
             raise HTTPException(
                 status_code=503, 
                 detail="Market data service not available. Please try again in a moment."
             )
         
-        # Use the pre-initialized service instead of factory
-        data = await market_service.get_comprehensive_stock_data(symbol)
+        # Use the service
+        data = await service.get_comprehensive_stock_data(symbol)
         
         # Map field names for frontend compatibility
         if "technical_levels" in data:
@@ -381,15 +397,16 @@ async def get_stock_history(symbol: str, days: int = 50):
     try:
         logger.info(f"Fetching {days} days of historical data for {symbol}")
         
-        # Use the pre-warmed service from startup
-        if market_service is None:
+        # Get or initialize service
+        service = await get_market_service()
+        if service is None:
             logger.error("Market service not initialized - startup may have failed")
             raise HTTPException(
                 status_code=503, 
                 detail="Market data service not available. Please try again in a moment."
             )
         
-        result = await market_service.get_stock_history(symbol, days)
+        result = await service.get_stock_history(symbol, days)
         
         # Ensure we have the expected format for frontend
         if result and isinstance(result, dict):
@@ -431,12 +448,13 @@ async def get_stock_history(symbol: str, days: int = 50):
 async def get_stock_news(symbol: str, limit: int = 10):
     """Get latest news for a stock using the appropriate service."""
     try:
-        # Use the pre-warmed service from startup
-        if market_service is None:
+        # Get or initialize service
+        service = await get_market_service()
+        if service is None:
             logger.error("Market service not initialized - startup may have failed")
             return {"symbol": symbol.upper(), "news": [], "error": "Service not available"}
         
-        result = await market_service.get_stock_news(symbol, limit)
+        result = await service.get_stock_news(symbol, limit)
         
         # Ensure consistent format - keep original "news" field name for frontend compatibility
         if result and isinstance(result, dict):
