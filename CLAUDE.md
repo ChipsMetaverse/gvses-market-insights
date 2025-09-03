@@ -40,7 +40,12 @@ React + TypeScript + Vite application with professional trading interface:
   - **Instant Updates**: Direct event handling without requestAnimationFrame for zero-delay tracking
   - **Chart Events**: Subscribes to pan, zoom, and crosshair events for continuous label positioning
 - **Voice Assistant**: ElevenLabs Conversational AI with visual feedback
-- **Market Insights Panel**: Stock tickers with technical indicators (ST, LTB, QE)
+- **Market Insights Panel**: Dynamic watchlist with customizable stock tickers
+  - **Add Any Symbol**: Search input to add any valid stock ticker (PLTR, MSFT, GOOGL, etc.)
+  - **Remove Symbols**: X button on each card (minimum 1 symbol required)
+  - **LocalStorage Persistence**: User's watchlist saved across sessions
+  - **Default Symbols**: TSLA, AAPL, NVDA, SPY, PLTR (fully customizable)
+  - **API Validation**: Symbols verified before adding to watchlist
 - **Chart Analysis Panel**: Scrollable expandable news feed (CNBC + Yahoo Finance hybrid)
 
 ### MCP Servers
@@ -127,6 +132,7 @@ All endpoints support both MCP and Direct modes transparently:
 - `GET /api/stock-news?symbol=TSLA` - Hybrid CNBC + Yahoo news (< 700ms in Direct mode)
 - `GET /api/comprehensive-stock-data?symbol=TSLA` - Complete stock information
 - `GET /api/market-overview` - Market indices and movers
+- `GET /api/symbol-search?query=microsoft&limit=10` - **NEW**: Semantic symbol search via Alpaca API
 
 ### Enhanced Endpoints
 - `GET /api/enhanced/market-data` - Auto-selects best data source
@@ -186,6 +192,33 @@ class MarketServiceWrapper:
 - **Current**: Alpaca → MCP fallback per request
 - **Production**: All services active, intelligent per-query routing
 
+## Symbol Validation Strategy
+
+### Market Data Validation (Implemented Sep 3, 2025)
+The system uses **live market data validation** instead of blacklists to determine valid symbols:
+
+#### Backend Validation (`mcp_server.py`)
+- Returns HTTP 404 if symbol has price = 0 or no market data
+- Returns HTTP 404 if symbol has no volume AND no previous close
+- Validates against actual market data, not word lists
+
+#### Frontend Validation (`TradingDashboardSimple.tsx`)
+- Basic format check: 1-5 letters for stocks, XXX-USD for crypto
+- Verifies symbol returns valid data (price > 0) before adding to watchlist
+- Shows appropriate error messages based on API response
+
+#### Voice Command Validation (`chartControlService.ts`)
+- Removed extensive blacklist of common English words
+- Simplified to format validation only
+- Relies on backend API for final validation
+
+### Why This Approach?
+✅ **No false positives**: Valid tickers like "YOU" ($35.83), "IT" ($250.91), "ARE" work correctly  
+✅ **No false negatives**: Invalid symbols like "ITS", "XYZABC" properly rejected  
+✅ **Real-time validation**: Checks against live market state  
+✅ **Simpler code**: No need to maintain blacklists  
+✅ **Voice reliability**: Better handling of misinterpreted speech
+
 ## Testing Scripts
 
 - `test_server.py` - API endpoint functionality
@@ -209,9 +242,10 @@ class MarketServiceWrapper:
 
 ### Adding New Market Data Endpoint
 1. Add method to `MarketServiceWrapper` (current) or `HybridMarketService` (production)
-2. Implement Alpaca integration if applicable
+2. Implement Alpaca integration if applicable (recommended for symbol-related endpoints)
 3. Add FastAPI endpoint in `mcp_server.py`
 4. Update frontend service in `marketDataService.ts`
+5. **For search features**: Consider using Alpaca's asset database for professional accuracy
 
 ### Modifying Voice Agent
 1. Update prompt in `idealagent.md`
@@ -222,6 +256,15 @@ class MarketServiceWrapper:
 1. Modify `TradingDashboardSimple.tsx` (news/analysis sections)
 2. Update styles in `TradingDashboardSimple.css`
 3. Maintain 350px max-height for scrollable container
+
+### Managing Dynamic Watchlist
+1. **Add Symbol via Search**: Type company name ("Microsoft") or ticker ("MSFT") - search dropdown shows suggestions
+2. **Add via Voice**: Say "show me Microsoft" - automatically adds to watchlist and displays chart
+3. **Remove Symbol**: Click the × button on any stock card (keeps minimum 1 symbol)
+4. **Reset Defaults**: Clear localStorage: `localStorage.removeItem('marketWatchlist')`
+5. **Set Custom Defaults**: `localStorage.setItem('marketWatchlist', JSON.stringify(['AAPL', 'GOOGL', 'AMZN']))`
+6. **Professional Validation**: Alpaca API ensures only tradable symbols are added
+7. **Search Features**: 300ms debounced search with real-time dropdown suggestions
 
 ## Architecture Philosophy
 
@@ -268,7 +311,83 @@ class MarketServiceWrapper:
 3. Ensure microphone permissions granted
 4. Check ElevenLabs agent configuration
 
+## Voice Command Processing
+
+### Semantic Voice Parsing (Sep 3, 2025)
+The voice command system now uses **semantic search** instead of regex patterns:
+
+#### Enhanced chartControlService.ts Features:
+- **Async Command Processing**: `parseAgentResponse()` now async to support API calls
+- **Company Name Resolution**: `resolveSymbolWithSearch()` method uses Alpaca API
+- **Fallback Strategy**: Tries semantic search first, falls back to legacy static mapping
+- **Professional Data**: Alpaca Markets ensures accurate ticker symbol matching
+
+#### Voice Command Examples:
+```typescript
+// Before (regex-based, unreliable):
+"show me Microsoft" -> parsed "YOU" incorrectly
+
+// After (semantic search):
+"show me Microsoft" -> API search -> MSFT (Microsoft Corporation)
+"display Apple" -> API search -> AAPL (Apple Inc)
+"load Tesla chart" -> API search -> TSLA (Tesla, Inc.)
+```
+
+#### Implementation Details:
+- **API Endpoint**: Uses `/api/symbol-search?query=microsoft` 
+- **Response Time**: Sub-second symbol resolution
+- **Data Source**: Alpaca Markets professional asset database
+- **Error Handling**: Graceful fallback to original parsing if API fails
+- **Toast Feedback**: Shows resolved company name and ticker in success messages
+
+### useSymbolSearch Hook (Sep 3, 2025)
+New React hook for frontend symbol search functionality:
+
+```typescript
+const { searchResults, isSearching, searchError, hasSearched } = useSymbolSearch(query, 300);
+```
+
+#### Features:
+- **300ms Debouncing**: Prevents excessive API calls during typing
+- **State Management**: Handles loading, results, and error states
+- **Caching**: Results cached in marketDataService for performance
+- **Error Handling**: User-friendly error messages for failed searches
+- **Real-time Updates**: Instant dropdown results as user types
+
+#### Integration Points:
+- **Market Insights Panel**: Search input field with dropdown suggestions
+- **Voice Commands**: Automatic company name to ticker resolution
+- **Watchlist Management**: Add symbols via search or direct entry
+- **Chart Navigation**: Voice-controlled symbol switching
+
 ## Recent Updates
+
+### Alpaca Symbol Search Integration (Sep 3, 2025)
+- **Semantic Voice Commands**: "show me Microsoft" now correctly resolves to MSFT via Alpaca API
+- **Professional Symbol Search**: New `/api/symbol-search` endpoint using Alpaca's asset database
+- **Real-time Search Dropdown**: 300ms debounced search in Market Insights panel
+- **Company Name Resolution**: Natural language support for all voice commands
+- **useSymbolSearch Hook**: Custom React hook for search state management
+- **Async Command Processing**: Voice parsing converted to async for API integration
+- **Enhanced UX**: Both manual search and voice commands support company names
+- **Professional Validation**: Alpaca Markets ensures tradable, accurate symbol matching
+
+### Market Data Validation (Sep 3, 2025)
+- **Replaced Blacklist Approach**: Removed hardcoded list of invalid words
+- **Live Market Validation**: Symbols validated against real market data
+- **Backend 404 Responses**: Invalid symbols return proper HTTP 404 errors
+- **Valid Tickers Work**: "YOU" ($35.83), "IT" ($250.91), "ARE" now work correctly
+- **Invalid Symbols Rejected**: "ITS", "XYZABC", "ME-USD" properly blocked
+- **Simplified Code**: Removed 50+ word blacklist from chartControlService
+- **Better Voice Support**: More reliable handling of voice commands
+
+### Dynamic Watchlist Feature (Sep 2, 2025)
+- **Customizable Market Insights**: Users can now add/remove any stock ticker
+- **Search & Add**: Input field with "Add" button for new symbols
+- **Symbol Validation**: API verification before adding to watchlist
+- **Remove Capability**: X button on each stock card (minimum 1 required)
+- **Persistent Storage**: localStorage saves user preferences across sessions
+- **Default Watchlist**: TSLA, AAPL, NVDA, SPY, PLTR (expandable to any ticker)
 
 ### Production MCP Fix (Sep 2, 2025 - Commit e009f62)
 - **Fixed MCP News**: Updated Docker to Node.js 22 to resolve undici compatibility

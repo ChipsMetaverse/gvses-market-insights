@@ -83,6 +83,22 @@ export interface TechnicalLevels {
   ltb_level?: number; // Load The Boat
 }
 
+export interface SymbolSearchResult {
+  symbol: string;
+  name: string;
+  exchange: string;
+  asset_class: string;
+  tradable: boolean;
+  status: string;
+}
+
+export interface SymbolSearchResponse {
+  query: string;
+  results: SymbolSearchResult[];
+  total: number;
+  data_source: string;
+}
+
 class MarketDataService {
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private cacheTimeout = 10000; // 10 seconds cache
@@ -194,6 +210,22 @@ class MarketDataService {
       console.error('Error fetching market overview:', error);
       throw error;
     }
+  }
+
+  async searchSymbols(query: string, limit: number = 20): Promise<SymbolSearchResponse> {
+    const cacheKey = `search-${query}-${limit}`;
+    const cached = this.getCached<SymbolSearchResponse>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const response = await axios.get(`${API_URL}/api/symbol-search`, {
+      params: { query, limit },
+      timeout: 5000
+    });
+
+    this.setCache(cacheKey, response.data);
+    return response.data;
   }
 
   async getMarketMovers(): Promise<any> {

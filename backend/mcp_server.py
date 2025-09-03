@@ -332,8 +332,31 @@ async def get_stock_price(symbol: str):
                 detail="Market data service not available. Please try again in a moment."
             )
         
-        return await service.get_stock_price(symbol)
+        result = await service.get_stock_price(symbol)
         
+        # Validate that we got real market data
+        # If price is 0 or missing, it's likely an invalid symbol
+        if not result or result.get('price', 0) == 0:
+            logger.warning(f"Invalid symbol or no market data for {symbol}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Symbol '{symbol}' not found or has no market data"
+            )
+        
+        # Additional validation: check if we have reasonable volume
+        # (some valid symbols might have 0 volume during pre/post market)
+        if result.get('volume', 0) == 0 and result.get('previous_close', 0) == 0:
+            logger.warning(f"Symbol {symbol} appears invalid (no volume or previous close)")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Symbol '{symbol}' appears to be invalid or delisted"
+            )
+        
+        return result
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except TimeoutError:
         logger.warning(f"Timeout fetching price for {symbol}")
         # Return a proper error response
@@ -346,6 +369,52 @@ async def get_stock_price(symbol: str):
         raise HTTPException(
             status_code=500,
             detail=f"Error fetching stock data: {str(e)}"
+        )
+
+
+@app.get("/api/symbol-search")
+async def search_symbols(query: str, limit: int = 20):
+    """Search for stock symbols using Alpaca Markets API."""
+    try:
+        # Get or initialize service
+        service = await get_market_service()
+        if service is None:
+            logger.error("Market service not initialized - startup may have failed")
+            raise HTTPException(
+                status_code=503, 
+                detail="Market data service not available. Please try again in a moment."
+            )
+        
+        # Validate input
+        if not query or len(query.strip()) < 1:
+            return {
+                "query": query,
+                "results": [],
+                "total": 0,
+                "message": "Query must be at least 1 character"
+            }
+        
+        if limit < 1 or limit > 100:
+            limit = 20  # Default to 20 if invalid
+        
+        # Search for assets
+        results = await service.search_assets(query.strip(), limit)
+        
+        return {
+            "query": query,
+            "results": results,
+            "total": len(results),
+            "data_source": "alpaca"
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        logger.error(f"Error searching symbols for query '{query}': {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error searching symbols: {str(e)}"
         )
 
 

@@ -47,6 +47,28 @@ class MarketDataCache:
 cache = MarketDataCache(ttl=5)
 
 
+async def search_assets_with_alpaca(query: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """Search for assets using Alpaca Markets API."""
+    
+    if not ALPACA_AVAILABLE:
+        raise ValueError("Alpaca service not available")
+    
+    logger.info(f"Searching Alpaca assets for query: '{query}'")
+    
+    try:
+        # Get Alpaca service instance
+        alpaca_service = get_alpaca_service()
+        
+        # Use the search method we just added
+        results = await alpaca_service.search_assets(query, limit)
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error searching Alpaca assets for '{query}': {e}")
+        raise
+
+
 async def get_quote_from_alpaca(symbol: str) -> Dict[str, Any]:
     """Get current quote from Alpaca Markets."""
     

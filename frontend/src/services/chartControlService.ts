@@ -3,14 +3,20 @@
  * Processes agent commands to control TradingView Lightweight Charts
  */
 
+import { marketDataService, SymbolSearchResult } from './marketDataService';
+
 export interface ChartCommand {
-  type: 'symbol' | 'timeframe' | 'indicator' | 'zoom' | 'scroll' | 'style';
+  type: 'symbol' | 'timeframe' | 'indicator' | 'zoom' | 'scroll' | 'style' | 'reset' | 'crosshair';
   value: any;
+  metadata?: {
+    assetType?: 'stock' | 'crypto';
+    [key: string]: any;
+  };
   timestamp?: number;
 }
 
 export interface ChartControlCallbacks {
-  onSymbolChange?: (symbol: string) => void;
+  onSymbolChange?: (symbol: string, metadata?: { assetType?: 'stock' | 'crypto' }) => void;
   onTimeframeChange?: (timeframe: string) => void;
   onIndicatorToggle?: (indicator: string, enabled: boolean) => void;
   onZoomChange?: (level: number) => void;
@@ -25,14 +31,368 @@ class ChartControlService {
   private currentSymbol: string = 'TSLA';
   private chartRef: any = null;
   
-  // Command patterns for parsing agent responses
+  // Company name to ticker mapping (200+ companies)
+  private companyToTicker: { [key: string]: string } = {
+    // Tech Giants
+    'NVIDIA': 'NVDA',
+    'APPLE': 'AAPL',
+    'MICROSOFT': 'MSFT',
+    'GOOGLE': 'GOOGL',
+    'ALPHABET': 'GOOGL',
+    'AMAZON': 'AMZN',
+    'META': 'META',
+    'FACEBOOK': 'META',
+    'NETFLIX': 'NFLX',
+    'TESLA': 'TSLA',
+    'INTEL': 'INTC',
+    'AMD': 'AMD',
+    'ORACLE': 'ORCL',
+    'SALESFORCE': 'CRM',
+    'ADOBE': 'ADBE',
+    'CISCO': 'CSCO',
+    'IBM': 'IBM',
+    'BROADCOM': 'AVGO',
+    'QUALCOMM': 'QCOM',
+    'TEXAS INSTRUMENTS': 'TXN',
+    'PAYPAL': 'PYPL',
+    'SPOTIFY': 'SPOT',
+    'SQUARE': 'SQ',
+    'BLOCK': 'SQ',
+    'SHOPIFY': 'SHOP',
+    'UBER': 'UBER',
+    'LYFT': 'LYFT',
+    'AIRBNB': 'ABNB',
+    'ZOOM': 'ZM',
+    'DOCUSIGN': 'DOCU',
+    'PALANTIR': 'PLTR',
+    'SNOWFLAKE': 'SNOW',
+    'DATABRICKS': 'DBX',
+    'CLOUDFLARE': 'NET',
+    'CROWDSTRIKE': 'CRWD',
+    'OKTA': 'OKTA',
+    'TWILIO': 'TWLO',
+    'SLACK': 'WORK',
+    'ATLASSIAN': 'TEAM',
+    'ASANA': 'ASAN',
+    'MONDAY': 'MNDY',
+    'UNITY': 'U',
+    'ROBLOX': 'RBLX',
+    'COINBASE': 'COIN',
+    'ROBINHOOD': 'HOOD',
+    'DRAFTKINGS': 'DKNG',
+    'PINTEREST': 'PINS',
+    'SNAP': 'SNAP',
+    'SNAPCHAT': 'SNAP',
+    'TWITTER': 'TWTR',
+    'X': 'TWTR',
+    
+    // Financial
+    'JPMORGAN': 'JPM',
+    'JP MORGAN': 'JPM',
+    'CHASE': 'JPM',
+    'BANK OF AMERICA': 'BAC',
+    'WELLS FARGO': 'WFC',
+    'GOLDMAN': 'GS',
+    'GOLDMAN SACHS': 'GS',
+    'MORGAN STANLEY': 'MS',
+    'CITIGROUP': 'C',
+    'CITI': 'C',
+    'AMERICAN EXPRESS': 'AXP',
+    'AMEX': 'AXP',
+    'BERKSHIRE': 'BRK.B',
+    'BERKSHIRE HATHAWAY': 'BRK.B',
+    'BLACKROCK': 'BLK',
+    'CHARLES SCHWAB': 'SCHW',
+    'SCHWAB': 'SCHW',
+    'VISA': 'V',
+    'MASTERCARD': 'MA',
+    'FIDELITY': 'FNF',
+    
+    // Retail & Consumer
+    'WALMART': 'WMT',
+    'TARGET': 'TGT',
+    'COSTCO': 'COST',
+    'HOME DEPOT': 'HD',
+    'LOWES': 'LOW',
+    'NIKE': 'NKE',
+    'ADIDAS': 'ADDYY',
+    'STARBUCKS': 'SBUX',
+    'MCDONALDS': 'MCD',
+    'COCA COLA': 'KO',
+    'COKE': 'KO',
+    'PEPSI': 'PEP',
+    'PEPSICO': 'PEP',
+    'DISNEY': 'DIS',
+    'WARNER': 'WBD',
+    'PARAMOUNT': 'PARA',
+    'COMCAST': 'CMCSA',
+    'VERIZON': 'VZ',
+    'AT&T': 'T',
+    'ATT': 'T',
+    'T-MOBILE': 'TMUS',
+    'TMOBILE': 'TMUS',
+    
+    // Healthcare & Pharma
+    'JOHNSON & JOHNSON': 'JNJ',
+    'JNJ': 'JNJ',
+    'PFIZER': 'PFE',
+    'MODERNA': 'MRNA',
+    'ABBVIE': 'ABBV',
+    'MERCK': 'MRK',
+    'LILLY': 'LLY',
+    'ELI LILLY': 'LLY',
+    'BRISTOL': 'BMY',
+    'BRISTOL MYERS': 'BMY',
+    'ASTRAZENECA': 'AZN',
+    'NOVARTIS': 'NVS',
+    'ROCHE': 'RHHBY',
+    'ABBOTT': 'ABT',
+    'MEDTRONIC': 'MDT',
+    'CVS': 'CVS',
+    'WALGREENS': 'WBA',
+    'UNITEDHEALTH': 'UNH',
+    'ANTHEM': 'ANTM',
+    'CIGNA': 'CI',
+    'HUMANA': 'HUM',
+    
+    // Automotive
+    'FORD': 'F',
+    'GENERAL MOTORS': 'GM',
+    'GM': 'GM',
+    'TOYOTA': 'TM',
+    'HONDA': 'HMC',
+    'VOLKSWAGEN': 'VWAGY',
+    'VW': 'VWAGY',
+    'BMW': 'BMWYY',
+    'MERCEDES': 'DMLRY',
+    'FERRARI': 'RACE',
+    'RIVIAN': 'RIVN',
+    'LUCID': 'LCID',
+    'NIO': 'NIO',
+    'XPENG': 'XPEV',
+    'LI AUTO': 'LI',
+    
+    // Airlines & Travel
+    'BOEING': 'BA',
+    'AIRBUS': 'EADSY',
+    'DELTA': 'DAL',
+    'UNITED': 'UAL',
+    'AMERICAN AIRLINES': 'AAL',
+    'SOUTHWEST': 'LUV',
+    'JETBLUE': 'JBLU',
+    'SPIRIT': 'SAVE',
+    'ALASKA': 'ALK',
+    'BOOKING': 'BKNG',
+    'EXPEDIA': 'EXPE',
+    'MARRIOTT': 'MAR',
+    'HILTON': 'HLT',
+    'HYATT': 'H',
+    'CARNIVAL': 'CCL',
+    'ROYAL CARIBBEAN': 'RCL',
+    'NORWEGIAN': 'NCLH',
+    
+    // Energy & Commodities
+    'EXXON': 'XOM',
+    'EXXONMOBIL': 'XOM',
+    'CHEVRON': 'CVX',
+    'SHELL': 'SHEL',
+    'BP': 'BP',
+    'CONOCOPHILLIPS': 'COP',
+    'MARATHON': 'MRO',
+    'OCCIDENTAL': 'OXY',
+    'SCHLUMBERGER': 'SLB',
+    'HALLIBURTON': 'HAL',
+    
+    // International
+    'ALIBABA': 'BABA',
+    'TENCENT': 'TCEHY',
+    'BAIDU': 'BIDU',
+    'JD': 'JD',
+    'PINDUODUO': 'PDD',
+    'MEITUAN': 'MPNGY',
+    'BYTEDANCE': 'BDNCE',
+    'XIAOMI': 'XIACF',
+    'BYD': 'BYDDY',
+    'SAMSUNG': 'SSNLF',
+    'SONY': 'SONY',
+    'NINTENDO': 'NTDOY',
+    'SOFTBANK': 'SFTBY',
+    'RAKUTEN': 'RKUNY',
+    'NESTLE': 'NSRGY',
+    'UNILEVER': 'UL',
+    'LVMH': 'LVMUY',
+    'ASML': 'ASML',
+    'TSMC': 'TSM',
+    'TAIWAN SEMICONDUCTOR': 'TSM',
+    'INFOSYS': 'INFY',
+    'WIPRO': 'WIT',
+    'TATA': 'TTM',
+    'RELIANCE': 'RELI',
+    'ARAMCO': 'ARMCO',
+    'PETROBRAS': 'PBR',
+    'VALE': 'VALE',
+    'MERCADOLIBRE': 'MELI',
+    'NUBANK': 'NU',
+    'STONE': 'STNE',
+    'PAGSEGURO': 'PAGS',
+    
+    // ETFs & Indices
+    'SPY': 'SPY',
+    'S&P': 'SPY',
+    'S&P 500': 'SPY',
+    'QQQ': 'QQQ',
+    'NASDAQ': 'QQQ',
+    'DIA': 'DIA',
+    'DOW': 'DIA',
+    'DOW JONES': 'DIA',
+    'IWM': 'IWM',
+    'RUSSELL': 'IWM',
+    'VTI': 'VTI',
+    'VOO': 'VOO',
+    'VANGUARD': 'VTI',
+    'ARK': 'ARKK',
+    'ARKK': 'ARKK',
+    'ARKG': 'ARKG',
+    'ARKQ': 'ARKQ',
+    'ARKW': 'ARKW',
+    'GLD': 'GLD',
+    'GOLD': 'GLD',
+    'SLV': 'SLV',
+    'SILVER': 'SLV',
+    'USO': 'USO',
+    'OIL': 'USO'
+  };
+  
+  // Cryptocurrency to ticker mapping (supports CoinGecko, Yahoo, and CoinMarketCap)
+  private cryptoToTicker: { [key: string]: { gecko: string; yahoo: string; cmc?: string } } = {
+    // Major cryptocurrencies
+    'BITCOIN': { gecko: 'bitcoin', yahoo: 'BTC-USD', cmc: 'BTC' },
+    'BTC': { gecko: 'bitcoin', yahoo: 'BTC-USD', cmc: 'BTC' },
+    'ETHEREUM': { gecko: 'ethereum', yahoo: 'ETH-USD', cmc: 'ETH' },
+    'ETH': { gecko: 'ethereum', yahoo: 'ETH-USD', cmc: 'ETH' },
+    'BINANCE': { gecko: 'binancecoin', yahoo: 'BNB-USD', cmc: 'BNB' },
+    'BNB': { gecko: 'binancecoin', yahoo: 'BNB-USD', cmc: 'BNB' },
+    'CARDANO': { gecko: 'cardano', yahoo: 'ADA-USD', cmc: 'ADA' },
+    'ADA': { gecko: 'cardano', yahoo: 'ADA-USD', cmc: 'ADA' },
+    'SOLANA': { gecko: 'solana', yahoo: 'SOL-USD', cmc: 'SOL' },
+    'SOL': { gecko: 'solana', yahoo: 'SOL-USD', cmc: 'SOL' },
+    'XRP': { gecko: 'ripple', yahoo: 'XRP-USD', cmc: 'XRP' },
+    'RIPPLE': { gecko: 'ripple', yahoo: 'XRP-USD', cmc: 'XRP' },
+    'DOGECOIN': { gecko: 'dogecoin', yahoo: 'DOGE-USD', cmc: 'DOGE' },
+    'DOGE': { gecko: 'dogecoin', yahoo: 'DOGE-USD', cmc: 'DOGE' },
+    'POLYGON': { gecko: 'matic-network', yahoo: 'MATIC-USD', cmc: 'MATIC' },
+    'MATIC': { gecko: 'matic-network', yahoo: 'MATIC-USD', cmc: 'MATIC' },
+    'POLKADOT': { gecko: 'polkadot', yahoo: 'DOT-USD', cmc: 'DOT' },
+    'DOT': { gecko: 'polkadot', yahoo: 'DOT-USD', cmc: 'DOT' },
+    'CHAINLINK': { gecko: 'chainlink', yahoo: 'LINK-USD', cmc: 'LINK' },
+    'LINK': { gecko: 'chainlink', yahoo: 'LINK-USD', cmc: 'LINK' },
+    'AVALANCHE': { gecko: 'avalanche-2', yahoo: 'AVAX-USD', cmc: 'AVAX' },
+    'AVAX': { gecko: 'avalanche-2', yahoo: 'AVAX-USD', cmc: 'AVAX' },
+    'UNISWAP': { gecko: 'uniswap', yahoo: 'UNI-USD', cmc: 'UNI' },
+    'UNI': { gecko: 'uniswap', yahoo: 'UNI-USD', cmc: 'UNI' },
+    'LITECOIN': { gecko: 'litecoin', yahoo: 'LTC-USD', cmc: 'LTC' },
+    'LTC': { gecko: 'litecoin', yahoo: 'LTC-USD', cmc: 'LTC' },
+    'COSMOS': { gecko: 'cosmos', yahoo: 'ATOM-USD', cmc: 'ATOM' },
+    'ATOM': { gecko: 'cosmos', yahoo: 'ATOM-USD', cmc: 'ATOM' },
+    'STELLAR': { gecko: 'stellar', yahoo: 'XLM-USD', cmc: 'XLM' },
+    'XLM': { gecko: 'stellar', yahoo: 'XLM-USD', cmc: 'XLM' },
+    'MONERO': { gecko: 'monero', yahoo: 'XMR-USD', cmc: 'XMR' },
+    'XMR': { gecko: 'monero', yahoo: 'XMR-USD', cmc: 'XMR' },
+    'TRON': { gecko: 'tron', yahoo: 'TRX-USD', cmc: 'TRX' },
+    'TRX': { gecko: 'tron', yahoo: 'TRX-USD', cmc: 'TRX' },
+    'ETHEREUM CLASSIC': { gecko: 'ethereum-classic', yahoo: 'ETC-USD', cmc: 'ETC' },
+    'ETC': { gecko: 'ethereum-classic', yahoo: 'ETC-USD', cmc: 'ETC' },
+    'FILECOIN': { gecko: 'filecoin', yahoo: 'FIL-USD', cmc: 'FIL' },
+    'FIL': { gecko: 'filecoin', yahoo: 'FIL-USD', cmc: 'FIL' },
+    'AAVE': { gecko: 'aave', yahoo: 'AAVE-USD', cmc: 'AAVE' },
+    'COMPOUND': { gecko: 'compound-governance-token', yahoo: 'COMP-USD', cmc: 'COMP' },
+    'COMP': { gecko: 'compound-governance-token', yahoo: 'COMP-USD', cmc: 'COMP' },
+    'MAKER': { gecko: 'maker', yahoo: 'MKR-USD', cmc: 'MKR' },
+    'MKR': { gecko: 'maker', yahoo: 'MKR-USD', cmc: 'MKR' },
+    'SUSHI': { gecko: 'sushi', yahoo: 'SUSHI-USD', cmc: 'SUSHI' },
+    'SUSHISWAP': { gecko: 'sushi', yahoo: 'SUSHI-USD', cmc: 'SUSHI' },
+    'CURVE': { gecko: 'curve-dao-token', yahoo: 'CRV-USD', cmc: 'CRV' },
+    'CRV': { gecko: 'curve-dao-token', yahoo: 'CRV-USD', cmc: 'CRV' },
+    'FANTOM': { gecko: 'fantom', yahoo: 'FTM-USD', cmc: 'FTM' },
+    'FTM': { gecko: 'fantom', yahoo: 'FTM-USD', cmc: 'FTM' },
+    'ALGORAND': { gecko: 'algorand', yahoo: 'ALGO-USD', cmc: 'ALGO' },
+    'ALGO': { gecko: 'algorand', yahoo: 'ALGO-USD', cmc: 'ALGO' },
+    'NEAR': { gecko: 'near', yahoo: 'NEAR-USD', cmc: 'NEAR' },
+    'NEAR PROTOCOL': { gecko: 'near', yahoo: 'NEAR-USD', cmc: 'NEAR' },
+    'FLOW': { gecko: 'flow', yahoo: 'FLOW-USD', cmc: 'FLOW' },
+    'HEDERA': { gecko: 'hedera-hashgraph', yahoo: 'HBAR-USD', cmc: 'HBAR' },
+    'HBAR': { gecko: 'hedera-hashgraph', yahoo: 'HBAR-USD', cmc: 'HBAR' },
+    'INTERNET COMPUTER': { gecko: 'internet-computer', yahoo: 'ICP-USD', cmc: 'ICP' },
+    'ICP': { gecko: 'internet-computer', yahoo: 'ICP-USD', cmc: 'ICP' },
+    'THE SANDBOX': { gecko: 'the-sandbox', yahoo: 'SAND-USD', cmc: 'SAND' },
+    'SAND': { gecko: 'the-sandbox', yahoo: 'SAND-USD', cmc: 'SAND' },
+    'DECENTRALAND': { gecko: 'decentraland', yahoo: 'MANA-USD', cmc: 'MANA' },
+    'MANA': { gecko: 'decentraland', yahoo: 'MANA-USD', cmc: 'MANA' },
+    'AXIE': { gecko: 'axie-infinity', yahoo: 'AXS-USD', cmc: 'AXS' },
+    'AXS': { gecko: 'axie-infinity', yahoo: 'AXS-USD', cmc: 'AXS' },
+    'ENJIN': { gecko: 'enjincoin', yahoo: 'ENJ-USD', cmc: 'ENJ' },
+    'ENJ': { gecko: 'enjincoin', yahoo: 'ENJ-USD', cmc: 'ENJ' },
+    'GALA': { gecko: 'gala', yahoo: 'GALA-USD', cmc: 'GALA' },
+    'THETA': { gecko: 'theta-token', yahoo: 'THETA-USD', cmc: 'THETA' },
+    'VECHAIN': { gecko: 'vechain', yahoo: 'VET-USD', cmc: 'VET' },
+    'VET': { gecko: 'vechain', yahoo: 'VET-USD', cmc: 'VET' },
+    'ZILLIQA': { gecko: 'zilliqa', yahoo: 'ZIL-USD', cmc: 'ZIL' },
+    'ZIL': { gecko: 'zilliqa', yahoo: 'ZIL-USD', cmc: 'ZIL' },
+    'SHIBA': { gecko: 'shiba-inu', yahoo: 'SHIB-USD', cmc: 'SHIB' },
+    'SHIB': { gecko: 'shiba-inu', yahoo: 'SHIB-USD', cmc: 'SHIB' },
+    'SHIBA INU': { gecko: 'shiba-inu', yahoo: 'SHIB-USD', cmc: 'SHIB' },
+    
+    // Stablecoins
+    'TETHER': { gecko: 'tether', yahoo: 'USDT-USD', cmc: 'USDT' },
+    'USDT': { gecko: 'tether', yahoo: 'USDT-USD', cmc: 'USDT' },
+    'USDC': { gecko: 'usd-coin', yahoo: 'USDC-USD', cmc: 'USDC' },
+    'USD COIN': { gecko: 'usd-coin', yahoo: 'USDC-USD', cmc: 'USDC' },
+    'BUSD': { gecko: 'binance-usd', yahoo: 'BUSD-USD', cmc: 'BUSD' },
+    'DAI': { gecko: 'dai', yahoo: 'DAI-USD', cmc: 'DAI' },
+    'FRAX': { gecko: 'frax', yahoo: 'FRAX-USD', cmc: 'FRAX' },
+    'TUSD': { gecko: 'true-usd', yahoo: 'TUSD-USD', cmc: 'TUSD' },
+    'PAX': { gecko: 'paxos-standard', yahoo: 'PAX-USD', cmc: 'PAX' },
+    'PAXOS': { gecko: 'paxos-standard', yahoo: 'PAX-USD', cmc: 'PAX' }
+  };
+  
+  // Symbol conflicts (symbols that exist as both stock and crypto)
+  private symbolConflicts: { [key: string]: { stock: string; crypto: { gecko: string; yahoo: string; cmc?: string } } } = {
+    'AMP': { stock: 'AMP', crypto: { gecko: 'amp-token', yahoo: 'AMP-USD', cmc: 'AMP' }},
+    'ADA': { stock: 'ADA', crypto: { gecko: 'cardano', yahoo: 'ADA-USD', cmc: 'ADA' }},
+    'LINK': { stock: 'LINK', crypto: { gecko: 'chainlink', yahoo: 'LINK-USD', cmc: 'LINK' }},
+    'UNI': { stock: 'UNI', crypto: { gecko: 'uniswap', yahoo: 'UNI-USD', cmc: 'UNI' }},
+    'DOT': { stock: 'DOT', crypto: { gecko: 'polkadot', yahoo: 'DOT-USD', cmc: 'DOT' }},
+    'COMP': { stock: 'COMP', crypto: { gecko: 'compound-governance-token', yahoo: 'COMP-USD', cmc: 'COMP' }},
+    'CRV': { stock: 'CRV', crypto: { gecko: 'curve-dao-token', yahoo: 'CRV-USD', cmc: 'CRV' }},
+    'FLOW': { stock: 'FLOW', crypto: { gecko: 'flow', yahoo: 'FLOW-USD', cmc: 'FLOW' }},
+    'SAND': { stock: 'SAND', crypto: { gecko: 'the-sandbox', yahoo: 'SAND-USD', cmc: 'SAND' }}
+  };
+
+  // Enhanced command patterns for parsing agent responses
   private commandPatterns = {
-    symbol: /(?:CHART|SHOW|DISPLAY|SWITCH TO|CHANGE TO)[:\s]+([A-Z]{1,5}(?:-USD)?)/i,
-    timeframe: /(?:TIMEFRAME|TIME|PERIOD)[:\s]+(1D|5D|1M|3M|6M|1Y|YTD|ALL)/i,
-    indicator: /(?:ADD|SHOW|HIDE|REMOVE)[:\s]+(MA|EMA|RSI|MACD|VOLUME|BOLLINGER)/i,
-    zoom: /(?:ZOOM)[:\s]+(IN|OUT|\d+%?)/i,
-    scroll: /(?:SCROLL|GO TO)[:\s]+(\d{4}-\d{2}-\d{2}|\w+)/i,
-    style: /(?:STYLE|VIEW)[:\s]+(CANDLES?|LINE|AREA|BARS?)/i
+    // Symbol patterns - prioritize company names over generic matches
+    symbol: /(?:CHART|SHOW|DISPLAY|SWITCH TO|CHANGE TO|LOAD|VIEW|PULL UP)[:\s]+([A-Z]{1,5}(?:-USD)?)|(?:show(?:ing)? (?:me |you )?|display(?:ing)?|load(?:ing)?|switch(?:ing)? to|change to|here(?:'s| is))?\s*(?:the )?(NVIDIA|APPLE|TESLA|MICROSOFT|AMAZON|GOOGLE|META|FACEBOOK|NETFLIX|[A-Z]{1,5})(?:'s)?\s*(?:chart|stock|ticker|price|data)?/i,
+    
+    // Timeframe patterns - support more variations
+    timeframe: /(?:TIMEFRAME|TIME|PERIOD|RANGE|VIEW)[:\s]+(1D|5D|1W|2W|1M|3M|6M|1Y|2Y|5Y|YTD|ALL|MAX)|(?:show |display |set )?(one|1) ?(day|week|month|year)|(?:show |display |set )?(five|5) ?(days?|weeks?|months?|years?)|(?:year to date|ytd|all time|maximum)/i,
+    
+    // Indicator patterns - expanded list
+    indicator: /(?:ADD|SHOW|HIDE|REMOVE|TOGGLE|DISPLAY)[:\s]+(MA|EMA|SMA|RSI|MACD|VOLUME|VOL|BOLLINGER|BB|VWAP|STOCHASTIC|ATR)|(?:add |show |display |toggle )?(moving average|exponential moving|rsi|macd|volume|bollinger bands?|vwap)/i,
+    
+    // Zoom patterns - more natural language
+    zoom: /(?:ZOOM)[:\s]+(IN|OUT|\d+%?)|zoom ?(in|out)(?: ?(\d+))?%?|(?:closer|further|magnify|shrink)/i,
+    
+    // Scroll patterns - date navigation
+    scroll: /(?:SCROLL|GO TO|NAVIGATE TO|JUMP TO)[:\s]+(\d{4}-\d{2}-\d{2}|\w+)|(?:go to |scroll to |jump to |show )?(yesterday|today|last week|last month|beginning|end)/i,
+    
+    // Style patterns - chart types
+    style: /(?:STYLE|VIEW|TYPE|CHART TYPE)[:\s]+(CANDLES?|LINE|AREA|BARS?|HEIKIN|HOLLOW)|(?:switch to |change to |use )?(candlestick|candle|line|area|bar|heikin ashi|hollow candle)s?(?: chart)?/i,
+    
+    // Reset view pattern
+    reset: /(?:RESET|FIT|AUTO)[:\s]*(VIEW|SCALE|ZOOM)?|reset (?:the )?(?:chart|view|zoom)|fit (?:to )?(?:screen|content)|auto ?scale/i,
+    
+    // Crosshair pattern
+    crosshair: /(?:CROSSHAIR|CURSOR)[:\s]+(ON|OFF|TOGGLE)|(?:show|hide|toggle)(?: the)? crosshair/i
   };
 
   /**
@@ -50,19 +410,196 @@ class ChartControlService {
   }
 
   /**
-   * Parse agent response for chart commands
+   * Detect asset type from context
    */
-  parseAgentResponse(response: string): ChartCommand[] {
+  private detectAssetType(response: string): 'stock' | 'crypto' | 'auto' {
+    const cryptoKeywords = /crypto|coin|token|bitcoin|ethereum|blockchain|defi|web3|nft|mining|wallet|satoshi/i;
+    const stockKeywords = /stock|share|equity|company|corporation|nasdaq|nyse|s&p|dow|earnings|dividend|ipo/i;
+    
+    if (cryptoKeywords.test(response)) return 'crypto';
+    if (stockKeywords.test(response)) return 'stock';
+    return 'auto';
+  }
+  
+  /**
+   * Validate if a string is likely a stock symbol
+   */
+  private isValidSymbol(symbol: string): boolean {
+    if (!symbol || symbol.length < 1) return false;
+    
+    const upperSymbol = symbol.toUpperCase();
+    
+    // Valid patterns:
+    // Stock: 1-5 uppercase letters
+    // Crypto: XXX-USD, XXX-USDT, XXX-USDC, XXX-BTC, XXX-ETH
+    // Special: BRK.A, BRK.B (Berkshire Hathaway)
+    const validPatterns = [
+      /^[A-Z]{1,5}$/,                                    // Stock symbols
+      /^[A-Z]{2,5}-USD$/,                                // Crypto USD pairs
+      /^[A-Z]{2,5}-(USDT|USDC|EUR|BTC|ETH)$/,          // Other crypto pairs
+      /^BRK\.[AB]$/                                      // Berkshire special case
+    ];
+    
+    return validPatterns.some(pattern => pattern.test(upperSymbol));
+  }
+  
+  /**
+   * Resolve symbol using Alpaca search API (semantic approach)
+   */
+  private async resolveSymbolWithSearch(query: string): Promise<{ symbol: string; type: 'stock' | 'crypto'; name?: string } | null> {
+    try {
+      console.log(`Searching for symbol with query: "${query}"`);
+      
+      // Use Alpaca search to find matching symbols
+      const searchResponse = await marketDataService.searchSymbols(query, 5);
+      
+      if (searchResponse.results.length > 0) {
+        // Get the best match (first result is most relevant due to backend sorting)
+        const bestMatch = searchResponse.results[0];
+        
+        console.log(`Found symbol: ${bestMatch.symbol} (${bestMatch.name}) via Alpaca search`);
+        
+        return {
+          symbol: bestMatch.symbol,
+          type: 'stock', // Alpaca primarily deals with US equities
+          name: bestMatch.name
+        };
+      }
+      
+      console.log(`No symbols found for query: "${query}"`);
+      return null;
+    } catch (error) {
+      console.error(`Error searching for symbol "${query}":`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Resolve symbol based on context and mappings (legacy fallback)
+   */
+  private resolveSymbol(symbol: string, context: 'stock' | 'crypto' | 'auto', tradingPair?: string): { symbol: string; type: 'stock' | 'crypto'; tradingPair?: string } | null {
+    const upperSymbol = symbol.toUpperCase();
+    
+    // First validate the symbol
+    if (!this.isValidSymbol(upperSymbol)) {
+      console.warn(`Invalid symbol rejected: ${upperSymbol}`);
+      return null;
+    }
+    
+    // Check if it's a conflicting symbol
+    if (this.symbolConflicts[upperSymbol]) {
+      if (context === 'crypto') {
+        const cryptoConfig = this.symbolConflicts[upperSymbol].crypto;
+        const pair = this.selectTradingPair(cryptoConfig, tradingPair);
+        return { symbol: pair.symbol, type: 'crypto', tradingPair: pair.pair };
+      } else if (context === 'stock') {
+        return { symbol: this.symbolConflicts[upperSymbol].stock, type: 'stock' };
+      } else {
+        // Default to stock for conflicting symbols in auto mode
+        console.log(`Symbol ${upperSymbol} exists as both stock and crypto, defaulting to stock`);
+        return { symbol: this.symbolConflicts[upperSymbol].stock, type: 'stock' };
+      }
+    }
+    
+    // Check company names
+    if (this.companyToTicker[upperSymbol]) {
+      return { symbol: this.companyToTicker[upperSymbol], type: 'stock' };
+    }
+    
+    // Check crypto names
+    if (this.cryptoToTicker[upperSymbol]) {
+      const pair = this.selectTradingPair(this.cryptoToTicker[upperSymbol], tradingPair);
+      return { symbol: pair.symbol, type: 'crypto', tradingPair: pair.pair };
+    }
+    
+    // Check if it's a direct crypto symbol with trading pair suffix
+    if (upperSymbol.match(/-USD$|-USDT$|-USDC$|-EUR$|-BTC$|-ETH$/)) {
+      const pairMatch = upperSymbol.match(/(USD|USDT|USDC|EUR|BTC|ETH)$/);
+      return { symbol: upperSymbol, type: 'crypto', tradingPair: pairMatch?.[1] };
+    }
+    
+    // If context suggests crypto, try adding trading pair suffix
+    if (context === 'crypto' && upperSymbol.length <= 5 && !upperSymbol.includes('-')) {
+      const defaultPair = tradingPair || 'USD';
+      return { symbol: `${upperSymbol}-${defaultPair}`, type: 'crypto', tradingPair: defaultPair };
+    }
+    
+    // Validate as potential stock symbol
+    if (this.isValidSymbol(upperSymbol) && context !== 'crypto') {
+      return { symbol: upperSymbol, type: 'stock' };
+    }
+    
+    return null;
+  }
+  
+  private selectTradingPair(
+    cryptoConfig: { gecko: string; yahoo: string; cmc?: string },
+    requestedPair?: string
+  ): { symbol: string; pair: string } {
+    // If specific pair requested, try to use it
+    if (requestedPair) {
+      const upperPair = requestedPair.toUpperCase();
+      if (upperPair === 'USDT' || upperPair === 'USDC' || upperPair === 'EUR' || upperPair === 'BTC' || upperPair === 'ETH') {
+        // Replace USD with requested pair
+        const baseSymbol = cryptoConfig.yahoo.replace(/-USD$/, '');
+        return { symbol: `${baseSymbol}-${upperPair}`, pair: upperPair };
+      }
+    }
+    
+    // Default to USD pair (most widely available on Yahoo Finance)
+    return { symbol: cryptoConfig.yahoo, pair: 'USD' };
+  }
+
+  /**
+   * Parse agent response for chart commands (async for symbol search)
+   */
+  async parseAgentResponse(response: string): Promise<ChartCommand[]> {
     const commands: ChartCommand[] = [];
     
-    // Check for symbol changes
+    // Detect context from the response
+    const assetContext = this.detectAssetType(response);
+    
+    // Detect trading pair mentions
+    const tradingPairMatch = response.match(/\b(USDT|USDC|EUR|BTC|ETH)\s*(pair|trading|market)?\b/i);
+    const requestedPair = tradingPairMatch ? tradingPairMatch[1] : undefined;
+    
+    // Check for symbol changes (handle multiple capture groups)
     const symbolMatch = response.match(this.commandPatterns.symbol);
     if (symbolMatch) {
-      commands.push({
-        type: 'symbol',
-        value: symbolMatch[1].toUpperCase(),
-        timestamp: Date.now()
-      });
+      // Find the first non-undefined capture group
+      const rawSymbol = symbolMatch[1] || symbolMatch[2];
+      
+      if (rawSymbol) {
+        // Try semantic search first (best for company names like "Microsoft")
+        let resolved = await this.resolveSymbolWithSearch(rawSymbol);
+        
+        if (!resolved) {
+          // Fallback to legacy static mapping if search fails
+          const legacyResolved = this.resolveSymbol(rawSymbol, assetContext, requestedPair);
+          if (legacyResolved) {
+            resolved = {
+              symbol: legacyResolved.symbol,
+              type: legacyResolved.type,
+              name: rawSymbol
+            };
+          }
+        }
+        
+        if (resolved) {
+          console.log(`Resolved "${rawSymbol}" to ${resolved.type} symbol: ${resolved.symbol}${resolved.name ? ` (${resolved.name})` : ''}`);
+          commands.push({
+            type: 'symbol',
+            value: resolved.symbol,
+            metadata: { 
+              assetType: resolved.type,
+              companyName: resolved.name
+            },
+            timestamp: Date.now()
+          });
+        } else {
+          console.log(`Could not resolve symbol: "${rawSymbol}"`);
+        }
+      }
     }
 
     // Check for timeframe changes
@@ -115,18 +652,43 @@ class ChartControlService {
     // Check for style changes
     const styleMatch = response.match(this.commandPatterns.style);
     if (styleMatch) {
+      const styleValue = styleMatch[1] || styleMatch[2];
       const styleMap: { [key: string]: 'candles' | 'line' | 'area' } = {
         'CANDLE': 'candles',
         'CANDLES': 'candles',
+        'CANDLESTICK': 'candles',
         'LINE': 'line',
         'AREA': 'area',
         'BAR': 'candles',
-        'BARS': 'candles'
+        'BARS': 'candles',
+        'HEIKIN': 'candles',
+        'HOLLOW': 'candles'
       };
       
       commands.push({
         type: 'style',
-        value: styleMap[styleMatch[1].toUpperCase()] || 'candles',
+        value: styleMap[styleValue?.toUpperCase()] || 'candles',
+        timestamp: Date.now()
+      });
+    }
+
+    // Check for reset command
+    const resetMatch = response.match(this.commandPatterns.reset);
+    if (resetMatch) {
+      commands.push({
+        type: 'reset',
+        value: 'view',
+        timestamp: Date.now()
+      });
+    }
+
+    // Check for crosshair command
+    const crosshairMatch = response.match(this.commandPatterns.crosshair);
+    if (crosshairMatch) {
+      const action = crosshairMatch[1]?.toUpperCase() || 'TOGGLE';
+      commands.push({
+        type: 'crosshair',
+        value: action === 'ON' || (action === 'TOGGLE' && !this.chartRef?.options()?.crosshair?.mode),
         timestamp: Date.now()
       });
     }
@@ -146,8 +708,10 @@ class ChartControlService {
         case 'symbol':
           if (this.callbacks.onSymbolChange) {
             this.currentSymbol = command.value;
-            this.callbacks.onSymbolChange(command.value);
-            message = `Switched to ${command.value}`;
+            this.callbacks.onSymbolChange(command.value, command.metadata);
+            const assetType = command.metadata?.assetType;
+            const icon = assetType === 'crypto' ? '₿' : '📈';
+            message = `${icon} Switched to ${command.value}`;
             success = true;
           } else {
             message = 'Symbol change not available';
@@ -179,15 +743,20 @@ class ChartControlService {
           
         case 'zoom':
           if (this.callbacks.onZoomChange && this.chartRef) {
-            const timeScale = this.chartRef.timeScale();
-            if (command.value > 1) {
-              timeScale.zoomIn();
-              message = 'Zoomed in';
-            } else {
-              timeScale.zoomOut();
-              message = 'Zoomed out';
+            try {
+              const timeScale = this.chartRef.timeScale();
+              if (command.value > 1) {
+                timeScale.zoomIn();
+                message = 'Zoomed in';
+              } else {
+                timeScale.zoomOut();
+                message = 'Zoomed out';
+              }
+              success = true;
+            } catch (error) {
+              console.error('Zoom error:', error);
+              message = 'Zoom function not available';
             }
-            success = true;
           } else {
             message = 'Zoom control not available';
           }
@@ -197,13 +766,14 @@ class ChartControlService {
           if (this.callbacks.onScrollToTime && this.chartRef) {
             // Parse date or relative time
             let targetTime: number;
-            if (command.value.match(/\d{4}-\d{2}-\d{2}/)) {
-              targetTime = new Date(command.value).getTime() / 1000;
-              message = `Scrolled to ${command.value}`;
-            } else {
+            const scrollValue = command.value || '';
+            if (scrollValue && scrollValue.match && scrollValue.match(/\d{4}-\d{2}-\d{2}/)) {
+              targetTime = new Date(scrollValue).getTime() / 1000;
+              message = `Scrolled to ${scrollValue}`;
+            } else if (scrollValue) {
               // Handle relative times like "yesterday", "last week"
               const now = new Date();
-              switch (command.value.toLowerCase()) {
+              switch (scrollValue.toLowerCase()) {
                 case 'yesterday':
                   targetTime = (now.getTime() - 86400000) / 1000;
                   message = 'Scrolled to yesterday';
@@ -244,6 +814,39 @@ class ChartControlService {
           }
           break;
           
+        case 'reset':
+          if (this.chartRef) {
+            try {
+              this.chartRef.timeScale().fitContent();
+              message = 'Chart view reset';
+              success = true;
+            } catch (e) {
+              message = 'Failed to reset view';
+            }
+          } else {
+            message = 'Chart not available';
+          }
+          break;
+          
+        case 'crosshair':
+          if (this.chartRef) {
+            try {
+              const mode = command.value ? 1 : 0;
+              this.chartRef.applyOptions({
+                crosshair: {
+                  mode: mode
+                }
+              });
+              message = `Crosshair ${command.value ? 'enabled' : 'disabled'}`;
+              success = true;
+            } catch (e) {
+              message = 'Failed to toggle crosshair';
+            }
+          } else {
+            message = 'Chart not available';
+          }
+          break;
+          
         default:
           message = `Unknown command: ${command.type}`;
       }
@@ -274,10 +877,10 @@ class ChartControlService {
   }
 
   /**
-   * Process agent response and execute any chart commands
+   * Process agent response and execute any chart commands (async)
    */
-  processAgentResponse(response: string): ChartCommand[] {
-    const commands = this.parseAgentResponse(response);
+  async processAgentResponse(response: string): Promise<ChartCommand[]> {
+    const commands = await this.parseAgentResponse(response);
     const executedCommands: ChartCommand[] = [];
     
     for (const command of commands) {

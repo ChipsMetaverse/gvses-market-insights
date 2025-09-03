@@ -16,8 +16,8 @@ from alpaca.data.requests import (
     StockSnapshotRequest
 )
 from alpaca.data.timeframe import TimeFrame
-from alpaca.trading.requests import GetOrdersRequest
-from alpaca.trading.enums import QueryOrderStatus
+from alpaca.trading.requests import GetOrdersRequest, GetAssetsRequest
+from alpaca.trading.enums import QueryOrderStatus, AssetClass, AssetStatus, AssetExchange
 import asyncio
 from functools import lru_cache
 
@@ -344,6 +344,62 @@ class AlpacaService:
             ]
         except Exception as e:
             logger.error(f"Error fetching orders: {e}")
+            return []
+    
+    async def search_assets(self, query: str = "", limit: int = 20) -> List[Dict[str, Any]]:
+        """Search for assets (stocks) that match the query string."""
+        try:
+            # Create search request
+            search_params = GetAssetsRequest(
+                asset_class=AssetClass.US_EQUITY,
+                status=AssetStatus.ACTIVE
+            )
+            
+            # Get all active US equity assets
+            assets = self.trading_client.get_all_assets(search_params)
+            
+            # Filter by query if provided
+            if query:
+                query_lower = query.lower().strip()
+                filtered_assets = []
+                
+                for asset in assets:
+                    # Search in symbol and name
+                    symbol_match = query_lower in asset.symbol.lower()
+                    name_match = asset.name and query_lower in asset.name.lower()
+                    
+                    if symbol_match or name_match:
+                        filtered_assets.append(asset)
+                
+                # Sort by relevance - exact symbol matches first
+                filtered_assets.sort(key=lambda x: (
+                    x.symbol.lower() != query_lower,  # Exact symbol match first
+                    not x.symbol.lower().startswith(query_lower),  # Symbol starts with query second
+                    x.symbol  # Alphabetical for the rest
+                ))
+                
+                assets = filtered_assets[:limit]
+            else:
+                # If no query, just return first N assets
+                assets = list(assets)[:limit]
+            
+            # Format results
+            results = []
+            for asset in assets:
+                results.append({
+                    "symbol": asset.symbol,
+                    "name": asset.name or asset.symbol,
+                    "exchange": asset.exchange.value if asset.exchange else "UNKNOWN",
+                    "asset_class": asset.asset_class.value if asset.asset_class else "us_equity",
+                    "tradable": asset.tradable,
+                    "status": asset.status.value if asset.status else "active"
+                })
+            
+            logger.info(f"Found {len(results)} assets for query '{query}'")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error searching assets with query '{query}': {e}")
             return []
     
     async def get_market_status(self) -> Dict[str, Any]:

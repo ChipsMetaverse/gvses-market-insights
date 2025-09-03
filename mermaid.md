@@ -77,6 +77,7 @@ graph TB
             useProvider[useProvider - Main Hook]
             useVoiceProvider[useVoiceProvider - Voice Specific]
             useChatProvider[useChatProvider - Chat Specific]
+            useSymbolSearch[useSymbolSearch - Alpaca Symbol Search]
             useElevenLabsConversation[useElevenLabsConversation - Legacy]
             useAgentConversation[useAgentConversation - Legacy]
             useVoiceRecording[useVoiceRecording - Legacy]
@@ -100,6 +101,7 @@ graph TB
         FastAPI --> ServiceFactory[MarketServiceFactory<br/>Alpaca Primary, Yahoo Fallback]
         
         ServiceFactory -->|Quotes & Charts| AlpacaService[AlpacaService<br/>Professional Market Data]
+        ServiceFactory -->|Symbol Search| AlpacaSearch[AlpacaService<br/>Semantic Symbol Search]
         ServiceFactory -->|Fallback| MCPService[MarketDataService<br/>Yahoo via MCP]
         ServiceFactory -->|News| NewsService[NewsService<br/>CNBC + Yahoo Hybrid]
         
@@ -311,6 +313,7 @@ graph TD
         AnalystRatings[GET /api/analyst-ratings - MCP Only]
         MarketMovers[GET /api/market-movers - MCP Only]
         MarketOverview[GET /api/market-overview - MCP Only]
+        SymbolSearch[GET /api/symbol-search - Alpaca Semantic Search]
         
         subgraph "Alpaca API Routes"
             AlpacaAccount[GET /api/alpaca/account]
@@ -321,6 +324,7 @@ graph TD
             AlpacaOrders[GET /api/alpaca/orders]
             AlpacaMarketStatus[GET /api/alpaca/market-status]
             AlpacaStockPrice[GET /api/alpaca/stock-price]
+            AlpacaSymbolSearch[GET /api/symbol-search]
         end
         
         subgraph "Enhanced API Routes - Dual MCP"
@@ -344,6 +348,7 @@ graph TD
         AnalystRatings --> MCPClient
         MarketMovers --> MCPClient
         MarketOverview --> MCPClient
+        SymbolSearch --> AlpacaService[Alpaca Service - Python]
         MCPClient --> MCPServer[Market MCP Server - Node.js]
         
         AlpacaAccount --> AlpacaService[Alpaca Service - Python]
@@ -917,13 +922,23 @@ stateDiagram-v2
 
 ```mermaid
 graph TD
-    subgraph "Market Insights Panel"
+    subgraph "Market Insights Panel - Dynamic Watchlist"
+        SearchInput[Add Symbol Input]
+        SearchInput --> AddButton[Add Button]
+        AddButton --> Validation[Symbol Validation]
+        Validation --> WatchlistUpdate[Update Watchlist]
+        
         StockCard[Stock Card]
         StockCard --> Symbol[Stock Symbol]
         StockCard --> Price[Current Price]
         StockCard --> Change[Price Change %]
         StockCard --> Label[Technical Label<br/>ST/LTB/QE]
         StockCard --> Description[Momentum Description]
+        StockCard --> RemoveButton[× Remove Button]
+        
+        LocalStorage[LocalStorage Persistence]
+        WatchlistUpdate --> LocalStorage
+        LocalStorage --> DefaultWatchlist[Default: TSLA, AAPL, NVDA, SPY, PLTR]
     end
     
     subgraph "Chart Analysis Panel - Scrollable"
@@ -1239,6 +1254,81 @@ sequenceDiagram
 - ✅ **Enhanced API Endpoints**: Added /api/enhanced/* endpoints for intelligent data source routing
 - ✅ **Environment Configuration**: Updated .env.example with Alpaca and ElevenLabs variables
 
+## Alpaca Symbol Search & Voice Command Semantic Parsing (Sep 3, 2025)
+
+### Symbol Search Architecture
+```mermaid
+graph TB
+    subgraph "Frontend Symbol Search"
+        SearchInput[Search Input Field<br/>Market Insights Panel]
+        SearchInput -->|Debounced 300ms| useSymbolSearch[useSymbolSearch Hook]
+        useSymbolSearch -->|API Call| MarketDataService[marketDataService.ts]
+        MarketDataService -->|GET /api/symbol-search| Backend[FastAPI Backend]
+        
+        Backend -->|Response| SearchDropdown[Search Results Dropdown]
+        SearchDropdown -->|User Selection| AddToWatchlist[Add to Watchlist]
+        
+        SearchInput -->|Enter Key| ExactMatch[Exact Match Search]
+        ExactMatch -->|Found| AddToWatchlist
+        ExactMatch -->|Not Found| ManualAdd[Manual Add with Validation]
+    end
+    
+    subgraph "Backend Implementation"
+        Backend --> AlpacaService[AlpacaService.search_assets()]
+        AlpacaService -->|GetAssetsRequest| AlpacaAPI[Alpaca Markets API]
+        AlpacaAPI -->|Filter & Sort| Results[Semantic Search Results]
+        Results -->|JSON Response| Frontend[Frontend Dropdown]
+    end
+    
+    style useSymbolSearch fill:#90CAF9
+    style AlpacaService fill:#81C784
+    style SearchDropdown fill:#FFB74D
+```
+
+### Voice Command Semantic Parsing Flow
+```mermaid
+sequenceDiagram
+    participant User
+    participant Voice as ElevenLabs Voice
+    participant ChartControl as chartControlService
+    participant SymbolSearch as Alpaca Symbol Search
+    participant Chart as Trading Chart
+    
+    User->>Voice: "show me Microsoft"
+    Voice->>ChartControl: parseAgentResponse("show me Microsoft")
+    ChartControl->>ChartControl: Extract "MICROSOFT" from regex
+    ChartControl->>SymbolSearch: resolveSymbolWithSearch("MICROSOFT")
+    SymbolSearch->>SymbolSearch: API: /api/symbol-search?query=microsoft
+    SymbolSearch-->>ChartControl: Best match: MSFT (Microsoft Corporation)
+    ChartControl->>Chart: Switch to MSFT chart
+    Chart-->>User: Display Microsoft stock chart
+    
+    Note over ChartControl,SymbolSearch: Semantic search replaces regex patterns
+    Note over SymbolSearch: Company names correctly resolve to ticker symbols
+```
+
+### Symbol Search Hook Implementation
+```mermaid
+graph LR
+    subgraph "useSymbolSearch Hook"
+        Query[Search Query] -->|300ms Debounce| API[API Call]
+        API --> Loading[isSearching: true]
+        API --> Results[searchResults: SymbolSearchResult[]]
+        API --> Error[searchError: string | null]
+        
+        Results --> Success[hasSearched: true]
+        Error --> Success
+        Loading --> Success
+    end
+    
+    subgraph "Component Integration"
+        Success --> Dropdown[Search Dropdown UI]
+        Success --> Selection[Result Selection]
+        Selection --> Callback[handleSelectSymbol()]
+        Callback --> Watchlist[Update Watchlist]
+    end
+```
+
 **Previous Updates (Aug 26, 2025 - Earlier):**
 - ✅ **Alpaca Markets Integration**: Added official Alpaca Markets API for commercial-compliant real-time and historical data
 - ✅ **Dual Data Sources**: System now supports both Yahoo Finance (via MCP) and Alpaca Markets (direct API)
@@ -1256,19 +1346,68 @@ sequenceDiagram
 - ✅ **MCP Integration**: Full integration with market-mcp-server for real historical data from Yahoo Finance
 - ✅ **Chart Data Pipeline**: Backend MCP client → Market MCP Server → Yahoo Finance API → TradingView Charts
 
-## Voice-Controlled Chart System
+## Dynamic Watchlist System
 
 ### Architecture
 ```mermaid
+graph TB
+    subgraph "Dynamic Watchlist Flow"
+        User[User Input] --> AddSymbol[Add Symbol Input]
+        AddSymbol --> Validate[Validate Format<br/>1-5 chars, A-Z only]
+        Validate -->|Valid| CheckDuplicate[Check if in Watchlist]
+        Validate -->|Invalid| ErrorToast[Show Error Toast]
+        
+        CheckDuplicate -->|New| FetchAPI[Verify via API]
+        CheckDuplicate -->|Exists| InfoToast[Already in Watchlist]
+        
+        FetchAPI -->|Success| UpdateState[Update Watchlist State]
+        FetchAPI -->|Fail| NotFoundToast[Symbol Not Found]
+        
+        UpdateState --> SaveLocal[Save to localStorage]
+        UpdateState --> RefreshData[Fetch Market Data]
+        SaveLocal --> SuccessToast[Show Success Toast]
+        
+        RemoveButton[Remove Symbol] --> CheckMinimum[Check Min Count]
+        CheckMinimum -->|>1| RemoveFromState[Remove from State]
+        CheckMinimum -->|=1| MinimumToast[Must Keep One]
+        RemoveFromState --> SaveLocal
+    end
+    
+    style FetchAPI fill:#90CAF9
+    style SaveLocal fill:#81C784
+    style ErrorToast fill:#FF6B6B
+```
+
+### Features
+- **Dynamic Addition**: Add any valid stock ticker (MSFT, GOOGL, META, etc.)
+- **Symbol Validation**: Real-time API verification before adding
+- **Persistent Storage**: LocalStorage saves user preferences
+- **Default Watchlist**: Starts with TSLA, AAPL, NVDA, SPY, PLTR
+- **Minimum Protection**: Always maintains at least one symbol
+- **Visual Feedback**: Toast notifications for all actions
+
+## Voice-Controlled Chart System with Semantic Search
+
+### Enhanced Architecture (Sep 3, 2025)
+```mermaid
 graph LR
-    subgraph "Voice Control Flow"
-        User[User Voice/Text] --> ElevenLabs[ElevenLabs Agent]
+    subgraph "Voice Control Flow with Semantic Parsing"
+        User[User Voice: "show me Microsoft"] --> ElevenLabs[ElevenLabs Agent]
         ElevenLabs --> Response[Agent Response]
         Response --> ChartControl[chartControlService]
-        ChartControl --> CommandParser[Command Parser]
-        CommandParser --> CommandExecutor[Command Executor]
-        CommandExecutor --> ChartAPI[Chart API]
-        CommandExecutor --> Toast[Toast Notification]
+        ChartControl --> AsyncParser[Async Command Parser]
+        AsyncParser --> SemanticSearch[Semantic Symbol Search]
+        SemanticSearch -->|Alpaca API| SymbolResolution[Company Name → Ticker]
+        SymbolResolution --> CommandExecutor[Command Executor]
+        CommandExecutor --> ChartAPI[Chart API: Load MSFT]
+        CommandExecutor --> Toast[Toast: "Loaded Microsoft (MSFT)"]
+    end
+    
+    subgraph "Symbol Resolution Process"
+        SemanticSearch --> APICall[/api/symbol-search?query=microsoft]
+        APICall --> AlpacaFilter[Alpaca Asset Filtering]
+        AlpacaFilter --> BestMatch[Best Match: MSFT]
+        BestMatch --> Metadata[Company Name + Exchange Info]
     end
     
     subgraph "Visual Feedback"
@@ -1279,7 +1418,8 @@ graph LR
     
     subgraph "Supported Commands"
         Commands[Commands]
-        Commands --> Symbol[CHART:SYMBOL]
+        Commands --> Symbol[Company Names: "Microsoft", "Apple", "Tesla"]
+        Commands --> Ticker[Ticker Symbols: "MSFT", "AAPL", "TSLA"]
         Commands --> Timeframe[TIMEFRAME:1D/5D/1M]
         Commands --> Indicators[ADD/REMOVE:RSI/MACD]
         Commands --> Zoom[ZOOM:IN/OUT]
@@ -1288,20 +1428,47 @@ graph LR
     end
 ```
 
-### Components
-- **chartControlService.ts**: Central service for parsing and executing chart commands
+### Components (Enhanced Sep 3, 2025)
+- **chartControlService.ts**: Central service with async semantic parsing for chart commands
+- **useSymbolSearch.ts**: Debounced search hook with 300ms delay and error handling
+- **marketDataService.ts**: Symbol search API integration with caching
 - **CommandToast.tsx**: Visual feedback component with animations
-- **TradingDashboardSimple.tsx**: Integration point with callbacks
-- **ElevenLabs Agent**: Trained to include chart commands in responses
+- **TradingDashboardSimple.tsx**: Integration point with search dropdown and callbacks
+- **ElevenLabs Agent**: Trained to include chart commands with company names
 
-### Features
+### Enhanced Features (Sep 3, 2025)
+- ✅ **Semantic Symbol Resolution**: "Microsoft" correctly resolves to MSFT via Alpaca API
+- ✅ **Company Name Support**: Voice commands work with natural company names
+- ✅ **Real-time Search Dropdown**: 300ms debounced search with instant suggestions
+- ✅ **Professional Data Validation**: Alpaca Markets API ensures accurate symbol matching
+- ✅ **Async Command Processing**: Non-blocking voice command execution
 - ✅ **Natural Language Processing**: Agent understands conversational chart requests
-- ✅ **Visual Feedback**: Toast notifications confirm command execution
+- ✅ **Visual Feedback**: Toast notifications confirm command execution with company names
 - ✅ **Error Handling**: Clear error messages for failed commands
 - ✅ **Instant Updates**: Zero-delay chart synchronization
-- ✅ **Command Validation**: Robust parsing with fallback handling
+- ✅ **Command Validation**: Robust parsing with semantic fallback handling
+
+## Recent Updates (September 3, 2025)
+
+**Alpaca Symbol Search & Semantic Voice Parsing:**
+- ✅ **Semantic Voice Commands**: "show me Microsoft" now correctly resolves to MSFT via Alpaca API search
+- ✅ **Company Name Resolution**: Voice commands support natural company names instead of just ticker symbols
+- ✅ **Symbol Search API**: New `/api/symbol-search` endpoint using Alpaca's `get_all_assets()` with intelligent filtering
+- ✅ **Real-time Search Dropdown**: 300ms debounced search in Market Insights panel with instant symbol suggestions
+- ✅ **useSymbolSearch Hook**: Custom React hook managing search state, debouncing, and API calls
+- ✅ **Async Command Processing**: Voice command parsing converted to async to support API-based symbol resolution
+- ✅ **Professional Symbol Validation**: Alpaca Markets ensures accurate, tradable symbol matching
+- ✅ **Enhanced User Experience**: Both manual search and voice commands seamlessly resolve company names to tickers
 
 ## Recent Updates (September 2, 2025)
+
+**Dynamic Watchlist Feature:**
+- ✅ **Customizable Watchlist**: Users can now add any stock ticker to Market Insights panel
+- ✅ **Search Functionality**: Input field to add new symbols with validation
+- ✅ **Remove Capability**: X button to remove symbols from watchlist (minimum 1 required)
+- ✅ **LocalStorage Persistence**: User preferences saved across sessions
+- ✅ **Default Symbols**: TSLA, AAPL, NVDA, SPY, PLTR (expandable to any valid ticker)
+- ✅ **API Validation**: Symbols verified against backend before adding
 
 **Production MCP Fix:**
 - ✅ **Node.js 22 Upgrade**: Fixed MCP server startup issue in production
@@ -1313,6 +1480,9 @@ graph LR
 ## Recent Updates (September 1, 2025)
 
 **Voice Control Enhancements:**
+- ✅ **Semantic Voice Parsing**: Replaced regex-based parsing with Alpaca API semantic search
+- ✅ **Company Name Support**: "Microsoft", "Apple", "Tesla" correctly resolve to MSFT, AAPL, TSLA
+- ✅ **Async Processing**: Voice commands now handle API calls without blocking UI
 - ✅ **Visual Command Feedback**: Added toast notifications for all chart commands
 - ✅ **Enhanced Error Handling**: Improved error messages and command validation
 - ✅ **Chart Label Fix**: Fixed disappearing technical level labels with instant sync

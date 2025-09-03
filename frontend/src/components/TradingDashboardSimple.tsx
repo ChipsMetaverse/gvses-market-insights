@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TradingChart } from './TradingChart';
-import { marketDataService } from '../services/marketDataService';
+import { marketDataService, SymbolSearchResult } from '../services/marketDataService';
 import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
+import { useSymbolSearch } from '../hooks/useSymbolSearch';
 import { ProviderSelector } from './ProviderSelector';
 import { chartControlService } from '../services/chartControlService';
 import { CommandToast } from './CommandToast';
@@ -40,6 +41,125 @@ export const TradingDashboardSimple: React.FC = () => {
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [chartStyle, setChartStyle] = useState<'candles' | 'line' | 'area'>('candles');
+  const [chartTimeframe, setChartTimeframe] = useState('1D');
+  const [assetType, setAssetType] = useState<'stock' | 'crypto'>('stock');
+  
+  // Dynamic watchlist with localStorage persistence
+  const [watchlist, setWatchlist] = useState<string[]>(() => {
+    const saved = localStorage.getItem('marketWatchlist');
+    return saved ? JSON.parse(saved) : ['TSLA', 'AAPL', 'NVDA', 'SPY', 'PLTR'];
+  });
+  const [searchSymbol, setSearchSymbol] = useState('');
+  const [isAddingSymbol, setIsAddingSymbol] = useState(false);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Use the symbol search hook with debouncing
+  const { searchResults, isSearching, searchError } = useSymbolSearch(searchSymbol, 300);
+
+  // Save watchlist to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('marketWatchlist', JSON.stringify(watchlist));
+  }, [watchlist]);
+
+  // Show/hide search dropdown based on input focus and results
+  useEffect(() => {
+    const shouldShow = searchSymbol.length >= 1 && (searchResults.length > 0 || isSearching);
+    setShowSearchDropdown(shouldShow);
+  }, [searchSymbol, searchResults, isSearching]);
+
+  // Handle clicking outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(event.target as Node)) {
+        setShowSearchDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Handle selecting a symbol from search results
+  const handleSelectSymbol = (result: SymbolSearchResult) => {
+    setSearchSymbol('');
+    setShowSearchDropdown(false);
+    addToWatchlist(result.symbol);
+  };
+
+  // Add symbol to watchlist
+  const addToWatchlist = async (symbol: string) => {
+    const upperSymbol = symbol.toUpperCase().trim();
+    
+    // Basic format validation (1-5 characters for stocks, or crypto format)
+    const isStockFormat = /^[A-Z]{1,5}$/.test(upperSymbol);
+    const isCryptoFormat = /^[A-Z]{2,5}-USD$/.test(upperSymbol);
+    
+    if (!upperSymbol || (!isStockFormat && !isCryptoFormat)) {
+      setToastCommand({ command: '❌ Invalid symbol format', type: 'error' });
+      setTimeout(() => setToastCommand(null), 3000);
+      return;
+    }
+    
+    // Check if already in watchlist
+    if (watchlist.includes(upperSymbol)) {
+      setToastCommand({ command: `⚠️ ${upperSymbol} already in watchlist`, type: 'info' });
+      setTimeout(() => setToastCommand(null), 3000);
+      return;
+    }
+    
+    setIsAddingSymbol(true);
+    
+    try {
+      // Verify symbol exists by fetching its data and checking quality
+      const data = await marketDataService.getStockPrice(upperSymbol);
+      
+      // Validate we got real market data (price > 0)
+      if (!data || data.price === 0 || data.price === undefined) {
+        throw new Error('No valid market data');
+      }
+      
+      // Add to watchlist
+      const newWatchlist = [...watchlist, upperSymbol];
+      setWatchlist(newWatchlist);
+      setSearchSymbol('');
+      setToastCommand({ command: `✅ Added ${upperSymbol} to watchlist`, type: 'success' });
+      setTimeout(() => setToastCommand(null), 3000);
+      
+      // Fetch data for the new watchlist
+      fetchStocksData(newWatchlist);
+    } catch (error: any) {
+      console.error(`Failed to add ${upperSymbol}:`, error);
+      // Check if it's a 404 (symbol not found)
+      const message = error.response?.status === 404 || error.message?.includes('404')
+        ? `❌ Symbol ${upperSymbol} not found or invalid`
+        : `❌ Failed to add ${upperSymbol}`;
+      setToastCommand({ command: message, type: 'error' });
+      setTimeout(() => setToastCommand(null), 3000);
+    } finally {
+      setIsAddingSymbol(false);
+    }
+  };
+
+  // Remove symbol from watchlist
+  const removeFromWatchlist = (symbol: string) => {
+    if (watchlist.length <= 1) {
+      setToastCommand({ command: '⚠️ Must keep at least one symbol', type: 'info' });
+      setTimeout(() => setToastCommand(null), 3000);
+      return;
+    }
+    
+    const newWatchlist = watchlist.filter(s => s !== symbol);
+    setWatchlist(newWatchlist);
+    setToastCommand({ command: `🗑️ Removed ${symbol} from watchlist`, type: 'info' });
+    setTimeout(() => setToastCommand(null), 3000);
+    
+    // If we removed the selected symbol, select the first one
+    if (selectedSymbol === symbol && newWatchlist.length > 0) {
+      setSelectedSymbol(newWatchlist[0]);
+    }
+  };
   
   // Audio processing refs
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -50,9 +170,6 @@ export const TradingDashboardSimple: React.FC = () => {
   
   // Chart control ref
   const chartRef = useRef<any>(null);
-  
-  // Stock symbols to track
-  const watchlist = ['TSLA', 'AAPL', 'NVDA', 'SPY'];
   
   // ElevenLabs conversation hook
   const {
@@ -73,7 +190,7 @@ export const TradingDashboardSimple: React.FC = () => {
       };
       setMessages(prev => [...prev, message]);
     },
-    onAgentResponse: (response) => {
+    onAgentResponse: async (response) => {
       const message: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -82,10 +199,14 @@ export const TradingDashboardSimple: React.FC = () => {
       };
       setMessages(prev => [...prev, message]);
       
-      // Process agent response for chart commands
-      const commands = chartControlService.processAgentResponse(response);
-      if (commands.length > 0) {
-        console.log('Chart commands executed:', commands);
+      // Process agent response for chart commands (async with semantic search)
+      try {
+        const commands = await chartControlService.processAgentResponse(response);
+        if (commands.length > 0) {
+          console.log('Chart commands executed:', commands);
+        }
+      } catch (error) {
+        console.error('Error processing chart commands:', error);
       }
     },
     onConnectionChange: (connected) => {
@@ -270,10 +391,11 @@ export const TradingDashboardSimple: React.FC = () => {
   };
 
   // Fetch stock prices for watchlist
-  const fetchStockData = async () => {
+  const fetchStocksData = async (symbolsToFetch?: string[]) => {
+    const symbols = symbolsToFetch || watchlist;
     setIsLoadingStocks(true);
     try {
-      const promises = watchlist.map(async (symbol) => {
+      const promises = symbols.map(async (symbol) => {
         const stockPrice = await marketDataService.getStockPrice(symbol);
         
         // Determine label based on price momentum
@@ -357,15 +479,15 @@ export const TradingDashboardSimple: React.FC = () => {
     setIsLoadingNews(false);
   };
 
-  // Fetch data on mount and set up refresh interval
+  // Fetch data when watchlist changes and set up refresh interval
   useEffect(() => {
-    fetchStockData();
+    fetchStocksData(watchlist);
     
     // Refresh every 30 seconds
-    const interval = setInterval(fetchStockData, 30000);
+    const interval = setInterval(() => fetchStocksData(watchlist), 30000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [watchlist]);
 
   // Fetch analysis when selected symbol changes
   useEffect(() => {
@@ -375,28 +497,84 @@ export const TradingDashboardSimple: React.FC = () => {
   // Register chart control callbacks
   useEffect(() => {
     chartControlService.registerCallbacks({
-      onSymbolChange: (symbol: string) => {
-        setSelectedSymbol(symbol);
-        fetchStockAnalysis(symbol);
+      onSymbolChange: (symbol: string, metadata?: { assetType?: 'stock' | 'crypto' }) => {
+        console.log('Voice command: Changing symbol to', symbol, 'Type:', metadata?.assetType);
+        
+        // Validate symbol before processing
+        const upperSymbol = symbol.toUpperCase();
+        
+        // Check if it's a valid symbol format
+        const isValidFormat = /^[A-Z]{1,5}(-USD)?$/.test(upperSymbol) || /^BRK\.[AB]$/.test(upperSymbol);
+        
+        // Check if it's in the watchlist or is a known crypto symbol
+        const isInWatchlist = watchlist.includes(upperSymbol.replace('-USD', ''));
+        const isCrypto = metadata?.assetType === 'crypto' || upperSymbol.endsWith('-USD');
+        
+        if (!isValidFormat) {
+          console.warn(`Invalid symbol format rejected: ${symbol}`);
+          setToastCommand({ command: `❌ Invalid symbol: ${symbol}`, type: 'error' });
+          setTimeout(() => setToastCommand(null), 3000);
+          return;
+        }
+        
+        // For stocks, check if it's in the watchlist (unless it's crypto)
+        if (!isCrypto && !isInWatchlist) {
+          // Try to add it to the watchlist first
+          addToWatchlist(upperSymbol.replace('-USD', '')).then(() => {
+            // If successfully added, then select it
+            setSelectedSymbol(upperSymbol);
+            if (metadata?.assetType) {
+              setAssetType(metadata.assetType);
+            }
+            fetchStockAnalysis(upperSymbol);
+          }).catch(() => {
+            // If failed to add, show error
+            setToastCommand({ command: `❌ Symbol not found: ${symbol}`, type: 'error' });
+            setTimeout(() => setToastCommand(null), 3000);
+          });
+          return;
+        }
+        
+        // Valid symbol, proceed with update
+        setSelectedSymbol(upperSymbol);
+        if (metadata?.assetType) {
+          setAssetType(metadata.assetType);
+        }
+        fetchStockAnalysis(upperSymbol);
+        const icon = metadata?.assetType === 'crypto' ? '₿' : '📈';
+        setToastCommand({ command: `${icon} Symbol: ${upperSymbol}`, type: 'success' });
+        setTimeout(() => setToastCommand(null), 3000);
       },
       onTimeframeChange: (timeframe: string) => {
-        console.log('Timeframe changed to:', timeframe);
-        // Future: Add timeframe state and pass to chart
+        console.log('Voice command: Changing timeframe to', timeframe);
+        setChartTimeframe(timeframe);
+        setToastCommand({ command: `Timeframe: ${timeframe}`, type: 'success' });
+        setTimeout(() => setToastCommand(null), 3000);
       },
       onIndicatorToggle: (indicator: string, enabled: boolean) => {
-        console.log(`Indicator ${indicator} ${enabled ? 'enabled' : 'disabled'}`);
-        // Future: Add indicator management
+        console.log(`Voice command: ${indicator} ${enabled ? 'enabled' : 'disabled'}`);
+        setToastCommand({ command: `${indicator} ${enabled ? 'enabled' : 'disabled'}`, type: 'info' });
+        setTimeout(() => setToastCommand(null), 3000);
       },
       onZoomChange: (level: number) => {
-        console.log('Zoom level:', level);
-        // Handled directly by chart ref in service
+        console.log('Voice command: Zoom level', level);
+        setToastCommand({ command: level > 1 ? 'Zoomed in' : 'Zoomed out', type: 'info' });
+        setTimeout(() => setToastCommand(null), 3000);
       },
       onScrollToTime: (time: number) => {
-        console.log('Scrolling to time:', time);
+        console.log('Voice command: Scrolling to time', time);
         // Handled directly by chart ref in service
       },
       onStyleChange: (style: 'candles' | 'line' | 'area') => {
-        console.log('Chart style changed to:', style);
+        console.log('Voice command: Chart style changed to', style);
+        setChartStyle(style);
+        const styleNames = {
+          'candles': 'Candlestick',
+          'line': 'Line Chart',
+          'area': 'Area Chart'
+        };
+        setToastCommand({ command: `Style: ${styleNames[style]}`, type: 'success' });
+        setTimeout(() => setToastCommand(null), 3000);
         // Future: Add chart style state
       },
       onCommandExecuted: (command, success, message) => {
@@ -500,6 +678,135 @@ export const TradingDashboardSimple: React.FC = () => {
         {/* Left Panel - Market Insights */}
         <aside className="insights-panel">
           <h2 className="panel-title">MARKET INSIGHTS</h2>
+          <div style={{ padding: '10px 15px', borderBottom: '1px solid #3a3a3a', position: 'relative' }}>
+            <div style={{ display: 'flex', gap: '8px', position: 'relative' }} ref={searchInputRef}>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder="Search symbols (e.g., Microsoft, MSFT)"
+                  value={searchSymbol}
+                  onChange={(e) => setSearchSymbol(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && searchSymbol) {
+                      // If there's an exact match, use it; otherwise add the raw input
+                      const exactMatch = searchResults.find(
+                        r => r.symbol.toLowerCase() === searchSymbol.toLowerCase()
+                      );
+                      if (exactMatch) {
+                        handleSelectSymbol(exactMatch);
+                      } else {
+                        addToWatchlist(searchSymbol);
+                      }
+                    }
+                  }}
+                  onFocus={() => setShowSearchDropdown(searchSymbol.length >= 1 && (searchResults.length > 0 || isSearching))}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    paddingRight: isSearching ? '32px' : '12px',
+                    borderRadius: '4px',
+                    border: '1px solid #3a3a3a',
+                    backgroundColor: '#1a1a1a',
+                    color: '#ffffff',
+                    fontSize: '14px'
+                  }}
+                  disabled={isAddingSymbol}
+                />
+                {isSearching && (
+                  <div style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: '12px',
+                    color: '#888'
+                  }}>
+                    ...
+                  </div>
+                )}
+                
+                {/* Search Results Dropdown */}
+                {showSearchDropdown && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    backgroundColor: '#1a1a1a',
+                    border: '1px solid #3a3a3a',
+                    borderTop: 'none',
+                    borderRadius: '0 0 4px 4px',
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    zIndex: 1000
+                  }}>
+                    {isSearching && searchResults.length === 0 ? (
+                      <div style={{ padding: '12px', color: '#888', fontSize: '14px' }}>
+                        Searching...
+                      </div>
+                    ) : searchError ? (
+                      <div style={{ padding: '12px', color: '#ff6b6b', fontSize: '14px' }}>
+                        {searchError}
+                      </div>
+                    ) : searchResults.length > 0 ? (
+                      searchResults.map((result) => (
+                        <div
+                          key={result.symbol}
+                          onClick={() => handleSelectSymbol(result)}
+                          style={{
+                            padding: '12px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid #2a2a2a',
+                            fontSize: '14px'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2a2a2a'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          <div style={{ fontWeight: 'bold', color: '#4a9eff' }}>
+                            {result.symbol}
+                          </div>
+                          <div style={{ color: '#ccc', fontSize: '12px', marginTop: '2px' }}>
+                            {result.name} • {result.exchange}
+                          </div>
+                        </div>
+                      ))
+                    ) : searchSymbol.length >= 1 && (
+                      <div style={{ padding: '12px', color: '#888', fontSize: '14px' }}>
+                        No symbols found for "{searchSymbol}"
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  if (searchSymbol) {
+                    const exactMatch = searchResults.find(
+                      r => r.symbol.toLowerCase() === searchSymbol.toLowerCase()
+                    );
+                    if (exactMatch) {
+                      handleSelectSymbol(exactMatch);
+                    } else {
+                      addToWatchlist(searchSymbol);
+                    }
+                  }
+                }}
+                disabled={!searchSymbol || isAddingSymbol}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  backgroundColor: searchSymbol && !isAddingSymbol ? '#4a9eff' : '#3a3a3a',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: searchSymbol && !isAddingSymbol ? 'pointer' : 'not-allowed',
+                  fontSize: '14px',
+                  fontWeight: 'bold'
+                }}
+              >
+                {isAddingSymbol ? '...' : 'Add'}
+              </button>
+            </div>
+          </div>
           <div className="insights-content">
             {isLoadingStocks ? (
               <div className="loading-spinner">Loading market data...</div>
@@ -509,10 +816,30 @@ export const TradingDashboardSimple: React.FC = () => {
                   key={stock.symbol} 
                   className={`stock-item ${selectedSymbol === stock.symbol ? 'selected' : ''}`}
                   onClick={() => setSelectedSymbol(stock.symbol)}
-                  style={{ cursor: 'pointer' }}
+                  style={{ cursor: 'pointer', position: 'relative' }}
                 >
-                  <div className="stock-header">
+                  <div className="stock-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span className="stock-symbol">{stock.symbol}</span>
+                    {watchlist.length > 1 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFromWatchlist(stock.symbol);
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#666',
+                          cursor: 'pointer',
+                          padding: '2px 6px',
+                          fontSize: '16px',
+                          lineHeight: '1'
+                        }}
+                        title="Remove from watchlist"
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
                   <div className="stock-price">
                     <span className="price">${stock.price.toFixed(2)}</span>
@@ -537,6 +864,9 @@ export const TradingDashboardSimple: React.FC = () => {
               <TradingChart 
                 symbol={selectedSymbol} 
                 technicalLevels={technicalLevels}
+                chartStyle={chartStyle}
+                timeframe={chartTimeframe}
+                assetType={assetType}
                 onChartReady={(chart: any) => {
                   chartRef.current = chart;
                   chartControlService.setChartRef(chart);
