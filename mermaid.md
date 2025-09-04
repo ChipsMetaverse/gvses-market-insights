@@ -1448,6 +1448,96 @@ graph LR
 - ✅ **Instant Updates**: Zero-delay chart synchronization
 - ✅ **Command Validation**: Robust parsing with semantic fallback handling
 
+## Agent-Enhanced WebSocket Relay Architecture (September 4, 2025)
+
+### Symbol Resolution Agent with OpenAI Agents SDK
+
+```mermaid
+graph TB
+    subgraph "Voice Command Processing with Agent Intelligence"
+        User[User: "show me google"] --> ElevenLabs[ElevenLabs STT]
+        ElevenLabs --> Relay[Agent-Enhanced Relay<br/>websocket-relay-elevenlabs-agents.ts]
+        
+        subgraph "Symbol Resolution Agent (TypeScript)"
+            Relay --> Agent[Symbol Resolution Agent<br/>OpenAI Agents SDK]
+            Agent --> StaticMap[1. Static Mappings<br/>google → GOOGL ✅]
+            StaticMap -->|Found| Resolved[Symbol: GOOGL]
+            StaticMap -->|Not Found| OpenAIAgent[2. OpenAI Agent<br/>Intelligent Parsing]
+            OpenAIAgent -->|Found| Resolved
+            OpenAIAgent -->|Not Found| FormatValidation[3. Format Validation<br/>Fallback Logic]
+            FormatValidation --> Resolved
+        end
+        
+        Resolved --> Tools[Tool Execution]
+        Tools --> ChartCommand[get_market_data Tool]
+        ChartCommand --> Response[Chart Updates to GOOGL]
+        Response --> Frontend[Frontend Display]
+    end
+    
+    subgraph "Production Deployment"
+        FlyIO[Fly.io Production<br/>g-vses.fly.dev]
+        FlyIO --> Secrets[Environment Secrets]
+        Secrets --> OpenAIKey[OPENAI_API_KEY ✅<br/>Set July 1, 2025]
+        Secrets --> ElevenLabsKey[ELEVENLABS_API_KEY ✅]
+        Secrets --> AlpacaKey[ALPACA Keys ✅]
+    end
+    
+    style Agent fill:#90CAF9
+    style StaticMap fill:#81C784
+    style Resolved fill:#FFB74D
+    style OpenAIKey fill:#90EE90
+```
+
+### Multi-Layer Symbol Resolution Priority
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant ElevenLabs
+    participant Relay as Agent Relay
+    participant Agent as Symbol Agent
+    participant OpenAI
+    participant Frontend
+    
+    User->>ElevenLabs: "show me google"
+    ElevenLabs->>Relay: Transcript: "google"
+    Relay->>Agent: resolveSymbol("google")
+    
+    Note over Agent: Priority Resolution Chain
+    
+    Agent->>Agent: 1. Check Static Mappings
+    Note right of Agent: COMPANY_MAPPINGS = {<br/>'google': 'GOOGL',<br/>'microsoft': 'MSFT',<br/>'apple': 'AAPL'<br/>}
+    Agent-->>Relay: Found: GOOGL ✅
+    
+    alt If not in static mappings
+        Agent->>OpenAI: 2. Use OpenAI API
+        OpenAI-->>Agent: Intelligent resolution
+        Agent-->>Relay: Resolved symbol
+    end
+    
+    alt If OpenAI unavailable
+        Agent->>Agent: 3. Format validation
+        Agent-->>Relay: Best guess or error
+    end
+    
+    Relay->>Frontend: Execute: loadChart("GOOGL")
+    Frontend-->>User: Display Alphabet Inc. chart
+    
+    Note over User,Frontend: Fixes: google → GOOGL (not GOOP ETF)
+```
+
+## Recent Updates (September 4, 2025)
+
+**OpenAI Agents SDK Integration for Symbol Resolution:**
+- ✅ **Agent-Enhanced Relay Created**: New `websocket-relay-elevenlabs-agents.ts` with integrated Symbol Resolution Agent
+- ✅ **Fixes Google → GOOP Bug**: Static mappings ensure "google" correctly resolves to GOOGL (Alphabet stock), not GOOP (ETF)
+- ✅ **Multi-Layer Resolution**: Priority system: Static mappings → OpenAI Agent → Format validation
+- ✅ **Production OpenAI API Access**: Leverages existing OPENAI_API_KEY on Fly.io relay servers (set July 1, 2025)
+- ✅ **TypeScript Implementation**: Symbol Resolution Agent ported from Python to TypeScript for relay integration
+- ✅ **Comprehensive Company Mappings**: Covers major companies and common voice variations
+- ✅ **Fallback Logic**: Works without OpenAI API locally, full capabilities in production
+- ✅ **Tool Integration**: Enhanced tools for market data, crypto prices, GVSES levels, and news
+
 ## Recent Updates (September 3, 2025)
 
 **Alpaca Symbol Search & Semantic Voice Parsing:**
