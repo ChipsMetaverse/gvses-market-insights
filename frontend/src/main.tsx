@@ -4,7 +4,8 @@ import App from './App';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  // StrictMode disabled: causes issues with WebSocket singleton pattern
+  // StrictMode double-invokes effects which creates duplicate WebSocket connections
+  // ElevenLabs rejects multiple connections, causing immediate disconnection
+  <App />,
 );

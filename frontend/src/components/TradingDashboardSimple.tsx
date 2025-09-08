@@ -3,7 +3,7 @@ import { TradingChart } from './TradingChart';
 import { marketDataService, SymbolSearchResult } from '../services/marketDataService';
 import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import { useSymbolSearch } from '../hooks/useSymbolSearch';
-import { ProviderSelector } from './ProviderSelector';
+// import { ProviderSelector } from './ProviderSelector'; // Removed - conflicts with useElevenLabsConversation
 import { chartControlService } from '../services/chartControlService';
 import { CommandToast } from './CommandToast';
 import './TradingDashboardSimple.css';
@@ -92,11 +92,18 @@ export const TradingDashboardSimple: React.FC = () => {
   const addToWatchlist = async (symbol: string) => {
     const upperSymbol = symbol.toUpperCase().trim();
     
-    // Basic format validation (1-5 characters for stocks, or crypto format)
+    // Popular cryptocurrency symbols that should be allowed
+    const CRYPTO_SYMBOLS = new Set([
+      'BTC', 'ETH', 'ADA', 'DOT', 'SOL', 'MATIC', 'AVAX', 'LTC', 
+      'XRP', 'DOGE', 'SHIB', 'UNI', 'LINK', 'BCH', 'XLM'
+    ]);
+    
+    // Basic format validation
     const isStockFormat = /^[A-Z]{1,5}$/.test(upperSymbol);
     const isCryptoFormat = /^[A-Z]{2,5}-USD$/.test(upperSymbol);
+    const isKnownCrypto = CRYPTO_SYMBOLS.has(upperSymbol);
     
-    if (!upperSymbol || (!isStockFormat && !isCryptoFormat)) {
+    if (!upperSymbol || (!isStockFormat && !isCryptoFormat && !isKnownCrypto)) {
       setToastCommand({ command: '❌ Invalid symbol format', type: 'error' });
       setTimeout(() => setToastCommand(null), 3000);
       return;
@@ -362,6 +369,12 @@ export const TradingDashboardSimple: React.FC = () => {
   // Send text message
   const sendTextMessage = () => {
     if (inputText.trim() && isConnected) {
+      // Stop voice recording before sending text to prevent conflicts
+      if (isRecording) {
+        console.log('Stopping voice recording before sending text message');
+        stopVoiceRecording();
+      }
+      
       const message: Message = {
         id: crypto.randomUUID(),
         role: 'user',
@@ -597,23 +610,26 @@ export const TradingDashboardSimple: React.FC = () => {
   // Track if we've already started recording to prevent duplicates
   const hasStartedRecordingRef = useRef(false);
   const connectionAttemptTimeRef = useRef<number>(0);
+  const isMountedRef = useRef(true);
   
-  // Auto-start voice recording when connected
+  // Auto-start voice recording when connected - DISABLED to prevent text/audio conflicts
+  // Users should manually start voice recording when needed
   useEffect(() => {
     let isMounted = true;
     let timer: NodeJS.Timeout;
     
-    if (isConnected && !isRecording && !hasStartedRecordingRef.current) {
-      console.log('Connection established, starting voice recording...');
-      hasStartedRecordingRef.current = true;
-      
-      // Small delay to ensure everything is ready
-      timer = setTimeout(() => {
-        if (isMounted && isConnected && !isRecording) {
-          startVoiceRecording();
-        }
-      }, 500);
-    }
+    // DISABLED: Auto-start causes conflicts when user wants to type text
+    // if (isConnected && !isRecording && !hasStartedRecordingRef.current) {
+    //   console.log('Connection established, starting voice recording...');
+    //   hasStartedRecordingRef.current = true;
+    //   
+    //   // Small delay to ensure everything is ready
+    //   timer = setTimeout(() => {
+    //     if (isMounted && isConnected && !isRecording) {
+    //       startVoiceRecording();
+    //     }
+    //   }, 500);
+    // }
     
     // Reset flag when disconnected
     if (!isConnected) {
@@ -626,15 +642,10 @@ export const TradingDashboardSimple: React.FC = () => {
     };
   }, [isConnected, isRecording, startVoiceRecording]); // Include all dependencies
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopVoiceRecording();
-      if (isConnected) {
-        stopConversation();
-      }
-    };
-  }, [stopVoiceRecording, isConnected, stopConversation]);
+  // Note: No cleanup on unmount for WebSocket connection
+  // The ConnectionManager is a singleton that persists across component re-renders
+  // and handles its own lifecycle. Cleaning up here causes issues with React StrictMode
+  // which double-invokes effects in development.
 
   return (
     <div className="trading-dashboard-simple">
@@ -915,13 +926,43 @@ export const TradingDashboardSimple: React.FC = () => {
                 <span className="status-dot"></span>
                 {isConnected ? 'Connected' : 'Disconnected'}
               </div>
+              
+              {/* Voice Recording Control - Only show when connected */}
+              {isConnected && (
+                <button
+                  onClick={() => {
+                    if (isRecording) {
+                      stopVoiceRecording();
+                    } else {
+                      startVoiceRecording();
+                    }
+                  }}
+                  className="voice-control-button"
+                  style={{
+                    marginTop: '10px',
+                    padding: '8px 16px',
+                    borderRadius: '20px',
+                    border: 'none',
+                    background: isRecording ? '#ff4444' : '#4CAF50',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  {isRecording ? '🔴 Stop Voice' : '🎤 Start Voice'}
+                </button>
+              )}
             </div>
 
             {/* Voice Conversation */}
             <div className="voice-conversation">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                 <h3 style={{ margin: 0 }}>Voice Conversation</h3>
-                <ProviderSelector compact={true} showCapabilities={false} className="compact-provider-selector" />
+                {/* ProviderSelector removed - conflicts with useElevenLabsConversation */}
               </div>
               <div className="conversation-messages">
                 {messages.length === 0 ? (
@@ -986,6 +1027,13 @@ export const TradingDashboardSimple: React.FC = () => {
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && sendTextMessage()}
+                      onFocus={() => {
+                        // Stop voice recording when focusing on text input
+                        if (isRecording) {
+                          console.log('Stopping voice recording - text input focused');
+                          stopVoiceRecording();
+                        }
+                      }}
                       placeholder="Type a message (or just speak)..."
                       className="text-input"
                     />

@@ -191,13 +191,18 @@ export class ElevenLabsConnectionManager {
             // Respond to ping to keep connection alive
             const eventId = data.ping_event?.event_id;
             const pingMs = data.ping_event?.ping_ms || 0;
+            console.log(`[ConnectionManager] Ping received - event_id: ${eventId}, delay: ${pingMs}ms`);
             
             setTimeout(() => {
               if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
+                const pongMessage = {
                   type: 'pong',
                   event_id: eventId
-                }));
+                };
+                console.log(`[ConnectionManager] Sending pong for event ${eventId}`);
+                ws.send(JSON.stringify(pongMessage));
+              } else {
+                console.warn(`[ConnectionManager] Cannot send pong - WebSocket not open (state: ${ws.readyState})`);
               }
             }, pingMs);
             break;
@@ -210,10 +215,38 @@ export class ElevenLabsConnectionManager {
       
       ws.onerror = (error) => {
         console.error('[ConnectionManager] WebSocket error:', error);
+        console.error('[ConnectionManager] Error details:', {
+          type: error.type,
+          target: error.target,
+          timeStamp: error.timeStamp,
+          readyState: ws.readyState
+        });
       };
       
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         console.log('[ConnectionManager] WebSocket closed');
+        console.log('[ConnectionManager] Close event details:', {
+          code: event.code,
+          reason: event.reason || 'No reason provided',
+          wasClean: event.wasClean,
+          timeStamp: event.timeStamp
+        });
+        
+        // Analyze close code
+        if (event.code === 1000) {
+          console.log('[ConnectionManager] Normal closure');
+        } else if (event.code === 1001) {
+          console.log('[ConnectionManager] Endpoint going away');
+        } else if (event.code === 1006) {
+          console.log('[ConnectionManager] Abnormal closure - connection lost');
+        } else if (event.code === 1009) {
+          console.log('[ConnectionManager] Message too large');
+        } else if (event.code === 1011) {
+          console.log('[ConnectionManager] Server error');
+        } else if (event.code >= 4000) {
+          console.log('[ConnectionManager] Custom/Application error');
+        }
+        
         this.websocket = null;
         this.connectionPromise = null;
         
