@@ -1448,6 +1448,20 @@ graph LR
 - ✅ **Instant Updates**: Zero-delay chart synchronization
 - ✅ **Command Validation**: Robust parsing with semantic fallback handling
 
+## Recent Updates (September 7, 2025)
+
+**BTC Crypto Symbol Mapping Fix:**
+- ✅ **Crypto Symbol Mapping**: Added mapping for BTC → BTC-USD, ETH → ETH-USD in DirectMarketDataService
+- ✅ **15 Cryptocurrencies Supported**: BTC, ETH, ADA, DOGE, SOL, XRP, DOT, UNI, BCH, LTC, LINK, MATIC, AVAX, ATOM, ALGO
+- ✅ **Asset Type Field**: API responses now include `asset_type: "crypto"` or `"stock"` for proper identification
+- ✅ **Correct BTC Pricing**: BTC now shows ~$110,877 (actual Bitcoin price) instead of $49.44 (ETF price)
+
+**Agent Response Token Optimization:**
+- ✅ **Phase 1 Tool Orchestration**: Set to 4000 tokens for complex reasoning and tool selection
+- ✅ **Phase 2 User Response**: Limited to 700 tokens for concise, conversational responses
+- ✅ **Direct /ask Endpoint**: Also limited to 700 tokens for consistency
+- ✅ **Optimized for Voice**: Shorter responses work better for voice interactions
+
 ## Recent Updates (September 3, 2025)
 
 **Alpaca Symbol Search & Semantic Voice Parsing:**
