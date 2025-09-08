@@ -1448,6 +1448,79 @@ graph LR
 - ✅ **Instant Updates**: Zero-delay chart synchronization
 - ✅ **Command Validation**: Robust parsing with semantic fallback handling
 
+## Enhanced Voice Control Navigation (September 8, 2025)
+
+### Multi-Command Architecture
+```mermaid
+graph TB
+    subgraph "Enhanced Voice Control System"
+        User[User Voice Input] --> Enhanced[enhancedChartControlService]
+        
+        subgraph "Core Features"
+            Enhanced --> MultiCmd[Multi-Command Parser]
+            Enhanced --> History[Command History]
+            Enhanced --> Context[Context Tracking]
+            Enhanced --> NLP[Natural Language Processing]
+        end
+        
+        subgraph "Command Processing"
+            MultiCmd --> Split[Split on 'and', 'then', 'also']
+            Split --> Parallel[Parallel Execution]
+            
+            Context --> Previous[Previous Symbol/Timeframe]
+            Context --> Session[Session Statistics]
+            
+            History --> Undo[Undo Support]
+            History --> Redo[Redo Support]
+            
+            NLP --> Temporal[Temporal Navigation]
+            NLP --> Relative[Relative Commands]
+            NLP --> Semantic[Semantic Search]
+        end
+        
+        subgraph "UI Components"
+            Enhanced --> Helper[VoiceCommandHelper]
+            Helper --> Suggestions[Live Suggestions]
+            Helper --> HistoryView[Command History View]
+            Helper --> Examples[Interactive Examples]
+        end
+    end
+```
+
+### Enhanced Features
+- ✅ **Multi-Command Support**: Process commands like "Show Apple and zoom to 1 month"
+- ✅ **Command History**: Full undo/redo support with state tracking
+- ✅ **Context Awareness**: Remember previous symbols and navigation patterns
+- ✅ **Natural Language**: Support for "go back", "zoom more", "last week"
+- ✅ **Temporal Navigation**: Navigate by dates like "show last earnings"
+- ✅ **Visual Helper**: Interactive command helper with suggestions and history
+- ✅ **Session Tracking**: Monitor commands executed per session
+- ✅ **Smart Caching**: Cache symbol resolutions for instant responses
+
+### Voice Command Examples
+```
+Single Commands:
+- "Show me Microsoft" → Loads MSFT chart
+- "Display Apple" → Switches to AAPL
+- "Zoom to 1 month" → Changes timeframe
+
+Multi-Commands:
+- "Show Apple and zoom to 1 month" → Executes both
+- "Display Tesla with RSI indicator" → Symbol + indicator
+- "Switch to Microsoft then add moving average" → Sequential
+
+Contextual Commands:
+- "Go back" → Returns to previous symbol
+- "Zoom in more" → Relative zoom
+- "Show last month" → Temporal navigation
+- "Compare with SPY" → Future: split view
+```
+
+### Components
+- **enhancedChartControlService.ts**: Advanced command processing with multi-command support
+- **VoiceCommandHelper.tsx**: Visual component showing history, suggestions, and examples
+- **VoiceCommandHelper.css**: Professional UI styling with animations
+
 ## Recent Updates (September 7, 2025)
 
 **WebSocket Disconnection Fix:**

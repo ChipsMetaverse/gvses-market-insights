@@ -5,7 +5,9 @@ import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import { useSymbolSearch } from '../hooks/useSymbolSearch';
 // import { ProviderSelector } from './ProviderSelector'; // Removed - conflicts with useElevenLabsConversation
 import { chartControlService } from '../services/chartControlService';
+import { enhancedChartControl } from '../services/enhancedChartControlService';
 import { CommandToast } from './CommandToast';
+import { VoiceCommandHelper } from './VoiceCommandHelper';
 import './TradingDashboardSimple.css';
 
 interface StockData {
@@ -206,11 +208,16 @@ export const TradingDashboardSimple: React.FC = () => {
       };
       setMessages(prev => [...prev, message]);
       
-      // Process agent response for chart commands (async with semantic search)
+      // Process agent response for chart commands with enhanced multi-command support
       try {
-        const commands = await chartControlService.processAgentResponse(response);
+        const commands = await enhancedChartControl.processEnhancedResponse(response);
         if (commands.length > 0) {
-          console.log('Chart commands executed:', commands);
+          console.log('Enhanced chart commands executed:', commands);
+          // Show feedback for each command
+          commands.forEach(cmd => {
+            const message = `${cmd.type}: ${typeof cmd.value === 'object' ? JSON.stringify(cmd.value) : cmd.value}`;
+            setToastCommand({ command: message, type: 'success' });
+          });
         }
       } catch (error) {
         console.error('Error processing chart commands:', error);
@@ -507,9 +514,10 @@ export const TradingDashboardSimple: React.FC = () => {
     fetchStockAnalysis(selectedSymbol);
   }, [selectedSymbol]);
   
-  // Register chart control callbacks
+  // Register chart control callbacks for both services
   useEffect(() => {
-    chartControlService.registerCallbacks({
+    // Register with enhanced service
+    enhancedChartControl.registerCallbacks({
       onSymbolChange: (symbol: string, metadata?: { assetType?: 'stock' | 'crypto' }) => {
         console.log('Voice command: Changing symbol to', symbol, 'Type:', metadata?.assetType);
         
@@ -881,7 +889,8 @@ export const TradingDashboardSimple: React.FC = () => {
                 onChartReady={(chart: any) => {
                   chartRef.current = chart;
                   chartControlService.setChartRef(chart);
-                  console.log('Chart ready for agent control');
+                  enhancedChartControl.setChartRef(chart);
+                  console.log('Chart ready for enhanced agent control');
                 }}
               />
             </div>
@@ -1169,6 +1178,13 @@ export const TradingDashboardSimple: React.FC = () => {
         </div>
         <button className="chart-ready">📊 Chart Ready</button>
       </footer>
+      
+      {/* Voice Command Helper - Shows command history and suggestions */}
+      <VoiceCommandHelper 
+        isVisible={activeTab === 'voice' || isConnected}
+        position="right"
+        maxHeight={400}
+      />
     </div>
   );
 };
