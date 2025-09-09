@@ -197,6 +197,49 @@ class OpenAIRealtimeRelay:
                     with open(instructions_file, 'r') as f:
                         instructions = f.read()
                     logger.info("Loaded enhanced instructions from training module")
+                    
+                    # Integrate technical analysis knowledge
+                    try:
+                        from agent_training.knowledge_integration import TechnicalAnalysisKnowledge, knowledge_enhancer
+                        ta_knowledge = TechnicalAnalysisKnowledge()
+                        
+                        # Add technical analysis knowledge to instructions
+                        knowledge_section = "\n\n## Technical Analysis Knowledge\n\n"
+                        knowledge_section += "You have access to comprehensive technical analysis knowledge including:\n\n"
+                        
+                        # Add chart patterns
+                        chart_patterns = ta_knowledge.knowledge_base['chart_patterns']
+                        if chart_patterns:
+                            knowledge_section += "### Chart Patterns\n"
+                            for pattern_name, pattern_info in list(chart_patterns.items())[:5]:  # Top 5 patterns
+                                knowledge_section += f"- **{pattern_name}**: {pattern_info.get('description', '')[:100]}...\n"
+                            knowledge_section += "\n"
+                        
+                        # Add candlestick patterns
+                        candlestick_patterns = ta_knowledge.knowledge_base['candlestick_patterns']
+                        if candlestick_patterns:
+                            knowledge_section += "### Candlestick Patterns\n"
+                            for pattern_name, pattern_info in list(candlestick_patterns.items())[:5]:  # Top 5 patterns
+                                knowledge_section += f"- **{pattern_name}**: {pattern_info.get('description', '')[:100]}...\n"
+                            knowledge_section += "\n"
+                        
+                        # Add technical indicators
+                        indicators = ta_knowledge.knowledge_base['technical_indicators']
+                        if indicators:
+                            knowledge_section += "### Technical Indicators\n"
+                            for indicator_name, indicator_info in list(indicators.items())[:5]:  # Top 5 indicators
+                                knowledge_section += f"- **{indicator_name}**: {indicator_info.get('description', '')[:100]}...\n"
+                            knowledge_section += "\n"
+                        
+                        knowledge_section += "Use this knowledge to provide detailed technical analysis when discussing stocks, patterns, and market movements.\n"
+                        instructions += knowledge_section
+                        
+                        logger.info(f"Integrated technical analysis knowledge: {len(chart_patterns)} chart patterns, {len(candlestick_patterns)} candlestick patterns, {len(indicators)} indicators")
+                        
+                    except Exception as knowledge_error:
+                        logger.warning(f"Failed to load technical analysis knowledge: {knowledge_error}")
+                        # Continue with basic instructions
+                    
                 else:
                     # Fallback to basic instructions
                     instructions = self._get_fallback_instructions()
