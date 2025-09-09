@@ -1123,16 +1123,6 @@ export const TradingDashboardSimple: React.FC = () => {
                   </div>
                 </div>
               )}
-              
-              <div className="voice-commands">
-                <strong>Try these commands:</strong>
-                <ul>
-                  <li>"What's the price of Tesla?"</li>
-                  <li>"Show me Apple's chart"</li>
-                  <li>"What's the market sentiment?"</li>
-                  <li>"Any news on {selectedSymbol}?"</li>
-                </ul>
-              </div>
             </div>
           </div>
         </main>

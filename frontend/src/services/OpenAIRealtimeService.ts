@@ -39,7 +39,7 @@ export class OpenAIRealtimeService {
     this.sessionId = config.sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Initialize RealtimeClient with relay server URL
-    const relayUrl = config.relayServerUrl || `ws://localhost:8000/realtime-relay/${this.sessionId}`;
+    const relayUrl = config.relayServerUrl || `ws://localhost:8000/openai/realtime/ws`;
     
     this.client = new RealtimeClient({ 
       url: relayUrl
