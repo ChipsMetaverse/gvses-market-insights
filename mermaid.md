@@ -29,7 +29,8 @@ graph TB
             
             subgraph "Provider Implementations"
                 ElevenLabsProvider[ElevenLabsProvider]
-                OpenAIProvider[OpenAIProvider]
+                OpenAIProvider[OpenAIProvider - GPT Text]
+                OpenAIRealtimeProvider[OpenAIRealtimeProvider - Voice]
                 ClaudeProvider[ClaudeProvider - Configurable]
                 CustomProvider[CustomProvider - Extensible]
             end
@@ -42,6 +43,7 @@ graph TB
             
             BaseProvider --> ElevenLabsProvider
             BaseProvider --> OpenAIProvider
+            BaseProvider --> OpenAIRealtimeProvider
             BaseProvider --> ClaudeProvider
             
             ProviderFactory --> ProviderManager
@@ -96,6 +98,8 @@ graph TB
     subgraph "Backend (FastAPI) - Alpaca-First Architecture"
         FastAPI[mcp_server.py]
         FastAPI --> ElevenLabsProxy["/elevenlabs/signed-url"]
+        FastAPI --> OpenAIRealtimeWS["/openai/realtime/ws"]
+        FastAPI --> OpenAISession["/openai/realtime/session"]
         FastAPI --> AskEndpoint["/ask"]
         FastAPI --> ConversationsAPI["/conversations/*"]
         FastAPI --> ServiceFactory[MarketServiceFactory<br/>Alpaca Primary, Yahoo Fallback]
@@ -112,6 +116,7 @@ graph TB
     
     subgraph "External Services"
         ElevenLabs[ElevenLabs API]
+        OpenAIRealtime[OpenAI Realtime API]
         Claude[Claude API via MCP]
         Supabase[(Supabase DB)]
         AlpacaMarkets[Alpaca Markets<br/>Professional Data]
@@ -119,6 +124,7 @@ graph TB
     
     Frontend --> FastAPI
     FastAPI --> ElevenLabs
+    FastAPI --> OpenAIRealtime
     FastAPI --> Claude
     FastAPI --> AlpacaMarkets
     Frontend --> Supabase
@@ -1203,7 +1209,7 @@ sequenceDiagram
   - API URL configuration (port 8000)
   - Supabase connection settings
 
-*Last Updated: 2025-09-02*
+*Last Updated: 2025-09-08*
 
 *This document represents the architecture evolution of the GVSES AI Market Analysis Assistant application.*
 
@@ -1521,6 +1527,24 @@ Contextual Commands:
 - **VoiceCommandHelper.tsx**: Visual component showing history, suggestions, and examples
 - **VoiceCommandHelper.css**: Professional UI styling with animations
 
+## Recent Updates (September 8, 2025)
+
+**OpenAI Realtime Provider Integration:**
+- ✅ **OpenAI Realtime Voice Provider Added**: New speech-to-speech provider alongside ElevenLabs
+- ✅ **WebSocket Proxy Implementation**: Backend proxy at /openai/realtime/ws for browser security bypass
+- ✅ **Session Management**: /openai/realtime/session endpoint for connection initialization
+- ✅ **Provider Test Interface**: Comprehensive testing UI at ?provider-test for all AI providers
+- ✅ **Provider Switching**: Hot-swapping between ElevenLabs and OpenAI Realtime providers
+- ✅ **PCM Audio Support**: 16-bit, 24kHz audio format for OpenAI compatibility
+
+**Tailwind CSS v3 Fix:**
+- ✅ **Fixed UI Layout Issues**: Resolved overlapping provider cards and broken styling
+- ✅ **Downgraded from v4 to v3**: Tailwind v4 alpha was incompatible with PostCSS setup
+- ✅ **Proper CSS Processing**: Vite now correctly processes @tailwind directives
+- ✅ **668 CSS Rules Loaded**: 4x more styles than broken v4 configuration
+- ✅ **Professional UI Restored**: Clean two-column layout with proper spacing and alignment
+- ✅ **Playwright Verification**: Automated tests confirm all styles working correctly
+
 ## Recent Updates (September 7, 2025)
 
 **WebSocket Disconnection Fix:**
@@ -1632,6 +1656,118 @@ sequenceDiagram
 - ✅ **Comprehensive Company Mappings**: Covers major companies and common voice variations
 - ✅ **Fallback Logic**: Works without OpenAI API locally, full capabilities in production
 - ✅ **Tool Integration**: Enhanced tools for market data, crypto prices, GVSES levels, and news
+## Recent Updates (September 9, 2025)
+
+**OpenAI Realtime API Integration & WebSocket Fixes:**
+- ✅ **Official SDK Migration**: Integrated `@openai/realtime-api-beta` for native OpenAI voice support
+- ✅ **WebSocket Subprotocol Handling**: Fixed "Sec-WebSocket-Protocol" negotiation in FastAPI relay endpoint
+- ✅ **Tool Validation System**: Comprehensive validation ensuring OpenAI API compatibility
+- ✅ **Relay Server Architecture**: Secure proxy pattern for API key management on backend
+- ✅ **Provider Switching**: Seamless runtime switching between ElevenLabs and OpenAI providers
+- ✅ **Connection Stability**: Resolved WebSocket handshake failures with proper subprotocol support
+- ✅ **Tool Name Sanitization**: Automatic cleanup of invalid characters in tool definitions
+- ✅ **PCM16 Audio Format**: Native 24kHz audio streaming for OpenAI compatibility
+- ✅ **Error Recovery**: Robust error handling with automatic reconnection logic
+- ✅ **Modular Architecture**: Clean separation between provider implementations
+
+**⚠️ Critical Issue Discovered - Agent Has No Tools:**
+- ❌ **Tool Delivery Failure**: Despite backend loading 7 high-priority tools, OpenAI session receives 0 tools
+- ❌ **Agent Capability Gap**: Voice agent cannot execute market data queries or analysis
+- ❌ **Session Configuration Issue**: Tools sent via session.update are not being registered with OpenAI
+- 🔍 **Investigation Results**:
+  - Backend successfully loads and validates 33 MCP tools
+  - Tool mapper converts to OpenAI format correctly
+  - 7 high-priority tools selected (stock quotes, history, news, etc.)
+  - session.update message sent with tools array
+  - OpenAI session.created response shows 0 tools configured
+  - Agent cannot respond to market queries like "What's Tesla's price?"
+- 📊 **Current State**: Framework exists but agent lacks market analysis capability
+- 🎯 **Required Fix**: Tools must be included in initial session configuration, not via update
+
+**Technical Implementation Details:**
+```python
+# FastAPI WebSocket Endpoint with Subprotocol Support
+@app.websocket("/realtime-relay/{session_id}")
+async def openai_relay_endpoint(websocket: WebSocket, session_id: str):
+    # Extract and negotiate subprotocol
+    subprotocol = None
+    if "sec-websocket-protocol" in websocket.headers:
+        requested_protocols = websocket.headers["sec-websocket-protocol"]
+        subprotocol = requested_protocols.split(',')[0].strip()
+    
+    # Accept with subprotocol if requested
+    if subprotocol:
+        await websocket.accept(subprotocol=subprotocol)
+    else:
+        await websocket.accept()
+```
+
+**Frontend RealtimeClient Configuration:**
+```typescript
+const client = new RealtimeClient({
+    url: relayUrl,
+    apiKey: 'not-needed',  // Handled by relay server
+    dangerouslyAllowAPIKeyInBrowser: false
+});
+
+// Configure tools and audio
+await client.updateSession({
+    model: 'gpt-4o-realtime-preview-2024-12-17',
+    voice: 'verse',
+    instructions: marketInstructions,
+    tools: validatedTools,
+    input_audio_format: 'pcm16',
+    output_audio_format: 'pcm16'
+});
+```
+
+## OpenAI Agent Market Capabilities FIXED (January 9, 2025)
+
+**Problem Discovered:**
+After migration to OpenAI SDK patterns, the agent had NO market analysis capabilities:
+- Agent framework existed but had 0 tools configured
+- Backend loaded 7 tools but they didn't reach OpenAI
+- OpenAI session.created showed 0 tools available
+- Voice worked but couldn't access market data
+
+**Root Causes Identified:**
+1. **Tool Format Mismatch**: OpenAI Realtime API uses FLAT tool structure, not nested under 'function' like Chat API
+2. **Timing Issue**: Tools must be sent AFTER receiving session.created event
+3. **Frontend Premature Config**: RealtimeClient was trying to configure session before connection
+
+**Solution Implemented:**
+1. **Fixed Tool Conversion** (`openai_tool_mapper.py`):
+   - Added `_convert_mcp_to_realtime_tool()` for flat structure
+   - Updated `get_high_priority_tools()` to return Realtime format
+   
+2. **Fixed Relay Server Timing** (`openai_relay_server.py`):
+   - Wait for session.created before sending session.update
+   - Tools now properly configured after connection established
+   
+3. **Fixed Frontend** (`OpenAIRealtimeService.ts`):
+   - Removed premature session.updateSession() call
+   - Let relay server handle all configuration
+
+**Result:**
+✅ Agent now has full market analysis capabilities with 8 high-priority tools:
+- get_stock_quote
+- get_stock_history  
+- get_stock_news
+- get_market_overview
+- get_market_movers
+- get_crypto_price
+- get_technical_indicators
+- get_analyst_ratings
+
+## UI Consolidation & Improvements (January 9, 2025)
+
+**UI Issues Fixed:**
+- ✅ **Single Connect Button**: Removed duplicate connect buttons, now one prominent primary button
+- ✅ **Provider Selection Simplified**: Provider switcher only shows when disconnected
+- ✅ **Cleaner Voice Interface**: Removed redundant "Start/Stop Voice" button (voice always active when connected)
+- ✅ **Unified Search**: Market Insights search remains separate from voice text input (different purposes)
+- ✅ **Better Visual Hierarchy**: Connect button is now gradient with shadow, disconnect is subtle
+
 ## Recent Updates (September 3, 2025)
 
 **Alpaca Symbol Search & Semantic Voice Parsing:**

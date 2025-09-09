@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TradingChart } from './TradingChart';
 import { marketDataService, SymbolSearchResult } from '../services/marketDataService';
 import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
+import { useOpenAIRealtimeConversation } from '../hooks/useOpenAIRealtimeConversation';
 import { useSymbolSearch } from '../hooks/useSymbolSearch';
 // import { ProviderSelector } from './ProviderSelector'; // Removed - conflicts with useElevenLabsConversation
 import { chartControlService } from '../services/chartControlService';
@@ -46,6 +47,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [chartStyle, setChartStyle] = useState<'candles' | 'line' | 'area'>('candles');
   const [chartTimeframe, setChartTimeframe] = useState('1D');
   const [assetType, setAssetType] = useState<'stock' | 'crypto'>('stock');
+  const [voiceProvider, setVoiceProvider] = useState<'elevenlabs' | 'openai'>('elevenlabs');
   
   // Dynamic watchlist with localStorage persistence
   const [watchlist, setWatchlist] = useState<string[]>(() => {
@@ -180,57 +182,86 @@ export const TradingDashboardSimple: React.FC = () => {
   // Chart control ref
   const chartRef = useRef<any>(null);
   
+  // Common callback functions for both providers
+  const handleUserTranscript = useCallback((transcript: string) => {
+    const message: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: transcript,
+      timestamp: new Date().toLocaleTimeString()
+    };
+    setMessages(prev => [...prev, message]);
+  }, []);
+
+  const handleAgentResponse = useCallback(async (response: string) => {
+    const message: Message = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: response,
+      timestamp: new Date().toLocaleTimeString()
+    };
+    setMessages(prev => [...prev, message]);
+    
+    // Process agent response for chart commands with enhanced multi-command support
+    try {
+      const commands = await enhancedChartControl.processEnhancedResponse(response);
+      if (commands.length > 0) {
+        console.log('Enhanced chart commands executed:', commands);
+        // Show feedback for each command
+        commands.forEach(cmd => {
+          const message = `${cmd.type}: ${typeof cmd.value === 'object' ? JSON.stringify(cmd.value) : cmd.value}`;
+          setToastCommand({ command: message, type: 'success' });
+        });
+      }
+    } catch (error) {
+      console.error('Error processing chart commands:', error);
+    }
+  }, []);
+
+  const handleConnectionChange = useCallback((connected: boolean) => {
+    if (!connected) {
+      setIsRecording(false);
+      setIsListening(false);
+      stopVoiceRecording();
+    }
+  }, []);
+
   // ElevenLabs conversation hook
+  const elevenLabsHook = useElevenLabsConversation({
+    apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
+    onUserTranscript: handleUserTranscript,
+    onAgentResponse: handleAgentResponse,
+    onConnectionChange: handleConnectionChange
+  });
+
+  // OpenAI Realtime conversation hook
+  const openAIHook = useOpenAIRealtimeConversation({
+    apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
+    onUserTranscript: handleUserTranscript,
+    onAgentResponse: handleAgentResponse,
+    onConnectionChange: handleConnectionChange,
+    onToolCall: (toolName: string, args: any) => {
+      console.log('OpenAI tool call:', toolName, args);
+      setToastCommand({ command: `🔧 Tool: ${toolName}`, type: 'info' });
+      setTimeout(() => setToastCommand(null), 2000);
+    },
+    onToolResult: (toolName: string, result: any) => {
+      console.log('OpenAI tool result:', toolName, result);
+      setToastCommand({ command: `✅ Tool completed: ${toolName}`, type: 'success' });
+      setTimeout(() => setToastCommand(null), 2000);
+    }
+  });
+
+  // Use the appropriate provider
+  const currentHook = voiceProvider === 'elevenlabs' ? elevenLabsHook : openAIHook;
   const {
     isConnected,
     isLoading: isConnecting,
     startConversation,
     stopConversation,
-    sendTextMessage: sendElevenLabsText,
-    sendAudioChunk,
-  } = useElevenLabsConversation({
-    apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
-    onUserTranscript: (transcript) => {
-      const message: Message = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content: transcript,
-        timestamp: new Date().toLocaleTimeString()
-      };
-      setMessages(prev => [...prev, message]);
-    },
-    onAgentResponse: async (response) => {
-      const message: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: response,
-        timestamp: new Date().toLocaleTimeString()
-      };
-      setMessages(prev => [...prev, message]);
-      
-      // Process agent response for chart commands with enhanced multi-command support
-      try {
-        const commands = await enhancedChartControl.processEnhancedResponse(response);
-        if (commands.length > 0) {
-          console.log('Enhanced chart commands executed:', commands);
-          // Show feedback for each command
-          commands.forEach(cmd => {
-            const message = `${cmd.type}: ${typeof cmd.value === 'object' ? JSON.stringify(cmd.value) : cmd.value}`;
-            setToastCommand({ command: message, type: 'success' });
-          });
-        }
-      } catch (error) {
-        console.error('Error processing chart commands:', error);
-      }
-    },
-    onConnectionChange: (connected) => {
-      if (!connected) {
-        setIsRecording(false);
-        setIsListening(false);
-        stopVoiceRecording();
-      }
-    }
-  });
+    sendTextMessage,
+    sendAudioChunk
+  } = currentHook;
 
   // Convert Float32 PCM to Int16 PCM (required by ElevenLabs)
   const convertFloat32ToInt16 = (float32Array: Float32Array): Int16Array => {
@@ -362,19 +393,20 @@ export const TradingDashboardSimple: React.FC = () => {
       stopConversation();
       hasStartedRecordingRef.current = false;
     } else {
-      console.log('Connecting to ElevenLabs...');
+      const providerName = voiceProvider === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI Realtime';
+      console.log(`Connecting to ${providerName}...`);
       // Connect (voice recording will auto-start via useEffect when connected)
       try {
         await startConversation();
       } catch (error) {
         console.error('Failed to connect:', error);
-        alert('Failed to connect to voice assistant. Please check your connection and try again.');
+        alert(`Failed to connect to ${providerName} voice assistant. Please check your connection and try again.`);
       }
     }
   };
 
-  // Send text message
-  const sendTextMessage = () => {
+  // Handle text message sending with pre-processing
+  const handleSendTextMessage = () => {
     if (inputText.trim() && isConnected) {
       // Stop voice recording before sending text to prevent conflicts
       if (isRecording) {
@@ -382,14 +414,8 @@ export const TradingDashboardSimple: React.FC = () => {
         stopVoiceRecording();
       }
       
-      const message: Message = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content: inputText,
-        timestamp: new Date().toLocaleTimeString()
-      };
-      setMessages(prev => [...prev, message]);
-      sendElevenLabsText(inputText);
+      // Use the unified sendTextMessage from the provider hook
+      sendTextMessage(inputText);
       setInputText('');
     } else if (!isConnected) {
       alert('Please connect to the voice assistant first');
@@ -656,7 +682,7 @@ export const TradingDashboardSimple: React.FC = () => {
   // which double-invokes effects in development.
 
   return (
-    <div className="trading-dashboard-simple">
+    <div className="trading-dashboard-simple" data-testid="trading-dashboard">
       {/* Command Toast Notifications */}
       {toastCommand && (
         <CommandToast
@@ -678,12 +704,14 @@ export const TradingDashboardSimple: React.FC = () => {
           <button 
             className={`tab-btn ${activeTab === 'charts' ? 'active' : ''}`}
             onClick={() => handleTabChange('charts')}
+            data-testid="charts-tab"
           >
             Interactive Charts
           </button>
           <button 
             className={`tab-btn ${activeTab === 'voice' ? 'active' : ''}`}
             onClick={() => handleTabChange('voice')}
+            data-testid="voice-tab"
           >
             Voice + Manual Control
           </button>
@@ -886,6 +914,7 @@ export const TradingDashboardSimple: React.FC = () => {
                 chartStyle={chartStyle}
                 timeframe={chartTimeframe}
                 assetType={assetType}
+                data-testid="trading-chart"
                 onChartReady={(chart: any) => {
                   chartRef.current = chart;
                   chartControlService.setChartRef(chart);
@@ -897,7 +926,91 @@ export const TradingDashboardSimple: React.FC = () => {
           </div>
 
           {/* Voice Assistant */}
-          <div className="voice-section">
+          <div className="voice-section" data-testid="voice-interface">
+            {/* Voice Provider Switcher - Simplified */}
+            {!isConnected && (
+              <div className="provider-switcher" data-testid="provider-switcher">
+                <div className="provider-switcher-header">
+                  <span className="provider-label">Select Voice Provider:</span>
+                  <div className="provider-options">
+                    <button 
+                      className={`provider-btn ${voiceProvider === 'elevenlabs' ? 'active' : ''}`}
+                      onClick={() => setVoiceProvider('elevenlabs')}
+                      disabled={isConnected}
+                      data-testid="provider-elevenlabs"
+                    >
+                      🎤 ElevenLabs
+                    </button>
+                    <button 
+                      className={`provider-btn ${voiceProvider === 'openai' ? 'active' : ''}`}
+                      onClick={() => setVoiceProvider('openai')}
+                      disabled={isConnected}
+                      data-testid="provider-openai"
+                    >
+                      🤖 OpenAI Realtime
+                    </button>
+                  </div>
+                  <div className="provider-info">
+                    {voiceProvider === 'elevenlabs' ? (
+                      <span className="provider-status">Conversational AI with natural voices</span>
+                    ) : (
+                      <span className="provider-status">Speech-to-speech with function calling</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Main Connect Button - Single prominent button */}
+            {!isConnected && (
+              <div style={{ padding: '20px', textAlign: 'center' }}>
+                <button 
+                  className="primary-connect-btn"
+                  onClick={handleConnectToggle}
+                  disabled={isConnecting}
+                  style={{
+                    width: '80%',
+                    fontSize: '18px',
+                    padding: '16px 24px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: isConnecting ? '#666' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    cursor: isConnecting ? 'wait' : 'pointer',
+                    fontWeight: 'bold',
+                    boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
+                    transition: 'all 0.3s ease'
+                  }}
+                  data-testid="main-connect-button"
+                >
+                  {isConnecting ? '⏳ Connecting...' : '🎤 Connect Voice Assistant'}
+                </button>
+              </div>
+            )}
+            
+            {/* Disconnect Button - Shows when connected */}
+            {isConnected && (
+              <div style={{ padding: '10px 20px', textAlign: 'center' }}>
+                <button 
+                  className="disconnect-btn"
+                  onClick={handleConnectToggle}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    border: '1px solid #ff4444',
+                    background: 'transparent',
+                    color: '#ff4444',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    transition: 'all 0.3s ease'
+                  }}
+                  data-testid="disconnect-button"
+                >
+                  🔴 Disconnect
+                </button>
+              </div>
+            )}
+            
             {/* Listening Interface */}
             <div className="listening-interface">
               <div className="listening-animation">
@@ -919,11 +1032,11 @@ export const TradingDashboardSimple: React.FC = () => {
                     '🔌 Click mic to connect'}
                 </div>
                 {isRecording && (
-                  <div className="recording-timer">{recordingTime}</div>
+                  <div className="recording-timer" data-testid="recording-timer">{recordingTime}</div>
                 )}
               </div>
               
-              <div className="audio-visualizer">
+              <div className="audio-visualizer" data-testid="audio-level">
                 <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
                 <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 400)}%` }}></div>
                 <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 600)}%` }}></div>
@@ -931,40 +1044,10 @@ export const TradingDashboardSimple: React.FC = () => {
                 <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
               </div>
               
-              <div className="connection-status">
+              <div className="connection-status" data-testid="connection-status">
                 <span className="status-dot"></span>
                 {isConnected ? 'Connected' : 'Disconnected'}
               </div>
-              
-              {/* Voice Recording Control - Only show when connected */}
-              {isConnected && (
-                <button
-                  onClick={() => {
-                    if (isRecording) {
-                      stopVoiceRecording();
-                    } else {
-                      startVoiceRecording();
-                    }
-                  }}
-                  className="voice-control-button"
-                  style={{
-                    marginTop: '10px',
-                    padding: '8px 16px',
-                    borderRadius: '20px',
-                    border: 'none',
-                    background: isRecording ? '#ff4444' : '#4CAF50',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  {isRecording ? '🔴 Stop Voice' : '🎤 Start Voice'}
-                </button>
-              )}
             </div>
 
             {/* Voice Conversation */}
@@ -973,7 +1056,7 @@ export const TradingDashboardSimple: React.FC = () => {
                 <h3 style={{ margin: 0 }}>Voice Conversation</h3>
                 {/* ProviderSelector removed - conflicts with useElevenLabsConversation */}
               </div>
-              <div className="conversation-messages">
+              <div className="conversation-messages" data-testid="messages-container">
                 {messages.length === 0 ? (
                   <div className="no-messages">
                     <p style={{ fontSize: '14px', color: '#666' }}>Click mic to connect • Speak anytime when connected</p>
@@ -1008,24 +1091,6 @@ export const TradingDashboardSimple: React.FC = () => {
                 </span>
               </div>
               
-              <div className="chart-control">
-                <button 
-                  className={isConnected ? "disconnect-btn" : "listening-btn"}
-                  onClick={handleConnectToggle}
-                  disabled={isConnecting}
-                  style={{ width: '100%', fontSize: '16px', padding: '12px' }}
-                >
-                  {isConnecting ? '⏳ Connecting...' : 
-                   isConnected ? '🔴 Disconnect Voice' : 
-                   '🎤 Connect Voice Assistant'}
-                </button>
-                {isConnected && (
-                  <div className="voice-status" style={{ marginTop: '10px', textAlign: 'center', color: '#4CAF50' }}>
-                    <span className="pulse-indicator" style={{ display: 'inline-block', width: '8px', height: '8px', backgroundColor: '#4CAF50', borderRadius: '50%', animation: 'pulse 1.5s infinite', marginRight: '8px' }}></span>
-                    <span>Voice active • Speak anytime</span>
-                  </div>
-                )}
-              </div>
               
               {/* Text Input Section - Only shown when connected */}
               {isConnected && (
@@ -1035,7 +1100,7 @@ export const TradingDashboardSimple: React.FC = () => {
                       type="text"
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && sendTextMessage()}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSendTextMessage()}
                       onFocus={() => {
                         // Stop voice recording when focusing on text input
                         if (isRecording) {
@@ -1045,11 +1110,13 @@ export const TradingDashboardSimple: React.FC = () => {
                       }}
                       placeholder="Type a message (or just speak)..."
                       className="text-input"
+                      data-testid="message-input"
                     />
                     <button 
-                      onClick={sendTextMessage}
+                      onClick={handleSendTextMessage}
                       disabled={!inputText.trim()}
                       className="send-button"
+                      data-testid="send-button"
                     >
                       Send
                     </button>
