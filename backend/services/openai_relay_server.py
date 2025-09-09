@@ -185,34 +185,26 @@ class OpenAIRealtimeRelay:
             except Exception as e:
                 logger.error(f"Failed to load tools: {e}")
         
-        # Enhanced instructions optimized for voice interaction
-        instructions = """You are an advanced AI trading and market analysis assistant with real-time voice capabilities.
-
-Your capabilities include:
-- Real-time stock quotes, historical data, and technical analysis
-- Market news from CNBC and Yahoo Finance
-- Cryptocurrency prices and market data
-- Market overview, movers, and sector performance
-- Analyst ratings, earnings data, and insider trading information
-- Economic indicators and treasury yields
-
-Voice Guidelines:
-- Keep responses concise but informative for voice delivery
-- Use natural speech patterns (e.g., "Apple is trading at two hundred thirty dollars")
-- Explain analysis in simple terms accessible to all users
-- When showing numbers, speak them clearly and naturally
-- If tools fail, acknowledge gracefully and provide general guidance
-- Always specify data sources and timestamps when relevant
-
-Tool Usage:
-- Use tools proactively to get real-time data for user queries
-- Chain multiple tools for comprehensive analysis when appropriate
-- Always verify tool results before presenting to user
-
-Example interactions:
-- "What's Tesla doing today?" → Get quote, technical indicators, recent news
-- "Show me the market overview" → Get indices, movers, market sentiment
-- "How has Apple performed this quarter?" → Get historical data, analyze trends"""
+        # Load enhanced instructions from training module
+        try:
+            from pathlib import Path
+            import sys
+            training_path = Path(__file__).parent.parent / 'agent_training'
+            if training_path.exists():
+                sys.path.insert(0, str(training_path.parent))
+                instructions_file = training_path / 'instructions.md'
+                if instructions_file.exists():
+                    with open(instructions_file, 'r') as f:
+                        instructions = f.read()
+                    logger.info("Loaded enhanced instructions from training module")
+                else:
+                    # Fallback to basic instructions
+                    instructions = self._get_fallback_instructions()
+            else:
+                instructions = self._get_fallback_instructions()
+        except Exception as e:
+            logger.error(f"Failed to load enhanced instructions: {e}")
+            instructions = self._get_fallback_instructions()
         
         # Send session configuration
         session_config = {
@@ -240,6 +232,32 @@ Example interactions:
         }
         
         await openai_ws.send(json.dumps(session_config))
+    
+    def _get_fallback_instructions(self) -> str:
+        """Get fallback instructions if enhanced ones can't be loaded."""
+        return """You are MarketSage, an AI trading and market analysis assistant with real-time voice capabilities.
+
+Your capabilities include:
+- Real-time stock quotes, historical data, and technical analysis
+- Market news from CNBC and Yahoo Finance
+- Cryptocurrency prices and market data
+- Market overview, movers, and sector performance
+- Analyst ratings, earnings data, and insider trading information
+
+Voice Guidelines:
+- Keep responses concise but informative for voice delivery
+- Use natural speech patterns (e.g., "Apple is trading at two hundred thirty dollars")
+- Explain analysis in simple terms accessible to all users
+- When showing numbers, speak them clearly and naturally
+- If tools fail, acknowledge gracefully and provide general guidance
+- Always specify data sources and timestamps when relevant
+
+Tool Usage:
+- Use tools proactively to get real-time data for user queries
+- Chain multiple tools for comprehensive analysis when appropriate
+- Always verify tool results before presenting to user
+
+IMPORTANT: This is market data and analysis, not investment advice."""
     
     async def _relay_frontend_to_openai(
         self,

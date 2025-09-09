@@ -254,8 +254,20 @@ async def startup_event():
         
         # Initialize OpenAI Realtime service
         try:
-            openai_service = OpenAIRealtimeService()
-            logger.info("OpenAI Realtime service initialized successfully")
+            # Check for required environment variable
+            if not os.environ.get("OPENAI_API_KEY"):
+                logger.warning("OPENAI_API_KEY not found in environment - OpenAI relay will be disabled")
+                openai_service = None
+            else:
+                openai_service = OpenAIRealtimeService()
+                logger.info("OpenAI Realtime service initialized successfully")
+                # Log enhanced training status
+                try:
+                    from services.openai_relay_server import openai_relay_server
+                    if openai_relay_server.tool_mapper:
+                        logger.info("OpenAI agent enhanced training loaded successfully")
+                except:
+                    pass
         except Exception as e:
             logger.warning(f"OpenAI Realtime service initialization failed: {e}")
             openai_service = None
@@ -298,11 +310,12 @@ async def test_direct_service():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    global market_service, market_service_error
+    global market_service, market_service_error, openai_service
     response = {
         "status": "healthy",
         "service_mode": MarketServiceFactory.get_service_mode(),
         "service_initialized": market_service is not None,
+        "openai_relay_ready": openai_service is not None and hasattr(openai_service, 'relay_server'),
         "timestamp": datetime.utcnow().isoformat()
     }
     
@@ -310,6 +323,24 @@ async def health_check():
     service_status = MarketServiceFactory.get_service_status()
     if service_status:
         response["services"] = service_status
+    
+    # Add OpenAI relay details if available
+    if openai_service:
+        try:
+            if hasattr(openai_service, 'relay_server'):
+                from services.openai_relay_server import openai_relay_server
+                active_sessions = await openai_relay_server.get_active_sessions()
+                response["openai_relay"] = {
+                    "active": True,
+                    "sessions": len(active_sessions),
+                    "tool_mapper_initialized": openai_relay_server.tool_mapper is not None
+                }
+            else:
+                response["openai_relay"] = {"active": False, "reason": "Legacy service mode"}
+        except Exception as e:
+            response["openai_relay"] = {"active": False, "error": str(e)}
+    else:
+        response["openai_relay"] = {"active": False, "reason": "Service not initialized"}
     
     if market_service_error:
         response["service_error"] = market_service_error
