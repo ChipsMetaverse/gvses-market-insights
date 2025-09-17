@@ -15,7 +15,7 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [levelPositions, setLevelPositions] = useState<{ qe?: number; st?: number; ltb?: number }>({})
+  const [levelPositions, setLevelPositions] = useState<{ sell_high?: number; buy_low?: number; btd?: number }>({})
   const [isChartReady, setIsChartReady] = useState(false)
   
   // Lifecycle management refs
@@ -34,22 +34,23 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
     try {
       const newPositions: any = {}
       
-      if (technicalLevels?.qe_level) {
-        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.qe_level)
+      // Use actual technical levels instead of deprecated QE/ST/LTB
+      if (technicalLevels?.sell_high_level) {
+        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.sell_high_level)
         if (coord !== null && coord !== undefined && !isNaN(coord)) {
-          newPositions.qe = coord
+          newPositions.sell_high = coord
         }
       }
-      if (technicalLevels?.st_level) {
-        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.st_level)
+      if (technicalLevels?.buy_low_level) {
+        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.buy_low_level)
         if (coord !== null && coord !== undefined && !isNaN(coord)) {
-          newPositions.st = coord
+          newPositions.buy_low = coord
         }
       }
-      if (technicalLevels?.ltb_level) {
-        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.ltb_level)
+      if (technicalLevels?.btd_level) {
+        const coord = candlestickSeriesRef.current.priceToCoordinate(technicalLevels.btd_level)
         if (coord !== null && coord !== undefined && !isNaN(coord)) {
-          newPositions.ltb = coord
+          newPositions.btd = coord
         }
       }
       
@@ -160,11 +161,11 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       })
       priceLineRefsRef.current = []
       
-      // Add new price lines without titles (labels will be on left side)
-      if (technicalLevels?.qe_level) {
+      // Add new price lines for actual technical levels
+      if (technicalLevels?.sell_high_level) {
         const line = candlestickSeriesRef.current.createPriceLine({
-          price: technicalLevels.qe_level,
-          color: '#10b981',
+          price: technicalLevels.sell_high_level,
+          color: '#10b981',  // Green for sell high
           lineWidth: 2,
           lineStyle: 2,
           axisLabelVisible: true,
@@ -173,10 +174,10 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
         priceLineRefsRef.current.push(line)
       }
       
-      if (technicalLevels?.st_level) {
+      if (technicalLevels?.buy_low_level) {
         const line = candlestickSeriesRef.current.createPriceLine({
-          price: technicalLevels.st_level,
-          color: '#eab308',
+          price: technicalLevels.buy_low_level,
+          color: '#eab308',  // Yellow/amber for buy low
           lineWidth: 2,
           lineStyle: 2,
           axisLabelVisible: true,
@@ -185,10 +186,10 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
         priceLineRefsRef.current.push(line)
       }
       
-      if (technicalLevels?.ltb_level) {
+      if (technicalLevels?.btd_level) {
         const line = candlestickSeriesRef.current.createPriceLine({
-          price: technicalLevels.ltb_level,
-          color: '#3b82f6',
+          price: technicalLevels.btd_level,
+          color: '#3b82f6',  // Blue for BTD (Buy the Dip)
           lineWidth: 2,
           lineStyle: 2,
           axisLabelVisible: true,
@@ -423,12 +424,12 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       {/* Custom left-side labels */}
       {!isLoading && !error && (
         <>
-          {levelPositions.qe !== undefined && technicalLevels?.qe_level && (
+          {levelPositions.sell_high !== undefined && technicalLevels?.sell_high_level && (
             <div
               style={{
                 position: 'absolute',
                 left: '2px',
-                top: `${levelPositions.qe}px`,
+                top: `${levelPositions.sell_high}px`,
                 transform: 'translateY(-50%)',
                 backgroundColor: 'rgba(255, 255, 255, 0.75)',
                 color: '#10b981',
@@ -441,15 +442,15 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
                 whiteSpace: 'nowrap',
               }}
             >
-              QE Level
+              Sell High
             </div>
           )}
-          {levelPositions.st !== undefined && technicalLevels?.st_level && (
+          {levelPositions.buy_low !== undefined && technicalLevels?.buy_low_level && (
             <div
               style={{
                 position: 'absolute',
                 left: '2px',
-                top: `${levelPositions.st}px`,
+                top: `${levelPositions.buy_low}px`,
                 transform: 'translateY(-50%)',
                 backgroundColor: 'rgba(255, 255, 255, 0.75)',
                 color: '#eab308',
@@ -462,15 +463,15 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
                 whiteSpace: 'nowrap',
               }}
             >
-              ST Level
+              Buy Low
             </div>
           )}
-          {levelPositions.ltb !== undefined && technicalLevels?.ltb_level && (
+          {levelPositions.btd !== undefined && technicalLevels?.btd_level && (
             <div
               style={{
                 position: 'absolute',
                 left: '2px',
-                top: `${levelPositions.ltb}px`,
+                top: `${levelPositions.btd}px`,
                 transform: 'translateY(-50%)',
                 backgroundColor: 'rgba(255, 255, 255, 0.75)',
                 color: '#3b82f6',
@@ -483,7 +484,7 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
                 whiteSpace: 'nowrap',
               }}
             >
-              LTB Level
+              BTD
             </div>
           )}
         </>

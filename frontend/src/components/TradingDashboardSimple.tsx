@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { TradingChart } from './TradingChart';
 import { marketDataService, SymbolSearchResult } from '../services/marketDataService';
 import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import { useOpenAIRealtimeConversation } from '../hooks/useOpenAIRealtimeConversation';
+import { useAgentVoiceConversation } from '../hooks/useAgentVoiceConversation';
 import { useSymbolSearch } from '../hooks/useSymbolSearch';
 // import { ProviderSelector } from './ProviderSelector'; // Removed - conflicts with useElevenLabsConversation
 import { chartControlService } from '../services/chartControlService';
 import { enhancedChartControl } from '../services/enhancedChartControlService';
 import { CommandToast } from './CommandToast';
 import { VoiceCommandHelper } from './VoiceCommandHelper';
+import StructuredResponse from './StructuredResponse';
 import './TradingDashboardSimple.css';
 
 interface StockData {
@@ -26,10 +28,60 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  provider?: 'agent' | 'elevenlabs' | 'openai';  // Track message source
 }
 
+// Panel Divider Component for resizable panels
+const PanelDivider: React.FC<{
+  onDrag: (delta: number) => void;
+  orientation?: 'vertical' | 'horizontal';
+}> = ({ onDrag, orientation = 'vertical' }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const startPosRef = useRef(0);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    startPosRef.current = orientation === 'vertical' ? e.clientX : e.clientY;
+    document.body.style.cursor = orientation === 'vertical' ? 'col-resize' : 'row-resize';
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const currentPos = orientation === 'vertical' ? e.clientX : e.clientY;
+      const delta = currentPos - startPosRef.current;
+      startPosRef.current = currentPos;
+      onDrag(delta);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      document.body.style.cursor = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, onDrag, orientation]);
+
+  return (
+    <div
+      className={`panel-divider ${orientation} ${isDragging ? 'dragging' : ''}`}
+      onMouseDown={handleMouseDown}
+    >
+      <div className="divider-handle" />
+    </div>
+  );
+};
+
 export const TradingDashboardSimple: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'charts' | 'voice'>('charts');
+  // Removed tab system - using unified interface
   const [isListening, setIsListening] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState('00:00');
@@ -47,7 +99,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [chartStyle, setChartStyle] = useState<'candles' | 'line' | 'area'>('candles');
   const [chartTimeframe, setChartTimeframe] = useState('1D');
   const [assetType, setAssetType] = useState<'stock' | 'crypto'>('stock');
-  const [voiceProvider, setVoiceProvider] = useState<'elevenlabs' | 'openai'>('elevenlabs');
+  const [voiceProvider, setVoiceProvider] = useState<'elevenlabs' | 'agent'>('agent');
   
   // Dynamic watchlist with localStorage persistence
   const [watchlist, setWatchlist] = useState<string[]>(() => {
@@ -57,6 +109,84 @@ export const TradingDashboardSimple: React.FC = () => {
   const [searchSymbol, setSearchSymbol] = useState('');
   const [isAddingSymbol, setIsAddingSymbol] = useState(false);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+
+  // Panel widths state for resizable panels
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
+    const saved = localStorage.getItem('leftPanelWidth');
+    return saved ? parseInt(saved) : 240;
+  });
+  const [rightPanelWidth, setRightPanelWidth] = useState(() => {
+    const saved = localStorage.getItem('rightPanelWidth');
+    return saved ? parseInt(saved) : 350;
+  });
+
+  // Update CSS variables when panel widths change
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--left-panel-width', `${leftPanelWidth}px`);
+    root.style.setProperty('--right-panel-width', `${rightPanelWidth}px`);
+    
+    // Save to localStorage
+    localStorage.setItem('leftPanelWidth', leftPanelWidth.toString());
+    localStorage.setItem('rightPanelWidth', rightPanelWidth.toString());
+  }, [leftPanelWidth, rightPanelWidth]);
+
+  // Panel resize handlers
+  const handleLeftPanelResize = useCallback((delta: number) => {
+    setLeftPanelWidth(prev => Math.max(200, Math.min(400, prev + delta)));
+  }, []);
+
+  const handleRightPanelResize = useCallback((delta: number) => {
+    setRightPanelWidth(prev => Math.max(300, Math.min(500, prev - delta)));
+  }, []);
+
+  // Message persistence storage keys
+  const STORAGE_KEYS = {
+    messages: 'trading-assistant-messages',
+    session: 'trading-assistant-session'
+  };
+
+  // Load persisted messages on component mount
+  useEffect(() => {
+    try {
+      const savedMessages = localStorage.getItem(STORAGE_KEYS.messages);
+      if (savedMessages) {
+        const parsedMessages = JSON.parse(savedMessages);
+        // Only load messages that are less than 24 hours old
+        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+        const recentMessages = parsedMessages.filter((msg: Message) => 
+          new Date(msg.timestamp).getTime() > oneDayAgo
+        );
+        setMessages(recentMessages);
+        console.log(`💾 Loaded ${recentMessages.length} persisted messages from localStorage`);
+      }
+    } catch (error) {
+      console.error('Error loading persisted messages:', error);
+      // Clear corrupted data
+      localStorage.removeItem(STORAGE_KEYS.messages);
+    }
+  }, []);
+
+  // Save messages to localStorage whenever messages change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.messages, JSON.stringify(messages));
+      console.log(`💾 Saved ${messages.length} messages to localStorage`);
+    } catch (error) {
+      console.error('Error saving messages to localStorage:', error);
+      // If storage is full, clear old messages and try again
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        const recentMessages = messages.slice(-20); // Keep only last 20 messages
+        try {
+          localStorage.setItem(STORAGE_KEYS.messages, JSON.stringify(recentMessages));
+          setMessages(recentMessages);
+          console.log('💾 Storage full - reduced to 20 most recent messages');
+        } catch (retryError) {
+          console.error('Failed to save even reduced message set:', retryError);
+        }
+      }
+    }
+  }, [messages]);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Use the symbol search hook with debouncing
@@ -182,26 +312,41 @@ export const TradingDashboardSimple: React.FC = () => {
   // Chart control ref
   const chartRef = useRef<any>(null);
   
-  // Common callback functions for both providers
+  // Common callback functions for both providers with provider tracking
   const handleUserTranscript = useCallback((transcript: string) => {
     const message: Message = {
-      id: crypto.randomUUID(),
+      id: `user-${voiceProvider}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       role: 'user',
       content: transcript,
-      timestamp: new Date().toLocaleTimeString()
+      timestamp: new Date().toLocaleTimeString(),
+      provider: voiceProvider as 'agent' | 'elevenlabs' | 'openai'
     };
     setMessages(prev => [...prev, message]);
-  }, []);
+  }, [voiceProvider]);
 
   const handleAgentResponse = useCallback(async (response: string) => {
+    console.log(`🤖 ${voiceProvider} response received:`, response);
+    
     const message: Message = {
-      id: crypto.randomUUID(),
+      id: `assistant-${voiceProvider}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       role: 'assistant',
       content: response,
-      timestamp: new Date().toLocaleTimeString()
+      timestamp: new Date().toLocaleTimeString(),
+      provider: voiceProvider as 'agent' | 'elevenlabs' | 'openai'
     };
     setMessages(prev => [...prev, message]);
+    console.log(`💬 Added ${voiceProvider} response to chat thread`);
     
+    // Process response as potential chart commands
+    try {
+      const commands = await chartControlService.parseAgentResponse(response);
+      if (commands.length > 0) {
+        console.log('[Enhanced] Processing voice response chart commands:', commands);
+        commands.forEach(cmd => chartControlService.executeCommand(cmd));
+      }
+    } catch (error) {
+      console.log('Chart command processing failed:', error);
+    }
     // Process agent response for chart commands with enhanced multi-command support
     try {
       const commands = await enhancedChartControl.processEnhancedResponse(response);
@@ -226,16 +371,75 @@ export const TradingDashboardSimple: React.FC = () => {
     }
   }, []);
 
-  // ElevenLabs conversation hook
-  const elevenLabsHook = useElevenLabsConversation({
+  // Track previous provider for cleanup
+  const previousProviderRef = useRef<string>(voiceProvider);
+  
+  // Cleanup on provider switch
+  useEffect(() => {
+    const previousProvider = previousProviderRef.current;
+    
+    // Cleanup previous provider before switching
+    if (previousProvider !== voiceProvider) {
+      console.log(`Switching from ${previousProvider} to ${voiceProvider}, cleaning up...`);
+      
+      if (previousProvider === 'elevenlabs') {
+        // Disconnect ElevenLabs singleton
+        import('../services/ElevenLabsConnectionManager').then(module => {
+          const manager = module.ElevenLabsConnectionManager.getInstance();
+          manager.disconnect();
+        });
+      } else if (previousProvider === 'openai') {
+        // Disconnect OpenAI service
+        import('../services/OpenAIRealtimeService').then(module => {
+          const service = module.OpenAIRealtimeService.getInstance();
+          service.disconnect();
+        });
+      }
+      
+      previousProviderRef.current = voiceProvider;
+    }
+  }, [voiceProvider]);
+
+  // Conditional hook mounting - only mount the active provider
+  const agentVoiceHook = voiceProvider === 'agent' ? useAgentVoiceConversation({
+    apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
+    onMessage: (message) => {
+      const msg: Message = {
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        timestamp: new Date(message.timestamp).toLocaleTimeString(),
+        provider: 'agent' as const  // Add provider tracking
+      };
+      setMessages(prev => [...prev, msg]);
+      
+      // Show tools used in toast for assistant messages
+      if (message.role === 'assistant' && message.toolsUsed && message.toolsUsed.length > 0) {
+        setToastCommand({ command: `🔧 Tools: ${message.toolsUsed.join(', ')}`, type: 'info' });
+        setTimeout(() => setToastCommand(null), 3000);
+      }
+    },
+    onConnectionChange: handleConnectionChange,
+    onError: (error) => {
+      setToastCommand({ command: `❌ Error: ${error}`, type: 'error' });
+      setTimeout(() => setToastCommand(null), 4000);
+    },
+    onThinking: (thinking) => {
+      // Show thinking indicator in UI if needed
+      console.log('Agent thinking:', thinking);
+    }
+  }) : null;
+
+  // ElevenLabs conversation hook - only mount when active
+  const elevenLabsHook = voiceProvider === 'elevenlabs' ? useElevenLabsConversation({
     apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
     onUserTranscript: handleUserTranscript,
     onAgentResponse: handleAgentResponse,
     onConnectionChange: handleConnectionChange
-  });
+  }) : null;
 
-  // OpenAI Realtime conversation hook
-  const openAIHook = useOpenAIRealtimeConversation({
+  // OpenAI Realtime conversation hook - only mount when active
+  const openAIHook = voiceProvider === 'openai' ? useOpenAIRealtimeConversation({
     apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
     onUserTranscript: handleUserTranscript,
     onAgentResponse: handleAgentResponse,
@@ -250,18 +454,104 @@ export const TradingDashboardSimple: React.FC = () => {
       setToastCommand({ command: `✅ Tool completed: ${toolName}`, type: 'success' });
       setTimeout(() => setToastCommand(null), 2000);
     }
-  });
+  }) : null;
 
-  // Use the appropriate provider
-  const currentHook = voiceProvider === 'elevenlabs' ? elevenLabsHook : openAIHook;
+  // Use the appropriate provider hook (with fallback to avoid null errors)
+  const currentHook = agentVoiceHook || elevenLabsHook || openAIHook || {
+    isConnected: false,
+    isLoading: false,
+    sendTextMessage: () => {},
+    messages: [],
+    connect: () => {},
+    disconnect: () => {},
+    startConversation: () => {},
+    stopConversation: () => {},
+    sendAudioChunk: () => {}
+  };
+  
+  // Handle different function names from different hooks
   const {
     isConnected,
     isLoading: isConnecting,
-    startConversation,
-    stopConversation,
     sendTextMessage,
-    sendAudioChunk
+    messages: hookMessages
   } = currentHook;
+  
+  // Map function names (agent hook uses connect/disconnect, others use startConversation/stopConversation)
+  const startConversation = voiceProvider === 'agent' ? 
+    (currentHook as any).connect : 
+    (currentHook as any).startConversation;
+  
+  const stopConversation = voiceProvider === 'agent' ? 
+    (currentHook as any).disconnect : 
+    (currentHook as any).stopConversation;
+  
+  const sendAudioChunk = (currentHook as any).sendAudioChunk;
+
+  // Create unified message thread with provider-aware deduplication
+  const unifiedMessages = useMemo(() => {
+    if (voiceProvider === 'agent') {
+      // Agent voice hook manages its own unified messages
+      return messages;
+    } else {
+      // Legacy providers: combine local text messages and voice transcripts
+      const allMessages = [...messages, ...hookMessages];
+      
+      // Provider-aware deduplication: only dedupe same provider + exact content within 2 seconds
+      const deduplicatedMessages = allMessages.filter((message, index, array) => {
+        const isDuplicate = array.findIndex((other, otherIndex) => {
+          if (otherIndex >= index) return false; // Only check earlier messages
+          
+          const messageTime = new Date(message.timestamp).getTime();
+          const otherTime = new Date(other.timestamp).getTime();
+          const timeDiff = Math.abs(messageTime - otherTime);
+          
+          // Only dedupe if same provider (or both missing provider) AND same content
+          const sameProvider = message.provider === other.provider || 
+                              (!message.provider && !other.provider);
+          
+          return sameProvider &&
+                 message.role === other.role && 
+                 message.content === other.content && 
+                 timeDiff < 2000; // Within 2 seconds
+        });
+        
+        return isDuplicate === -1; // Keep if no duplicate found
+      });
+    
+      // Sort by timestamp for chronological order
+      return deduplicatedMessages.sort((a, b) => 
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+    }
+  }, [messages, hookMessages, voiceProvider]);
+
+  // Track previous provider to only disconnect on actual provider changes
+  const prevProviderRef = useRef(voiceProvider);
+  
+  // Reset states when voice provider changes (prevent stuck loading states)
+  useEffect(() => {
+    const prevProvider = prevProviderRef.current;
+    const currentProvider = voiceProvider;
+    
+    console.log(`Voice provider switched from ${prevProvider} to: ${currentProvider}`);
+    
+    // Only disconnect if provider actually changed AND we're connected
+    if (prevProvider !== currentProvider && isConnected) {
+      console.log('Disconnecting from previous provider due to provider switch');
+      stopConversation();
+    }
+    
+    // Update ref for next comparison
+    prevProviderRef.current = currentProvider;
+    
+    // Clear any lingering UI states only on actual provider change
+    if (prevProvider !== currentProvider) {
+      setIsRecording(false);
+      setIsListening(false);
+      setInputText('');
+    }
+  }, [voiceProvider, stopConversation, isConnected]);
 
   // Convert Float32 PCM to Int16 PCM (required by ElevenLabs)
   const convertFloat32ToInt16 = (float32Array: Float32Array): Int16Array => {
@@ -376,6 +666,8 @@ export const TradingDashboardSimple: React.FC = () => {
   
   // Single connect/disconnect handler with debounce
   const handleConnectToggle = async () => {
+    console.log('🎯 handleConnectToggle called, voiceProvider:', voiceProvider, 'isConnected:', isConnected);
+    
     const now = Date.now();
     
     // Debounce rapid clicks (minimum 1 second between attempts)
@@ -394,38 +686,135 @@ export const TradingDashboardSimple: React.FC = () => {
       hasStartedRecordingRef.current = false;
     } else {
       const providerName = voiceProvider === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI Realtime';
-      console.log(`Connecting to ${providerName}...`);
+      console.log(`🚀 Connecting to ${providerName}...`);
+      console.log('📞 About to call startConversation()...');
+      
       // Connect (voice recording will auto-start via useEffect when connected)
       try {
         await startConversation();
+        console.log('✅ startConversation() completed');
       } catch (error) {
-        console.error('Failed to connect:', error);
+        console.error('❌ Failed to connect:', error);
         alert(`Failed to connect to ${providerName} voice assistant. Please check your connection and try again.`);
       }
     }
   };
 
-  // Handle text message sending with pre-processing
+  // Direct OpenAI connection handler - simplified single click
+  const handleOpenAIConnect = async () => {
+    const now = Date.now();
+    
+    // Debounce rapid clicks
+    if (now - connectionAttemptTimeRef.current < 1000) {
+      console.log('Debouncing rapid OpenAI connection attempt');
+      return;
+    }
+    
+    connectionAttemptTimeRef.current = now;
+    
+    // Set provider to OpenAI and connect immediately
+    setVoiceProvider('openai');
+    
+    // Small delay to ensure state update
+    setTimeout(async () => {
+      console.log('Connecting directly to OpenAI Realtime...');
+      try {
+        await startConversation();
+      } catch (error) {
+        console.error('Failed to connect to OpenAI:', error);
+        alert('Failed to connect to OpenAI Realtime. Please check your connection and try again.');
+      }
+    }, 100);
+  };
+
+  // Handle text message sending - route ONLY to active provider
   const handleSendTextMessage = () => {
-    if (inputText.trim() && isConnected) {
+    console.log('🎯 handleSendTextMessage called');
+    console.log('📝 Input text:', inputText);
+    console.log('🔌 Is connected:', isConnected);
+    console.log('🎤 Voice provider:', voiceProvider);
+    
+    if (inputText.trim()) {
       // Stop voice recording before sending text to prevent conflicts
       if (isRecording) {
         console.log('Stopping voice recording before sending text message');
         stopVoiceRecording();
       }
       
-      // Use the unified sendTextMessage from the provider hook
-      sendTextMessage(inputText);
+      // Generate unique ID with provider prefix
+      const messageId = `${voiceProvider}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Add user message to chat thread immediately (regardless of connection status)
+      const userMessage: Message = {
+        id: `user-${messageId}`,
+        role: 'user' as const,
+        content: inputText.trim(),
+        timestamp: new Date().toISOString(),
+        provider: voiceProvider as 'agent' | 'elevenlabs' | 'openai'
+      };
+      
+      // Add to local messages for immediate UI feedback
+      setMessages(prev => [...prev, userMessage]);
+      console.log('💬 Added user message to chat thread');
+      
+      // Clear input immediately for better UX
+      const messageText = inputText;
       setInputText('');
-    } else if (!isConnected) {
-      alert('Please connect to the voice assistant first');
+      
+      // Route ONLY to the active provider
+      switch(voiceProvider) {
+        case 'agent':
+          // Agent text should work immediately (no voice connection required)
+          fetch((import.meta.env.VITE_API_URL || window.location.origin) + '/api/agent/orchestrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: messageText })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.text) {
+              const agentMessage: Message = {
+                id: `assistant-agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                role: 'assistant',
+                content: data.text,
+                timestamp: new Date().toISOString(),
+                provider: 'agent'
+              };
+              setMessages(prev => [...prev, agentMessage]);
+              console.log('✅ Added backend agent response to chat');
+            }
+          })
+          .catch(err => console.error('Backend agent error:', err));
+          break;
+
+        case 'elevenlabs':
+        case 'openai':
+          // Voice providers require a live connection
+          if (isConnected) {
+            sendTextMessage(messageText);
+          } else {
+            setTimeout(() => {
+              const offlineMessage = {
+                id: `assistant-${Date.now()}-${Math.random()}`,
+                role: 'assistant' as const,
+                content: 'Please connect the voice assistant (mic) to use voice providers.',
+                timestamp: new Date().toISOString(),
+                provider: voiceProvider
+              } as any;
+              setMessages(prev => [...prev, offlineMessage]);
+            }, 300);
+          }
+          break;
+
+        default:
+          console.warn('Unknown provider:', voiceProvider);
+      }
+    } else {
+      console.log('❌ Cannot send message - no text entered');
     }
   };
 
-  const handleTabChange = (tab: 'charts' | 'voice') => {
-    setActiveTab(tab);
-    console.log('Tab changed to:', tab);
-  };
+  // Tab system removed - voice is always available via FAB
 
   const handleNewsToggle = (index: number) => {
     setExpandedNews(expandedNews === index ? null : index);
@@ -693,442 +1082,52 @@ export const TradingDashboardSimple: React.FC = () => {
         />
       )}
       
-      {/* Header */}
-      <header className="dashboard-header">
+      {/* Header with Integrated Ticker Cards */}
+      <header className="dashboard-header-with-tickers">
         <div className="header-left">
           <h1 className="brand">GVSES</h1>
           <span className="subtitle">AI Market Analysis Assistant</span>
         </div>
         
-        <div className="header-tabs">
-          <button 
-            className={`tab-btn ${activeTab === 'charts' ? 'active' : ''}`}
-            onClick={() => handleTabChange('charts')}
-            data-testid="charts-tab"
-          >
-            Interactive Charts
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'voice' ? 'active' : ''}`}
-            onClick={() => handleTabChange('voice')}
-            data-testid="voice-tab"
-          >
-            Voice + Manual Control
-          </button>
+        {/* Compact Ticker Cards in Header */}
+        <div className="header-tickers">
+          {isLoadingStocks ? (
+            <div className="ticker-loading">Loading...</div>
+          ) : (
+            stocksData.slice(0, 5).map((stock) => (
+              <div 
+                key={stock.symbol} 
+                className={`ticker-compact ${selectedSymbol === stock.symbol ? 'selected' : ''}`}
+                onClick={() => setSelectedSymbol(stock.symbol)}
+                title={`${stock.symbol}: ${stock.label}`}
+              >
+                <div className="ticker-compact-left">
+                  <div className="ticker-symbol-compact">{stock.symbol}</div>
+                  <div className="ticker-price-compact">${stock.price.toFixed(2)}</div>
+                </div>
+                <div className="ticker-compact-right">
+                  <div className={`ticker-change-compact ${stock.change >= 0 ? 'positive' : 'negative'}`}>
+                    {stock.change >= 0 ? '+' : ''}{stock.changePercent.toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
-
-        <button className="back-btn" onClick={handleBackToClassic}>Back to Classic</button>
+        
+        <div className="header-controls">
+          <span className="status-indicator">
+            {isConnected ? '🟢' : '⚪'}
+          </span>
+        </div>
       </header>
+
 
       {/* Main Layout */}
       <div className="dashboard-layout">
-        {/* Left Panel - Market Insights */}
-        <aside className="insights-panel">
-          <h2 className="panel-title">MARKET INSIGHTS</h2>
-          <div style={{ padding: '10px 15px', borderBottom: '1px solid #3a3a3a', position: 'relative' }}>
-            <div style={{ display: 'flex', gap: '8px', position: 'relative' }} ref={searchInputRef}>
-              <div style={{ flex: 1, position: 'relative' }}>
-                <input
-                  type="text"
-                  placeholder="Search symbols (e.g., Microsoft, MSFT)"
-                  value={searchSymbol}
-                  onChange={(e) => setSearchSymbol(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && searchSymbol) {
-                      // If there's an exact match, use it; otherwise add the raw input
-                      const exactMatch = searchResults.find(
-                        r => r.symbol.toLowerCase() === searchSymbol.toLowerCase()
-                      );
-                      if (exactMatch) {
-                        handleSelectSymbol(exactMatch);
-                      } else {
-                        addToWatchlist(searchSymbol);
-                      }
-                    }
-                  }}
-                  onFocus={() => setShowSearchDropdown(searchSymbol.length >= 1 && (searchResults.length > 0 || isSearching))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    paddingRight: isSearching ? '32px' : '12px',
-                    borderRadius: '4px',
-                    border: '1px solid #3a3a3a',
-                    backgroundColor: '#1a1a1a',
-                    color: '#ffffff',
-                    fontSize: '14px'
-                  }}
-                  disabled={isAddingSymbol}
-                />
-                {isSearching && (
-                  <div style={{
-                    position: 'absolute',
-                    right: '8px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    fontSize: '12px',
-                    color: '#888'
-                  }}>
-                    ...
-                  </div>
-                )}
-                
-                {/* Search Results Dropdown */}
-                {showSearchDropdown && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    backgroundColor: '#1a1a1a',
-                    border: '1px solid #3a3a3a',
-                    borderTop: 'none',
-                    borderRadius: '0 0 4px 4px',
-                    maxHeight: '200px',
-                    overflowY: 'auto',
-                    zIndex: 1000
-                  }}>
-                    {isSearching && searchResults.length === 0 ? (
-                      <div style={{ padding: '12px', color: '#888', fontSize: '14px' }}>
-                        Searching...
-                      </div>
-                    ) : searchError ? (
-                      <div style={{ padding: '12px', color: '#ff6b6b', fontSize: '14px' }}>
-                        {searchError}
-                      </div>
-                    ) : searchResults.length > 0 ? (
-                      searchResults.map((result) => (
-                        <div
-                          key={result.symbol}
-                          onClick={() => handleSelectSymbol(result)}
-                          style={{
-                            padding: '12px',
-                            cursor: 'pointer',
-                            borderBottom: '1px solid #2a2a2a',
-                            fontSize: '14px'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2a2a2a'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                        >
-                          <div style={{ fontWeight: 'bold', color: '#4a9eff' }}>
-                            {result.symbol}
-                          </div>
-                          <div style={{ color: '#ccc', fontSize: '12px', marginTop: '2px' }}>
-                            {result.name} • {result.exchange}
-                          </div>
-                        </div>
-                      ))
-                    ) : searchSymbol.length >= 1 && (
-                      <div style={{ padding: '12px', color: '#888', fontSize: '14px' }}>
-                        No symbols found for "{searchSymbol}"
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => {
-                  if (searchSymbol) {
-                    const exactMatch = searchResults.find(
-                      r => r.symbol.toLowerCase() === searchSymbol.toLowerCase()
-                    );
-                    if (exactMatch) {
-                      handleSelectSymbol(exactMatch);
-                    } else {
-                      addToWatchlist(searchSymbol);
-                    }
-                  }
-                }}
-                disabled={!searchSymbol || isAddingSymbol}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '4px',
-                  backgroundColor: searchSymbol && !isAddingSymbol ? '#4a9eff' : '#3a3a3a',
-                  color: '#ffffff',
-                  border: 'none',
-                  cursor: searchSymbol && !isAddingSymbol ? 'pointer' : 'not-allowed',
-                  fontSize: '14px',
-                  fontWeight: 'bold'
-                }}
-              >
-                {isAddingSymbol ? '...' : 'Add'}
-              </button>
-            </div>
-          </div>
-          <div className="insights-content">
-            {isLoadingStocks ? (
-              <div className="loading-spinner">Loading market data...</div>
-            ) : (
-              stocksData.map((stock) => (
-                <div 
-                  key={stock.symbol} 
-                  className={`stock-item ${selectedSymbol === stock.symbol ? 'selected' : ''}`}
-                  onClick={() => setSelectedSymbol(stock.symbol)}
-                  style={{ cursor: 'pointer', position: 'relative' }}
-                >
-                  <div className="stock-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="stock-symbol">{stock.symbol}</span>
-                    {watchlist.length > 1 && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFromWatchlist(stock.symbol);
-                        }}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#666',
-                          cursor: 'pointer',
-                          padding: '2px 6px',
-                          fontSize: '16px',
-                          lineHeight: '1'
-                        }}
-                        title="Remove from watchlist"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                  <div className="stock-price">
-                    <span className="price">${stock.price.toFixed(2)}</span>
-                    <span className={`change ${stock.change >= 0 ? 'positive' : 'negative'}`}>
-                      {stock.change >= 0 ? '↑' : '↓'} {Math.abs(stock.changePercent).toFixed(2)}%
-                    </span>
-                  </div>
-                  {stock.volume && (
-                    <div className="stock-volume">Vol: {(stock.volume / 1000000).toFixed(1)}M</div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </aside>
+        {/* Left Panel - Chart Analysis */}
+        <aside className="analysis-panel-left" style={{ width: `${leftPanelWidth}px` }}>
 
-        {/* Center - Chart and Voice */}
-        <main className="main-content">
-          {/* Chart */}
-          <div className="chart-section">
-            <div className="chart-wrapper">
-              <TradingChart 
-                symbol={selectedSymbol} 
-                technicalLevels={technicalLevels}
-                chartStyle={chartStyle}
-                timeframe={chartTimeframe}
-                assetType={assetType}
-                data-testid="trading-chart"
-                onChartReady={(chart: any) => {
-                  chartRef.current = chart;
-                  chartControlService.setChartRef(chart);
-                  enhancedChartControl.setChartRef(chart);
-                  console.log('Chart ready for enhanced agent control');
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Voice Assistant */}
-          <div className="voice-section" data-testid="voice-interface">
-            {/* Voice Provider Switcher - Simplified */}
-            {!isConnected && (
-              <div className="provider-switcher" data-testid="provider-switcher">
-                <div className="provider-switcher-header">
-                  <span className="provider-label">Select Voice Provider:</span>
-                  <div className="provider-options">
-                    <button 
-                      className={`provider-btn ${voiceProvider === 'elevenlabs' ? 'active' : ''}`}
-                      onClick={() => setVoiceProvider('elevenlabs')}
-                      disabled={isConnected}
-                      data-testid="provider-elevenlabs"
-                    >
-                      🎤 ElevenLabs
-                    </button>
-                    <button 
-                      className={`provider-btn ${voiceProvider === 'openai' ? 'active' : ''}`}
-                      onClick={() => setVoiceProvider('openai')}
-                      disabled={isConnected}
-                      data-testid="provider-openai"
-                    >
-                      🤖 OpenAI Realtime
-                    </button>
-                  </div>
-                  <div className="provider-info">
-                    {voiceProvider === 'elevenlabs' ? (
-                      <span className="provider-status">Conversational AI with natural voices</span>
-                    ) : (
-                      <span className="provider-status">Speech-to-speech with function calling</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Main Connect Button - Single prominent button */}
-            {!isConnected && (
-              <div style={{ padding: '20px', textAlign: 'center' }}>
-                <button 
-                  className="primary-connect-btn"
-                  onClick={handleConnectToggle}
-                  disabled={isConnecting}
-                  style={{
-                    width: '80%',
-                    fontSize: '18px',
-                    padding: '16px 24px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: isConnecting ? '#666' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    color: 'white',
-                    cursor: isConnecting ? 'wait' : 'pointer',
-                    fontWeight: 'bold',
-                    boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
-                    transition: 'all 0.3s ease'
-                  }}
-                  data-testid="main-connect-button"
-                >
-                  {isConnecting ? '⏳ Connecting...' : '🎤 Connect Voice Assistant'}
-                </button>
-              </div>
-            )}
-            
-            {/* Disconnect Button - Shows when connected */}
-            {isConnected && (
-              <div style={{ padding: '10px 20px', textAlign: 'center' }}>
-                <button 
-                  className="disconnect-btn"
-                  onClick={handleConnectToggle}
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: '6px',
-                    border: '1px solid #ff4444',
-                    background: 'transparent',
-                    color: '#ff4444',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    transition: 'all 0.3s ease'
-                  }}
-                  data-testid="disconnect-button"
-                >
-                  🔴 Disconnect
-                </button>
-              </div>
-            )}
-            
-            {/* Listening Interface */}
-            <div className="listening-interface">
-              <div className="listening-animation">
-                <div 
-                  className={`mic-icon ${isListening ? 'listening' : ''}`}
-                >
-                  <div className="pulse-ring"></div>
-                  <div className="pulse-ring"></div>
-                  <div className="pulse-ring"></div>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 14C13.66 14 15 12.66 15 11V5C15 3.34 13.66 2 12 2C10.34 2 9 3.34 9 5V11C9 12.66 10.34 14 12 14Z" fill="currentColor"/>
-                    <path d="M17 11C17 14.03 14.53 16.5 11.5 16.5C8.47 16.5 6 14.03 6 11H4C4 14.41 6.72 17.23 10 17.72V21H14V17.72C17.28 17.23 20 14.41 20 11H17Z" fill="currentColor"/>
-                  </svg>
-                </div>
-                <div className="listening-text">
-                  {isConnected ? 
-                    '🎧 Listening... (speak anytime)' : 
-                    isConnecting ? '⏳ Connecting...' :
-                    '🔌 Click mic to connect'}
-                </div>
-                {isRecording && (
-                  <div className="recording-timer" data-testid="recording-timer">{recordingTime}</div>
-                )}
-              </div>
-              
-              <div className="audio-visualizer" data-testid="audio-level">
-                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
-                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 400)}%` }}></div>
-                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 600)}%` }}></div>
-                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 400)}%` }}></div>
-                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
-              </div>
-              
-              <div className="connection-status" data-testid="connection-status">
-                <span className="status-dot"></span>
-                {isConnected ? 'Connected' : 'Disconnected'}
-              </div>
-            </div>
-
-            {/* Voice Conversation */}
-            <div className="voice-conversation">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <h3 style={{ margin: 0 }}>Voice Conversation</h3>
-                {/* ProviderSelector removed - conflicts with useElevenLabsConversation */}
-              </div>
-              <div className="conversation-messages" data-testid="messages-container">
-                {messages.length === 0 ? (
-                  <div className="no-messages">
-                    <p style={{ fontSize: '14px', color: '#666' }}>Click mic to connect • Speak anytime when connected</p>
-                    <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '5px' }}>
-                      <p style={{ fontSize: '12px', margin: '5px 0', color: '#888' }}>Try these commands:</p>
-                      <p style={{ fontSize: '11px', margin: '3px 0', color: '#666' }}>"What's the price of Tesla?"</p>
-                      <p style={{ fontSize: '11px', margin: '3px 0', color: '#666' }}>"Show me Apple's chart"</p>
-                      <p style={{ fontSize: '11px', margin: '3px 0', color: '#666' }}>"What's the market sentiment?"</p>
-                    </div>
-                  </div>
-                ) : (
-                  messages.map((msg) => (
-                    <div key={msg.id} className="conversation-message">
-                      <div className="message-icon">
-                        {msg.role === 'user' ? '👤' : '🤖'}
-                      </div>
-                      <div className="message-content">
-                        <div className="message-text">{msg.content}</div>
-                        {msg.timestamp && (
-                          <div className="message-time">{msg.timestamp}</div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-              
-              <div className="conversation-footer">
-                <span className="footer-text">
-                  {messages.length} message{messages.length !== 1 ? 's' : ''} • 
-                  {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
-                </span>
-              </div>
-              
-              
-              {/* Text Input Section - Only shown when connected */}
-              {isConnected && (
-                <div className="text-input-section">
-                  <div className="text-input-group">
-                    <input
-                      type="text"
-                      value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleSendTextMessage()}
-                      onFocus={() => {
-                        // Stop voice recording when focusing on text input
-                        if (isRecording) {
-                          console.log('Stopping voice recording - text input focused');
-                          stopVoiceRecording();
-                        }
-                      }}
-                      placeholder="Type a message (or just speak)..."
-                      className="text-input"
-                      data-testid="message-input"
-                    />
-                    <button 
-                      onClick={handleSendTextMessage}
-                      disabled={!inputText.trim()}
-                      className="send-button"
-                      data-testid="send-button"
-                    >
-                      Send
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </main>
-
-        {/* Right Panel - Chart Analysis */}
-        <aside className="analysis-panel">
           <h2 className="panel-title">CHART ANALYSIS</h2>
           <div className="analysis-content">
             {isLoadingNews ? (
@@ -1180,21 +1179,21 @@ export const TradingDashboardSimple: React.FC = () => {
                 <div className="technical-section">
                   <h4>TECHNICAL LEVELS</h4>
                   <div className="level-row">
-                    <span>QE Level</span>
+                    <span>Sell High</span>
                     <span className="level-val qe">
-                      ${technicalLevels.qe_level ? technicalLevels.qe_level.toFixed(2) : '---'}
+                      ${technicalLevels.sell_high_level ? technicalLevels.sell_high_level.toFixed(2) : '---'}
                     </span>
                   </div>
                   <div className="level-row">
-                    <span>ST Level</span>
+                    <span>Buy Low</span>
                     <span className="level-val st">
-                      ${technicalLevels.st_level ? technicalLevels.st_level.toFixed(2) : '---'}
+                      ${technicalLevels.buy_low_level ? technicalLevels.buy_low_level.toFixed(2) : '---'}
                     </span>
                   </div>
                   <div className="level-row">
-                    <span>LTB Level</span>
+                    <span>BTD</span>
                     <span className="level-val ltb">
-                      ${technicalLevels.ltb_level ? technicalLevels.ltb_level.toFixed(2) : '---'}
+                      ${technicalLevels.btd_level ? technicalLevels.btd_level.toFixed(2) : '---'}
                     </span>
                   </div>
                 </div>
@@ -1214,31 +1213,125 @@ export const TradingDashboardSimple: React.FC = () => {
             )}
           </div>
         </aside>
+
+        {/* Left Panel Divider */}
+        <PanelDivider onDrag={handleLeftPanelResize} />
+
+        {/* Center - Chart Always Visible */}
+        <main className="main-content">
+          {/* Chart Section - Always Visible */}
+          <div className="chart-section">
+            <div className="chart-wrapper">
+              <TradingChart 
+                symbol={selectedSymbol} 
+                technicalLevels={technicalLevels}
+                onChartReady={(chart: any) => {
+                  chartRef.current = chart;
+                  chartControlService.setChartRef(chart);
+                  enhancedChartControl.setChartRef(chart);
+                  console.log('Chart ready for enhanced agent control');
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Voice Status Bar - Minimal */}
+          {isConnected && (
+            <div className="voice-status-bar" data-testid="voice-interface">
+              <div className="audio-level-mini">
+                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
+                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 400)}%` }}></div>
+                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 600)}%` }}></div>
+              </div>
+              <span className="voice-status-text">{isListening ? 'Listening...' : 'Connected'}</span>
+            </div>
+          )}
+        </main>
+
+        {/* Right Panel Divider */}
+        <PanelDivider onDrag={handleRightPanelResize} />
+
+        {/* Right Panel - Voice Assistant Only */}
+        <aside className="voice-panel-right" style={{ width: `${rightPanelWidth}px` }}>
+          {/* Voice Conversation Section */}
+          <div className="voice-conversation-section" style={{ height: '100%' }}>
+            <h2 className="panel-title">VOICE ASSISTANT</h2>
+            <div className="conversation-messages-compact">
+              {unifiedMessages.length === 0 ? (
+                <div className="no-messages-state">
+                  <p>🎤 {isConnected ? 'Listening...' : 'Click mic to start'}</p>
+                </div>
+                ) : (
+                  unifiedMessages.map((msg) => (
+                    <div key={msg.id} className="conversation-message-enhanced">
+                      <div className="message-avatar">
+                        {msg.role === 'user' ? '👤' : '🤖'}
+                      </div>
+                      <div className="message-bubble">
+                        {msg.role === 'assistant' ? (
+                          <StructuredResponse content={msg.content} className="message-text-enhanced" />
+                        ) : (
+                          <div className="message-text-enhanced">{msg.content}</div>
+                        )}
+                        {msg.timestamp && (
+                          <div className="message-timestamp">
+                            {new Date(msg.timestamp).toLocaleTimeString([], { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+            </div>
+            
+            {/* Text Input Controls */}
+            <div className="voice-input-container">
+              <input
+                type="text"
+                className="voice-text-input"
+                placeholder={isConnected ? "Type a message..." : "Connect to send messages"}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendTextMessage();
+                  }
+                }}
+                disabled={false}
+              />
+              <button
+                className="voice-send-button"
+                onClick={handleSendTextMessage}
+                disabled={!inputText.trim()}
+                title="Send message"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </aside>
       </div>
 
-      {/* Footer */}
-      <footer className="dashboard-footer">
-        <div className="footer-tabs">
-          <button 
-            className={`footer-tab ${activeTab === 'charts' ? 'active' : ''}`}
-            onClick={() => handleTabChange('charts')}
-          >
-            Interactive Charts
-          </button>
-          <button 
-            className={`footer-tab ${activeTab === 'voice' ? 'active' : ''}`}
-            onClick={() => handleTabChange('voice')}
-          >
-            Voice + Manual Control
-          </button>
-          <button className="footer-tab">Educational Analysis</button>
-        </div>
-        <button className="chart-ready">📊 Chart Ready</button>
-      </footer>
+      
+      {/* Floating Voice Action Button */}
+      <button 
+        className={`voice-fab ${isConnected ? 'active' : ''} ${isConnecting ? 'connecting' : ''}`}
+        onClick={handleConnectToggle}
+        title={isConnected ? 'Disconnect Voice' : 'Connect Voice'}
+        data-testid="voice-fab"
+      >
+        {isConnecting ? '⌛' : isConnected ? '🎤' : '🎙️'}
+      </button>
       
       {/* Voice Command Helper - Shows command history and suggestions */}
       <VoiceCommandHelper 
-        isVisible={activeTab === 'voice' || isConnected}
+        isVisible={isConnected}
         position="right"
         maxHeight={400}
       />
