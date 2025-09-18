@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { createChart, ColorType, CandlestickSeries, Time, IChartApi, ISeriesApi } from 'lightweight-charts'
+import { createChart, ColorType, Time, IChartApi, ISeriesApi, CandlestickSeries } from 'lightweight-charts'
 import { marketDataService } from '../services/marketDataService'
 import { chartControlService } from '../services/chartControlService'
+import { enhancedChartControl } from '../services/enhancedChartControl'
+import { useIndicatorState } from '../hooks/useIndicatorState'
+import { useIndicatorContext } from '../contexts/IndicatorContext'
+import { useChartSeries } from '../hooks/useChartSeries'
+import './TradingChart.css'
 
 interface TradingChartProps {
   symbol: string
@@ -13,10 +18,18 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const oscillatorChartRef = useRef<IChartApi | null>(null)
+  const oscillatorContainerRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [levelPositions, setLevelPositions] = useState<{ sell_high?: number; buy_low?: number; btd?: number }>({})
   const [isChartReady, setIsChartReady] = useState(false)
+  
+  // Indicator state and series management
+  const { state: indicatorState, actions: indicatorActions } = useIndicatorState()
+  const { dispatch: indicatorDispatch } = useIndicatorContext()
+  const mainChartSeries = useChartSeries(isChartReady ? chartRef.current : null)
+  const oscillatorSeries = useChartSeries(isChartReady ? oscillatorChartRef.current : null)
   
   // Lifecycle management refs
   const isMountedRef = useRef(true)
@@ -277,6 +290,12 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       setTimeout(() => updateLabelPositionsRef.current(), 200)
     })
     
+    // Connect enhanced chart control to indicator system
+    enhancedChartControl.initialize(chart, indicatorDispatch)
+    
+    // Expose to window for agent access
+    ;(window as any).enhancedChartControl = enhancedChartControl
+    
     // Notify parent that chart is ready
     if (onChartReady && !isChartDisposedRef.current) {
       onChartReady(chart)
@@ -370,8 +389,176 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
     }
   }, [technicalLevels])
   
+  // Update indicators when data changes
+  useEffect(() => {
+    if (!chartRef.current || !indicatorState.data) return;
+    
+    const { indicators } = indicatorState.data;
+    if (!indicators) return;
+    
+    // Update Moving Averages
+    const { movingAverages } = indicatorState.indicators;
+    if (movingAverages.ma20.enabled && indicators.movingAverages?.ma20) {
+      mainChartSeries.addOrUpdateSeries('ma20', indicators.movingAverages.ma20, {
+        type: 'line',
+        color: movingAverages.ma20.color,
+        lineWidth: movingAverages.ma20.lineWidth
+      });
+    } else {
+      mainChartSeries.removeSeries('ma20');
+    }
+    
+    if (movingAverages.ma50.enabled && indicators.movingAverages?.ma50) {
+      mainChartSeries.addOrUpdateSeries('ma50', indicators.movingAverages.ma50, {
+        type: 'line',
+        color: movingAverages.ma50.color,
+        lineWidth: movingAverages.ma50.lineWidth
+      });
+    } else {
+      mainChartSeries.removeSeries('ma50');
+    }
+    
+    if (movingAverages.ma200.enabled && indicators.movingAverages?.ma200) {
+      mainChartSeries.addOrUpdateSeries('ma200', indicators.movingAverages.ma200, {
+        type: 'line',
+        color: movingAverages.ma200.color,
+        lineWidth: movingAverages.ma200.lineWidth
+      });
+    } else {
+      mainChartSeries.removeSeries('ma200');
+    }
+    
+    // Update Bollinger Bands
+    if (indicatorState.indicators.bollingerBands.enabled && indicators.bollingerBands) {
+      mainChartSeries.addOrUpdateSeries('bb-upper', indicators.bollingerBands.upper, {
+        type: 'line',
+        color: indicatorState.indicators.bollingerBands.color,
+        lineWidth: 1
+      });
+      mainChartSeries.addOrUpdateSeries('bb-middle', indicators.bollingerBands.middle, {
+        type: 'line',
+        color: indicatorState.indicators.bollingerBands.color,
+        lineWidth: 1
+      });
+      mainChartSeries.addOrUpdateSeries('bb-lower', indicators.bollingerBands.lower, {
+        type: 'line',
+        color: indicatorState.indicators.bollingerBands.color,
+        lineWidth: 1
+      });
+    } else {
+      mainChartSeries.removeSeries('bb-upper');
+      mainChartSeries.removeSeries('bb-middle');
+      mainChartSeries.removeSeries('bb-lower');
+    }
+  }, [indicatorState.data, indicatorState.indicators, mainChartSeries]);
+  
+  // Create/destroy oscillator chart based on RSI/MACD
+  useEffect(() => {
+    const needsOscillator = indicatorState.indicators.rsi.enabled || indicatorState.indicators.macd.enabled;
+    
+    if (needsOscillator && !oscillatorChartRef.current && oscillatorContainerRef.current) {
+      // Create oscillator chart
+      const oscChart = createChart(oscillatorContainerRef.current, {
+        layout: {
+          background: { type: ColorType.Solid, color: 'white' },
+          textColor: '#333',
+        },
+        width: oscillatorContainerRef.current.clientWidth,
+        height: 150,
+        grid: {
+          vertLines: { color: '#f0f0f0' },
+          horzLines: { color: '#f0f0f0' },
+        },
+        rightPriceScale: {
+          borderColor: '#e0e0e0',
+        },
+        timeScale: {
+          borderColor: '#e0e0e0',
+          visible: false, // Hide time axis (synced with main chart)
+        },
+      });
+      
+      oscillatorChartRef.current = oscChart;
+      
+      // Sync time scale with main chart
+      if (chartRef.current) {
+        chartRef.current.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+          if (range && oscillatorChartRef.current) {
+            oscillatorChartRef.current.timeScale().setVisibleLogicalRange(range);
+          }
+        });
+      }
+    } else if (!needsOscillator && oscillatorChartRef.current) {
+      // Destroy oscillator chart
+      oscillatorChartRef.current.remove();
+      oscillatorChartRef.current = null;
+    }
+  }, [indicatorState.indicators.rsi.enabled, indicatorState.indicators.macd.enabled]);
+  
+  // Update oscillator indicators
+  useEffect(() => {
+    if (!oscillatorChartRef.current || !indicatorState.data) return;
+    
+    const { indicators } = indicatorState.data;
+    if (!indicators) return;
+    
+    // Update RSI
+    if (indicatorState.indicators.rsi.enabled && indicators.rsi) {
+      oscillatorSeries.addOrUpdateSeries('rsi', indicators.rsi.values, {
+        type: 'line',
+        color: indicatorState.indicators.rsi.color,
+        lineWidth: 2
+      });
+      
+      // Add overbought/oversold lines
+      const rsiSeries = oscillatorSeries.getSeries('rsi');
+      if (rsiSeries) {
+        rsiSeries.createPriceLine({
+          price: indicatorState.indicators.rsi.overbought || 70,
+          color: 'rgba(255, 0, 0, 0.3)',
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: 'Overbought'
+        });
+        rsiSeries.createPriceLine({
+          price: indicatorState.indicators.rsi.oversold || 30,
+          color: 'rgba(0, 255, 0, 0.3)',
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: 'Oversold'
+        });
+      }
+    } else {
+      oscillatorSeries.removeSeries('rsi');
+    }
+    
+    // Update MACD
+    if (indicatorState.indicators.macd.enabled && indicators.macd) {
+      oscillatorSeries.addOrUpdateSeries('macd-line', indicators.macd.macdLine, {
+        type: 'line',
+        color: '#2962FF',
+        lineWidth: 2
+      });
+      oscillatorSeries.addOrUpdateSeries('macd-signal', indicators.macd.signalLine, {
+        type: 'line',
+        color: '#FF6B35',
+        lineWidth: 2
+      });
+      oscillatorSeries.addOrUpdateSeries('macd-histogram', indicators.macd.histogram, {
+        type: 'histogram',
+        color: '#26A69A'
+      });
+    } else {
+      oscillatorSeries.removeSeries('macd-line');
+      oscillatorSeries.removeSeries('macd-signal');
+      oscillatorSeries.removeSeries('macd-histogram');
+    }
+  }, [indicatorState.data, indicatorState.indicators, oscillatorSeries]);
+  
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div className="trading-chart-container">
       {isLoading && (
         <div style={{
           position: 'absolute',
@@ -414,12 +601,17 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       
       <div 
         ref={chartContainerRef} 
-        className="w-full" 
+        className="main-chart" 
         style={{ 
           opacity: (isLoading || error) ? 0.3 : 1,
-          height: '100%'
+          height: (indicatorState.indicators.rsi.enabled || indicatorState.indicators.macd.enabled) ? 'calc(100% - 160px)' : '100%'
         }} 
       />
+      
+      {/* Oscillator Chart (RSI/MACD) */}
+      {(indicatorState.indicators.rsi.enabled || indicatorState.indicators.macd.enabled) && (
+        <div className="oscillator-chart" ref={oscillatorContainerRef} />
+      )}
       
       {/* Custom left-side labels */}
       {!isLoading && !error && (

@@ -21,10 +21,17 @@ logger = logging.getLogger(__name__)
 # Import Alpaca service for chart data
 try:
     from alpaca_service import get_alpaca_service
-    ALPACA_AVAILABLE = True
+    # Check if we can actually get an Alpaca service instance
+    test_service = get_alpaca_service()
+    ALPACA_AVAILABLE = test_service is not None and test_service.is_available
+    if not ALPACA_AVAILABLE:
+        logger.warning("Alpaca service not available - credentials missing or initialization failed")
 except ImportError:
     ALPACA_AVAILABLE = False
-    logger.warning("Alpaca service not available - will use Yahoo Finance for all data")
+    logger.warning("Alpaca service not available - module not found")
+except Exception as e:
+    ALPACA_AVAILABLE = False
+    logger.warning(f"Alpaca service not available - {e}")
 
 
 # Simple cache implementation
@@ -59,6 +66,13 @@ async def search_assets_with_alpaca(query: str, limit: int = 20) -> List[Dict[st
         # Get Alpaca service instance
         alpaca_service = get_alpaca_service()
         
+        if alpaca_service is None:
+            logger.warning("Alpaca service unavailable - credentials or rate limit issue")
+            raise ValueError("Alpaca service temporarily unavailable")
+        
+        # Increment request count for rate limiting
+        alpaca_service._increment_request_count()
+        
         # Use the search method we just added
         results = await alpaca_service.search_assets(query, limit)
         
@@ -70,7 +84,7 @@ async def search_assets_with_alpaca(query: str, limit: int = 20) -> List[Dict[st
 
 
 async def get_quote_from_alpaca(symbol: str) -> Dict[str, Any]:
-    """Get current quote from Alpaca Markets."""
+    """Get current quote from Alpaca Markets with proper field mapping."""
     
     if not ALPACA_AVAILABLE:
         raise ValueError("Alpaca service not available")
@@ -81,6 +95,13 @@ async def get_quote_from_alpaca(symbol: str) -> Dict[str, Any]:
         # Get Alpaca service instance
         alpaca_service = get_alpaca_service()
         
+        if alpaca_service is None:
+            logger.warning("Alpaca service unavailable - credentials or rate limit issue")
+            raise ValueError("Alpaca service temporarily unavailable")
+        
+        # Increment request count for rate limiting
+        alpaca_service._increment_request_count()
+        
         # Get comprehensive snapshot for best price data
         snapshot = await alpaca_service.get_snapshot(symbol.upper())
         
@@ -88,7 +109,7 @@ async def get_quote_from_alpaca(symbol: str) -> Dict[str, Any]:
             logger.error(f"Alpaca snapshot error: {snapshot['error']}")
             raise ValueError(f"Alpaca error: {snapshot['error']}")
         
-        # Extract price data from snapshot
+        # Extract price data from snapshot with proper field mapping
         quote = {
             "symbol": symbol.upper(),
             "company_name": symbol.upper(),  # Alpaca doesn't provide company name
@@ -97,9 +118,12 @@ async def get_quote_from_alpaca(symbol: str) -> Dict[str, Any]:
             "is_open": True  # Will be updated if market status available
         }
         
-        # Get latest trade price
+        # Get latest trade price - map to 'price' for frontend
+        current_price = 0
         if "latest_trade" in snapshot:
-            quote["last"] = snapshot["latest_trade"]["price"]
+            current_price = snapshot["latest_trade"]["price"]
+            quote["price"] = current_price  # Frontend expects 'price'
+            quote["last"] = current_price    # Keep 'last' for compatibility
         
         # Get daily bar for OHLC
         if "daily_bar" in snapshot:
@@ -110,24 +134,37 @@ async def get_quote_from_alpaca(symbol: str) -> Dict[str, Any]:
             quote["volume"] = daily.get("volume", 0)
             
             # Use daily close as current if no latest trade
-            if "last" not in quote:
-                quote["last"] = daily.get("close", 0)
+            if current_price == 0 and daily.get("close"):
+                current_price = daily.get("close", 0)
+                quote["price"] = current_price
+                quote["last"] = current_price
         
-        # Calculate change from previous day
+        # Calculate change from previous day with proper field names
         if "previous_daily_bar" in snapshot:
             prev_close = snapshot["previous_daily_bar"].get("close", 0)
-            quote["prev_close"] = prev_close
+            quote["previous_close"] = prev_close  # Frontend expects 'previous_close'
+            quote["prev_close"] = prev_close      # Keep for compatibility
             
-            if quote.get("last") and prev_close:
-                quote["change_abs"] = round(quote["last"] - prev_close, 2)
-                quote["change_pct"] = round((quote["change_abs"] / prev_close) * 100, 2)
+            if current_price and prev_close:
+                change = round(current_price - prev_close, 2)
+                change_pct = round((change / prev_close) * 100, 2)
+                
+                quote["change"] = change           # Frontend expects 'change'
+                quote["change_abs"] = change       # Keep for compatibility
+                quote["change_percent"] = change_pct  # Frontend expects 'change_percent'
+                quote["change_pct"] = change_pct      # Keep for compatibility
             else:
+                quote["change"] = 0
                 quote["change_abs"] = 0
+                quote["change_percent"] = 0
                 quote["change_pct"] = 0
         else:
+            quote["change"] = 0
             quote["change_abs"] = 0
+            quote["change_percent"] = 0
             quote["change_pct"] = 0
-            quote["prev_close"] = quote.get("last", 0)
+            quote["previous_close"] = current_price
+            quote["prev_close"] = current_price
         
         # Add quote prices if available
         if "latest_quote" in snapshot:
@@ -137,16 +174,61 @@ async def get_quote_from_alpaca(symbol: str) -> Dict[str, Any]:
             quote["ask_size"] = latest_quote.get("ask_size")
             quote["bid_size"] = latest_quote.get("bid_size")
         
-        # Set defaults for missing fields to match Yahoo format
+        # Get 52-week high/low from Alpaca bars
+        try:
+            # Increment request count for rate limiting
+            alpaca_service._increment_request_count()
+            
+            # Get 1 year of daily bars to calculate 52-week range
+            bars = await alpaca_service.get_stock_bars(symbol.upper(), "1Day", 365)
+            
+            if bars and not bars.get("error"):
+                bars_data = bars.get("bars", [])
+                if bars_data:
+                    highs = [bar["high"] for bar in bars_data if "high" in bar]
+                    lows = [bar["low"] for bar in bars_data if "low" in bar]
+                    
+                    if highs and lows:
+                        year_high = max(highs)
+                        year_low = min(lows)
+                        
+                        quote["year_high"] = round(year_high, 2)
+                        quote["year_low"] = round(year_low, 2)
+                        quote["week52_high"] = round(year_high, 2)
+                        quote["week52_low"] = round(year_low, 2)
+                        
+                        logger.info(f"52-week range for {symbol}: ${year_low} - ${year_high}")
+                    else:
+                        quote["year_high"] = 0
+                        quote["year_low"] = 0
+                        quote["week52_high"] = 0
+                        quote["week52_low"] = 0
+                else:
+                    quote["year_high"] = 0
+                    quote["year_low"] = 0
+                    quote["week52_high"] = 0
+                    quote["week52_low"] = 0
+            else:
+                logger.warning(f"Could not fetch 52-week data for {symbol}")
+                quote["year_high"] = 0
+                quote["year_low"] = 0
+                quote["week52_high"] = 0
+                quote["week52_low"] = 0
+        except Exception as e:
+            logger.warning(f"Error fetching 52-week data: {e}")
+            quote["year_high"] = 0
+            quote["year_low"] = 0
+            quote["week52_high"] = 0
+            quote["week52_low"] = 0
+        
+        # Set other defaults for missing fields
         quote.setdefault("avg_volume_3m", 0)
         quote.setdefault("market_cap", 0)
         quote.setdefault("pe_ttm", 0)
         quote.setdefault("dividend_yield_pct", 0)
         quote.setdefault("beta", 1.0)
-        quote.setdefault("week52_high", 0)
-        quote.setdefault("week52_low", 0)
         
-        logger.info(f"Alpaca quote for {symbol}: ${quote.get('last', 'N/A')}")
+        logger.info(f"Alpaca quote for {symbol}: ${quote.get('price', 'N/A')}, open: ${quote.get('open', 0)}")
         return quote
         
     except Exception as e:

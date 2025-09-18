@@ -15,7 +15,7 @@ import uuid
 import datetime
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -71,6 +71,16 @@ except ImportError as e:
     logger.warning(f"Enhanced market router not available: {e}")
 except Exception as e:
     logger.error(f"Error mounting enhanced market router: {e}")
+
+# Mount agent router for internal agent orchestrator
+try:
+    from routers.agent_router import router as agent_router
+    app.include_router(agent_router)
+    logger.info("Agent router mounted successfully")
+except ImportError as e:
+    logger.warning(f"Agent router not available: {e}")
+except Exception as e:
+    logger.error(f"Error mounting agent router: {e}")
 
 # Initialize Supabase client
 def get_supabase_client() -> Client:
@@ -250,7 +260,23 @@ async def startup_event():
     try:
         supabase = get_supabase_client()
         conversation_manager = ConversationManager(supabase)
-        claude_service = ClaudeService()
+        # Disabled Claude service - using AgentOrchestrator instead
+        # claude_service = ClaudeService()
+        claude_service = None
+        
+        # Test Alpaca connectivity on startup
+        if os.environ.get("ALPACA_API_KEY") and os.environ.get("ALPACA_SECRET_KEY"):
+            try:
+                from services.market_service import get_quote_from_alpaca, ALPACA_AVAILABLE
+                if ALPACA_AVAILABLE:
+                    test_quote = await get_quote_from_alpaca("AAPL")
+                    logger.info(f"✅ Alpaca service validated: AAPL=${test_quote.get('price', 'N/A')}, open=${test_quote.get('open', 0)}")
+                else:
+                    logger.warning("⚠️ Alpaca service not available - will use Yahoo Finance fallback")
+            except Exception as e:
+                logger.error(f"❌ Alpaca validation failed: {e}")
+        else:
+            logger.warning("⚠️ Alpaca credentials not found - using Yahoo Finance only")
         
         # Initialize OpenAI Realtime service
         try:
@@ -264,8 +290,8 @@ async def startup_event():
                 # Log enhanced training status
                 try:
                     from services.openai_relay_server import openai_relay_server
-                    if openai_relay_server.tool_mapper:
-                        logger.info("OpenAI agent enhanced training loaded successfully")
+                    # Voice-only interface - no tools
+                    logger.info("OpenAI Realtime voice-only interface loaded")
                 except:
                     pass
         except Exception as e:
@@ -315,7 +341,7 @@ async def health_check():
         "status": "healthy",
         "service_mode": MarketServiceFactory.get_service_mode(),
         "service_initialized": market_service is not None,
-        "openai_relay_ready": openai_service is not None and hasattr(openai_service, 'relay_server'),
+        "openai_relay_ready": False,  # Will be set below after checking actual relay server
         "timestamp": datetime.utcnow().isoformat()
     }
     
@@ -325,25 +351,76 @@ async def health_check():
         response["services"] = service_status
     
     # Add OpenAI relay details if available
-    if openai_service:
-        try:
-            if hasattr(openai_service, 'relay_server'):
-                from services.openai_relay_server import openai_relay_server
-                active_sessions = await openai_relay_server.get_active_sessions()
-                response["openai_relay"] = {
-                    "active": True,
-                    "sessions": len(active_sessions),
-                    "tool_mapper_initialized": openai_relay_server.tool_mapper is not None
-                }
-            else:
-                response["openai_relay"] = {"active": False, "reason": "Legacy service mode"}
-        except Exception as e:
-            response["openai_relay"] = {"active": False, "error": str(e)}
-    else:
-        response["openai_relay"] = {"active": False, "reason": "Service not initialized"}
+    try:
+        # Try to import the relay server directly
+        from services.openai_relay_server import openai_relay_server
+        active_sessions = await openai_relay_server.get_active_sessions()
+        response["openai_relay_ready"] = True
+        response["openai_relay"] = {
+            "active": True,
+            "sessions": len(active_sessions),
+            "voice_only": True,  # Voice-only interface (no tools)
+            "api_key_configured": bool(openai_relay_server.api_key)
+        }
+    except ImportError:
+        # Fallback to checking OpenAI service
+        if openai_service:
+            response["openai_relay_ready"] = True
+            response["openai_relay"] = {
+                "active": True,
+                "reason": "OpenAI service mode",
+                "api_key_configured": bool(openai_service.api_key)
+            }
+        else:
+            response["openai_relay_ready"] = False
+            response["openai_relay"] = {"active": False, "reason": "Service not initialized"}
+    except Exception as e:
+        response["openai_relay_ready"] = False
+        response["openai_relay"] = {"active": False, "error": str(e)}
     
     if market_service_error:
         response["service_error"] = market_service_error
+    
+    # Day 5.2: Add feature flags
+    response["features"] = {
+        "tool_wiring": True,  # Day 1: Tool integration complete
+        "triggers_disclaimers": True,  # Day 2: Smart triggers and disclaimers
+        "advanced_ta": {  # Day 3.1: Advanced technical analysis
+            "enabled": True,
+            "fallback_enabled": True,
+            "timeout_ms": 3000,
+            "levels": ["sell_high_level", "buy_low_level", "btd_level", "retest_level"]
+        },
+        "tailored_suggestions": True,  # Day 3.2: Dynamic suggestions
+        "concurrent_execution": {  # Day 4.1: Concurrent with timeouts
+            "enabled": True,
+            "global_timeout_s": 10,
+            "per_tool_timeouts": {
+                "get_stock_price": 2.0,
+                "get_stock_history": 3.0,
+                "get_stock_news": 4.0,
+                "get_comprehensive_stock_data": 5.0
+            }
+        },
+        "ideal_formatter": True,  # Priority: Professional response format
+        "bounded_llm_insights": {  # Day 4.2: AI insights
+            "enabled": True,
+            "max_chars": 250,
+            "model": "gpt-3.5-turbo",
+            "timeout_s": 2.0,
+            "fallback_enabled": True
+        },
+        "test_suite": {  # Day 5.1: Comprehensive testing
+            "enabled": True,
+            "last_run_success_rate": 76.9,
+            "total_tests": 26
+        }
+    }
+    
+    # Add version info
+    response["version"] = "2.0.0"  # Major update with all features
+    response["agent_version"] = "1.5.0"  # Agent orchestrator version
+    
     return response
 
 
@@ -476,35 +553,307 @@ async def get_comprehensive_stock_data(symbol: str):
         # Use the service
         data = await service.get_comprehensive_stock_data(symbol)
         
-        # Map field names for frontend compatibility
+        # Normalize technical level field names using centralized helper
         if "technical_levels" in data:
-            tech_levels = data["technical_levels"]
-            
-            # Handle both old and new field name formats
-            mapped_levels = {}
-            
-            # New format (human readable) -> Old format (abbreviated)
-            if "quick_entry" in tech_levels:
-                mapped_levels["qe_level"] = tech_levels["quick_entry"]
-            elif "qe_level" in tech_levels:
-                mapped_levels["qe_level"] = tech_levels["qe_level"]
-                
-            if "swing_trade" in tech_levels:
-                mapped_levels["st_level"] = tech_levels["swing_trade"]
-            elif "st_level" in tech_levels:
-                mapped_levels["st_level"] = tech_levels["st_level"]
-                
-            if "load_the_boat" in tech_levels:
-                mapped_levels["ltb_level"] = tech_levels["load_the_boat"]
-            elif "ltb_level" in tech_levels:
-                mapped_levels["ltb_level"] = tech_levels["ltb_level"]
-            
-            # Keep all other fields and add mapped ones
-            data["technical_levels"] = {**tech_levels, **mapped_levels}
+            from utils.technical_levels import normalize_technical_levels
+            data["technical_levels"] = normalize_technical_levels(data["technical_levels"])
         
         return data
     except Exception as e:
         logger.error(f"Error fetching comprehensive data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def convert_numpy_types(obj):
+    """Convert numpy types to native Python types for JSON serialization."""
+    import numpy as np
+    
+    if isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, (np.str_, np.unicode_)):
+        return str(obj)
+    else:
+        return obj
+
+@app.get("/api/technical-indicators")
+async def get_technical_indicators(
+    symbol: str, 
+    indicators: str = "fibonacci,macd,rsi,bollinger,stochastic",
+    period: int = 100
+):
+    """Get specific technical indicators for a stock symbol."""
+    try:
+        # Parse comma-separated indicators
+        requested_indicators = [ind.strip().lower() for ind in indicators.split(',')]
+        
+        # Get market service
+        service = await get_market_service()
+        if service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Market data service not available. Please try again in a moment."
+            )
+        
+        # Get stock history for calculations
+        history_result = await service.get_stock_history(symbol, period)
+        candles = history_result.get('candles', [])
+        
+        if not candles or len(candles) < 20:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient historical data for {symbol}. Need at least 20 candles, got {len(candles)}."
+            )
+        
+        # Get current price
+        quote = await service.get_stock_price(symbol)
+        current_price = quote.get('price', quote.get('last', 0))
+        
+        # Import technical analysis module
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from advanced_technical_analysis import AdvancedTechnicalAnalysis
+        from pattern_detection import PatternDetector, format_patterns_for_agent
+        
+        # Extract price data
+        prices = [c.get('close', c.get('c', 0)) for c in candles]
+        highs = [c.get('high', c.get('h', 0)) for c in candles]
+        lows = [c.get('low', c.get('l', 0)) for c in candles]
+        volumes = [c.get('volume', c.get('v', 0)) for c in candles]
+        
+        result = {
+            "symbol": symbol.upper(),
+            "timestamp": candles[-1].get('time', candles[-1].get('date')) if candles else None,
+            "current_price": current_price,
+            "indicators": {}
+        }
+        
+        # Calculate requested indicators
+        if 'fibonacci' in requested_indicators and len(prices) >= 50:
+            recent_high = max(highs[-50:])
+            recent_low = min(lows[-50:])
+            fib_levels = AdvancedTechnicalAnalysis.calculate_fibonacci_levels(
+                recent_high, recent_low, current_price > sum(prices[-20:]) / 20
+            )
+            result["indicators"]["fibonacci"] = {
+                **fib_levels,
+                "swing_high": recent_high,
+                "swing_low": recent_low
+            }
+        
+        if 'macd' in requested_indicators and len(prices) >= 26:
+            import numpy as np
+            timestamps = [c.get('time', c.get('date')) for c in candles]
+            
+            # Calculate MACD as time series
+            fast_period = 12
+            slow_period = 26
+            signal_period = 9
+            
+            # Calculate EMAs
+            def calculate_ema(data, period):
+                ema = []
+                multiplier = 2 / (period + 1)
+                current_ema = np.mean(data[:period])  # Start with SMA
+                
+                for i in range(period, len(data)):
+                    current_ema = (data[i] - current_ema) * multiplier + current_ema
+                    ema.append(current_ema)
+                return ema
+            
+            # Need at least slow_period prices
+            if len(prices) >= slow_period:
+                fast_ema = calculate_ema(prices, fast_period)
+                slow_ema = calculate_ema(prices, slow_period)
+                
+                # Calculate MACD line (fast EMA - slow EMA)
+                macd_line = []
+                for i in range(len(slow_ema)):
+                    if i + (slow_period - fast_period) < len(fast_ema):
+                        macd_value = fast_ema[i + (slow_period - fast_period)] - slow_ema[i]
+                        macd_line.append(macd_value)
+                
+                # Calculate signal line (9-period EMA of MACD)
+                signal_line = []
+                if len(macd_line) >= signal_period:
+                    signal_line = calculate_ema(macd_line, signal_period)
+                
+                # Build time series
+                macd_series = {
+                    "macd_line": [],
+                    "signal_line": [],
+                    "histogram": []
+                }
+                
+                # Start from where we have all three values
+                start_idx = slow_period + signal_period - 1
+                for i in range(len(signal_line)):
+                    idx = start_idx + i
+                    if idx < len(timestamps):
+                        macd_val = macd_line[signal_period - 1 + i]
+                        signal_val = signal_line[i]
+                        
+                        macd_series["macd_line"].append({
+                            "time": timestamps[idx],
+                            "value": round(macd_val, 4)
+                        })
+                        macd_series["signal_line"].append({
+                            "time": timestamps[idx],
+                            "value": round(signal_val, 4)
+                        })
+                        macd_series["histogram"].append({
+                            "time": timestamps[idx],
+                            "value": round(macd_val - signal_val, 4)
+                        })
+                
+                result["indicators"]["macd"] = macd_series
+        
+        if 'rsi' in requested_indicators and len(prices) >= 14:
+            import numpy as np
+            timestamps = [c.get('time', c.get('date')) for c in candles]
+            
+            # Calculate RSI as time series
+            rsi_series = []
+            period = 14
+            
+            for i in range(period, len(prices)):
+                window_prices = prices[max(0, i-period):i+1]
+                
+                # Calculate price changes
+                changes = np.diff(window_prices)
+                gains = np.where(changes > 0, changes, 0)
+                losses = np.where(changes < 0, -changes, 0)
+                
+                avg_gain = np.mean(gains)
+                avg_loss = np.mean(losses)
+                
+                if avg_loss == 0:
+                    rsi = 100
+                else:
+                    rs = avg_gain / avg_loss
+                    rsi = 100 - (100 / (1 + rs))
+                
+                rsi_series.append({
+                    "time": timestamps[i],
+                    "value": round(rsi, 2)
+                })
+            
+            # Get current RSI for signal
+            current_rsi = rsi_series[-1]["value"] if rsi_series else 50
+            
+            result["indicators"]["rsi"] = {
+                "values": rsi_series,
+                "current": current_rsi,
+                "overbought": 70,
+                "oversold": 30,
+                "signal": "overbought" if current_rsi > 70 else "oversold" if current_rsi < 30 else "neutral"
+            }
+        
+        if 'bollinger' in requested_indicators and len(prices) >= 20:
+            import numpy as np
+            timestamps = [c.get('time', c.get('date')) for c in candles]
+            
+            # Calculate Bollinger Bands as time series
+            bollinger_series = {
+                "upper": [],
+                "middle": [],
+                "lower": []
+            }
+            
+            for i in range(19, len(prices)):
+                window_prices = prices[i-19:i+1]
+                mean = np.mean(window_prices)
+                std = np.std(window_prices)
+                
+                bollinger_series["upper"].append({
+                    "time": timestamps[i],
+                    "value": round(mean + 2 * std, 2)
+                })
+                bollinger_series["middle"].append({
+                    "time": timestamps[i],
+                    "value": round(mean, 2)
+                })
+                bollinger_series["lower"].append({
+                    "time": timestamps[i],
+                    "value": round(mean - 2 * std, 2)
+                })
+            
+            result["indicators"]["bollinger"] = bollinger_series
+        
+        if 'stochastic' in requested_indicators and len(prices) >= 14:
+            stoch_data = AdvancedTechnicalAnalysis.calculate_stochastic(highs, lows, prices)
+            result["indicators"]["stochastic"] = stoch_data
+        
+        if 'moving_averages' in requested_indicators or 'ma' in requested_indicators:
+            import numpy as np
+            # Extract timestamps from candles
+            timestamps = [c.get('time', c.get('date')) for c in candles]
+            
+            # Calculate moving averages as time series
+            ma_data = {}
+            
+            # MA20 time series
+            if len(prices) >= 20:
+                ma20_series = []
+                for i in range(19, len(prices)):
+                    ma20_series.append({
+                        "time": timestamps[i],
+                        "value": round(np.mean(prices[i-19:i+1]), 2)
+                    })
+                ma_data["ma20"] = ma20_series
+            
+            # MA50 time series
+            if len(prices) >= 50:
+                ma50_series = []
+                for i in range(49, len(prices)):
+                    ma50_series.append({
+                        "time": timestamps[i],
+                        "value": round(np.mean(prices[i-49:i+1]), 2)
+                    })
+                ma_data["ma50"] = ma50_series
+            
+            # MA200 time series (if enough data)
+            if len(prices) >= 200:
+                ma200_series = []
+                for i in range(199, len(prices)):
+                    ma200_series.append({
+                        "time": timestamps[i],
+                        "value": round(np.mean(prices[i-199:i+1]), 2)
+                    })
+                ma_data["ma200"] = ma200_series
+                
+            result["indicators"]["moving_averages"] = ma_data
+        
+        if 'support_resistance' in requested_indicators or 'sr' in requested_indicators:
+            sr_levels = AdvancedTechnicalAnalysis.identify_support_resistance(prices, volumes)
+            result["indicators"]["support_resistance"] = sr_levels
+        
+        # Add pattern detection
+        if 'patterns' in requested_indicators or len(requested_indicators) == 0:
+            # Detect patterns on the candle data
+            detector = PatternDetector(candles)
+            patterns_result = detector.detect_all_patterns()
+            result["patterns"] = patterns_result
+            
+            # Add formatted explanation for the agent
+            result["patterns"]["agent_explanation"] = format_patterns_for_agent(patterns_result)
+        
+        result["data_source"] = history_result.get("data_source", "unknown")
+        result["calculation_period"] = period
+        
+        # Convert numpy types to native Python types for JSON serialization
+        return convert_numpy_types(result)
+        
+    except Exception as e:
+        logger.error(f"Error calculating technical indicators: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -706,42 +1055,103 @@ async def record_conversation(request: ConversationRecordRequest):
         logger.error(f"Error recording conversation: {e}")
         raise HTTPException(status_code=500, detail="Failed to record conversation")
 
+# Agent Orchestrator endpoints
+@app.post("/api/agent/orchestrate")
+async def orchestrate_agent(request: QueryRequest):
+    """Process a query using the agent orchestrator with function calling."""
+    try:
+        from services.agent_orchestrator import get_orchestrator
+        orchestrator = get_orchestrator()
+        
+        # Process the query with the orchestrator
+        result = await orchestrator.process_query(
+            query=request.query,
+            conversation_history=getattr(request, 'conversation_history', None)
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Agent orchestration error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/agent/health")
+async def agent_health():
+    """Check agent orchestrator health."""
+    return {
+        "status": "healthy",
+        "model": os.getenv("AGENT_MODEL", "gpt-4o"),
+        "temperature": float(os.getenv("AGENT_TEMPERATURE", "0.7")),
+        "backend": "agent_orchestrator"
+    }
+
+@app.get("/api/agent/tools")
+async def get_agent_tools():
+    """Get available tools for the agent."""
+    from services.agent_orchestrator import get_orchestrator
+    orchestrator = get_orchestrator()
+    return orchestrator._get_tool_schemas()
+
+@app.post("/api/agent/clear-cache")
+async def clear_agent_cache():
+    """Clear the agent's cache."""
+    from services.agent_orchestrator import get_orchestrator
+    orchestrator = get_orchestrator()
+    orchestrator.clear_cache()
+    return {"status": "success", "message": "Cache cleared"}
 
 @app.post("/ask", response_model=QueryResponse)
 async def ask_assistant(request: QueryRequest):
-    """Process a voice query through Claude."""
-    if not claude_service or not conversation_manager:
-        raise HTTPException(status_code=503, detail="Services not initialized")
-    
+    """Process a voice query through the Agent Orchestrator."""
     try:
+        # Import and get the orchestrator
+        from services.agent_orchestrator import get_orchestrator
+        orchestrator = get_orchestrator()
+        
         # Generate session ID if not provided
         session_id = request.session_id or str(uuid.uuid4())
         
         # Get conversation history if requested
         history = []
-        if request.include_history:
+        if request.include_history and conversation_manager:
             history = await conversation_manager.get_history(session_id)
         
-        # Send query to Claude
-        response = await claude_service.ask(request.query, history)
+        # Convert history to orchestrator format if needed
+        conversation_history = []
+        for msg in history:
+            if isinstance(msg, dict):
+                conversation_history.append({
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", "")
+                })
         
-        # Save conversation to Supabase
-        await conversation_manager.save_message(
-            session_id, "user", request.query, request.user_id
+        # Process query through orchestrator
+        result = await orchestrator.process_query(
+            request.query, 
+            conversation_history,
+            stream=False
         )
-        await conversation_manager.save_message(
-            session_id, "assistant", response, request.user_id
-        )
+        
+        # Extract response text
+        response_text = result.get("text", "")
+        
+        # Save conversation to Supabase if available
+        if conversation_manager:
+            await conversation_manager.save_message(
+                session_id, "user", request.query, request.user_id
+            )
+            await conversation_manager.save_message(
+                session_id, "assistant", response_text, request.user_id
+            )
         
         # Generate audio URL if voice is enabled
         audio_url = None
         if request.voice_enabled:
             # This would integrate with a TTS service
-            # audio_url = await generate_audio(response)
+            # audio_url = await generate_audio(response_text)
             pass
         
         return QueryResponse(
-            response=response,
+            response=response_text,
             session_id=session_id,
             timestamp=datetime.utcnow().isoformat(),
             audio_url=audio_url,
@@ -760,23 +1170,53 @@ async def openai_websocket_endpoint(websocket: WebSocket):
         return
     
     try:
-        await openai_service.handle_websocket_connection(websocket, None)
+        # Handle WebSocket subprotocol negotiation
+        headers = dict(websocket.headers)
+        subprotocol = None
+        
+        # Check for Sec-WebSocket-Protocol header
+        if "sec-websocket-protocol" in headers:
+            requested_protocols = headers["sec-websocket-protocol"]
+            # Use the first requested protocol (RealtimeClient typically sends protocol headers)
+            subprotocol = requested_protocols.split(',')[0].strip() if requested_protocols else None
+            logger.info(f"WebSocket subprotocol requested: {subprotocol}")
+        
+        # Accept WebSocket with subprotocol if requested
+        if subprotocol:
+            await websocket.accept(subprotocol=subprotocol)
+        else:
+            await websocket.accept()
+        
+        # Pass the accepted websocket to the OpenAI service
+        await openai_service.handle_websocket_connection_accepted(websocket, None)
     except Exception as e:
         logger.error(f"OpenAI WebSocket error: {e}")
-        await websocket.close(code=1011, reason=str(e))
+        try:
+            await websocket.close(code=1011, reason=str(e))
+        except:
+            pass
 
 
 @app.post("/openai/realtime/session")
-async def create_openai_session():
+async def create_openai_session(request: Request):
     """Create a new OpenAI Realtime session."""
     if not openai_service:
         raise HTTPException(status_code=503, detail="OpenAI service not initialized")
     
     try:
         session_id = str(uuid.uuid4())
+        
+        # Compute WebSocket URL from request to avoid mixed-content issues
+        # Use the same scheme (ws/wss) and host as the HTTP request
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        ws_scheme = "wss" if forwarded_proto == "https" or request.url.scheme == "https" else "ws"
+        
+        # Get the host from headers or request
+        host = request.headers.get("host", request.url.netloc)
+        
         return {
             "session_id": session_id,
-            "ws_url": f"ws://localhost:8000/openai/realtime/ws",
+            "ws_url": f"{ws_scheme}://{host}/realtime-relay/{session_id}",
             "status": "ready"
         }
     except Exception as e:
@@ -883,6 +1323,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         await websocket.close()
+
 
 
 if __name__ == "__main__":

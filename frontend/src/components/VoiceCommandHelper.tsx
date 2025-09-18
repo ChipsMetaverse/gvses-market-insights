@@ -170,6 +170,11 @@ export const VoiceCommandHelper: React.FC<VoiceCommandHelperProps> = ({
               placeholder="Type a command or company name..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchInput.trim()) {
+                  handleSuggestionClick(searchInput.trim());
+                }
+              }}
               className="search-input"
             />
             {suggestions.length > 0 && (

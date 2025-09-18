@@ -18,7 +18,49 @@ class MarketServiceWrapper:
     """
     Simple wrapper around the original market_service.py functions.
     Provides a consistent interface for the factory pattern.
+    Includes intelligent crypto symbol detection.
     """
+    
+    # Popular cryptocurrency symbols that users expect to map to -USD pairs
+    CRYPTO_SYMBOLS = {
+        'BTC': 'BTC-USD',    # Bitcoin
+        'ETH': 'ETH-USD',    # Ethereum
+        'ADA': 'ADA-USD',    # Cardano
+        'DOT': 'DOT-USD',    # Polkadot
+        'SOL': 'SOL-USD',    # Solana
+        'MATIC': 'MATIC-USD', # Polygon
+        'AVAX': 'AVAX-USD',  # Avalanche
+        'LTC': 'LTC-USD',    # Litecoin
+        'XRP': 'XRP-USD',    # Ripple
+        'DOGE': 'DOGE-USD',  # Dogecoin
+        'SHIB': 'SHIB-USD',  # Shiba Inu
+        'UNI': 'UNI-USD',    # Uniswap
+        'LINK': 'LINK-USD',  # Chainlink
+        'BCH': 'BCH-USD',    # Bitcoin Cash
+        'XLM': 'XLM-USD',    # Stellar
+    }
+    
+    def _map_crypto_symbol(self, symbol: str) -> tuple[str, str]:
+        """
+        Map crypto symbols to their -USD pairs for accurate pricing.
+        
+        Returns:
+            tuple: (mapped_symbol, asset_type)
+        """
+        upper_symbol = symbol.upper()
+        
+        # If already in crypto format, keep as is
+        if '-USD' in upper_symbol:
+            return upper_symbol, 'crypto'
+        
+        # Check if it's a known crypto that should map to -USD
+        if upper_symbol in self.CRYPTO_SYMBOLS:
+            mapped_symbol = self.CRYPTO_SYMBOLS[upper_symbol]
+            logger.info(f"Mapping crypto symbol {symbol} -> {mapped_symbol}")
+            return mapped_symbol, 'crypto'
+        
+        # Not a crypto, treat as stock
+        return upper_symbol, 'stock'
     
     def __init__(self):
         # Import the original MCP-based functions
@@ -38,50 +80,78 @@ class MarketServiceWrapper:
         self.build_summary_table = build_summary_table
     
     async def get_stock_price(self, symbol: str) -> dict:
-        """Get stock price - uses Alpaca for quotes, Yahoo for fallback."""
+        """Get stock price - includes crypto symbol mapping and intelligent routing."""
         
-        # Try Alpaca first for real-time quotes (professional-grade)
-        try:
-            # Check if we can use Alpaca
-            from services.market_service import get_quote_from_alpaca, ALPACA_AVAILABLE
-            
-            if ALPACA_AVAILABLE:
-                logger.info(f"Using Alpaca for {symbol} quote")
-                quote = await get_quote_from_alpaca(symbol)
-                quote["data_source"] = "alpaca"
-                return quote
-        except Exception as e:
-            logger.warning(f"Alpaca quote failed: {e}, falling back to Yahoo Finance")
+        # Map crypto symbols to proper format
+        mapped_symbol, asset_type = self._map_crypto_symbol(symbol)
         
-        # Fallback to Yahoo Finance via MCP
-        logger.info(f"Using Yahoo Finance for {symbol} quote")
-        quote = await self._get_quote(symbol)
+        # Try Alpaca first for real-time quotes (professional-grade) - but only for stocks
+        if asset_type == 'stock':
+            try:
+                # Check if we can use Alpaca
+                from services.market_service import get_quote_from_alpaca, ALPACA_AVAILABLE
+                
+                if ALPACA_AVAILABLE:
+                    logger.info(f"Using Alpaca for {mapped_symbol} quote")
+                    quote = await get_quote_from_alpaca(mapped_symbol)
+                    quote["data_source"] = "alpaca"
+                    quote["asset_type"] = asset_type
+                    return quote
+            except Exception as e:
+                logger.warning(f"Alpaca quote failed: {e}, falling back to Yahoo Finance")
+        
+        # Use Yahoo Finance (supports both stocks and crypto)
+        logger.info(f"Using Yahoo Finance for {mapped_symbol} quote (asset_type: {asset_type})")
+        quote = await self._get_quote(mapped_symbol)
+        
+        # Normalize field names from MCP format to Direct format
+        # MCP returns: last, prev_close, change_pct
+        # Direct/endpoint expects: price, previous_close, change_percent
+        if "last" in quote and "price" not in quote:
+            quote["price"] = quote["last"]
+        if "prev_close" in quote and "previous_close" not in quote:
+            quote["previous_close"] = quote["prev_close"]
+        if "change_pct" in quote and "change_percent" not in quote:
+            quote["change_percent"] = quote["change_pct"]
+        
         quote["data_source"] = "yahoo_mcp"
+        quote["asset_type"] = asset_type
+        
+        # If we mapped a crypto symbol, update the response to show original symbol
+        if mapped_symbol != symbol.upper():
+            quote["original_symbol"] = symbol.upper()
+            quote["mapped_from"] = f"{symbol.upper()} -> {mapped_symbol}"
+        
         return quote
     
     async def get_stock_history(self, symbol: str, days: int = 50) -> dict:
-        """Get stock history - uses Alpaca for chart data, Yahoo for fallback."""
+        """Get stock history - includes crypto symbol mapping and intelligent routing."""
         
-        # Try Alpaca first for chart data (professional-grade)
-        try:
-            # Check if we can use Alpaca
-            from services.market_service import get_ohlcv_from_alpaca, ALPACA_AVAILABLE
-            
-            if ALPACA_AVAILABLE:
-                logger.info(f"Using Alpaca for {symbol} chart data")
-                candles = await get_ohlcv_from_alpaca(symbol, days)
+        # Map crypto symbols to proper format
+        mapped_symbol, asset_type = self._map_crypto_symbol(symbol)
+        
+        # Try Alpaca first for chart data (professional-grade) - but only for stocks
+        if asset_type == 'stock':
+            try:
+                # Check if we can use Alpaca
+                from services.market_service import get_ohlcv_from_alpaca, ALPACA_AVAILABLE
                 
-                return {
-                    "symbol": symbol.upper(),
-                    "candles": candles,
-                    "period": f"{days}D",
-                    "data_source": "alpaca"
-                }
-        except Exception as e:
-            logger.warning(f"Alpaca chart data failed: {e}, falling back to Yahoo Finance")
+                if ALPACA_AVAILABLE:
+                    logger.info(f"Using Alpaca for {mapped_symbol} chart data")
+                    candles = await get_ohlcv_from_alpaca(mapped_symbol, days)
+                    
+                    return {
+                        "symbol": symbol.upper(),
+                        "candles": candles,
+                        "period": f"{days}D",
+                        "data_source": "alpaca",
+                        "asset_type": asset_type
+                    }
+            except Exception as e:
+                logger.warning(f"Alpaca chart data failed: {e}, falling back to Yahoo Finance")
         
-        # Fallback to Yahoo Finance via MCP
-        logger.info(f"Using Yahoo Finance for {symbol} chart data")
+        # Use Yahoo Finance (supports both stocks and crypto)
+        logger.info(f"Using Yahoo Finance for {mapped_symbol} chart data (asset_type: {asset_type})")
         
         # Map days to range string for Yahoo
         if days <= 1:
@@ -99,13 +169,21 @@ class MarketServiceWrapper:
         else:
             range_str = "5Y"
         
-        candles = await self._get_ohlcv(symbol, range_str)
-        return {
+        candles = await self._get_ohlcv(mapped_symbol, range_str)
+        result = {
             "symbol": symbol.upper(),
             "candles": candles,
             "period": range_str,
-            "data_source": "yahoo_mcp"
+            "data_source": "yahoo_mcp",
+            "asset_type": asset_type
         }
+        
+        # If we mapped a crypto symbol, include mapping info
+        if mapped_symbol != symbol.upper():
+            result["original_symbol"] = symbol.upper()
+            result["mapped_from"] = f"{symbol.upper()} -> {mapped_symbol}"
+        
+        return result
     
     async def get_stock_news(self, symbol: str, limit: int = 10) -> dict:
         """Get stock news via MCP (includes CNBC and Yahoo)."""
@@ -126,27 +204,12 @@ class MarketServiceWrapper:
     async def get_comprehensive_stock_data(self, symbol: str) -> dict:
         """Get comprehensive stock data via MCP."""
         try:
-            # Get quote and history
+            # Get quote and history - request 6M for enough data for advanced TA (200+ candles)
             quote = await self._get_quote(symbol)
-            candles = await self._get_ohlcv(symbol, "1M")
+            candles = await self._get_ohlcv(symbol, "6M")  # Get 6 months for advanced TA
             
-            # Calculate technical levels
-            technical_levels = {}
-            if candles and len(candles) > 0:
-                recent_candles = candles[-20:]  # Last 20 days
-                if recent_candles:
-                    highs = [c.get('high', 0) for c in recent_candles if c.get('high')]
-                    lows = [c.get('low', 0) for c in recent_candles if c.get('low')]
-                    
-                    if highs and lows:
-                        recent_high = max(highs)
-                        recent_low = min(lows)
-                        
-                        technical_levels = {
-                            "qe_level": round(recent_high * 0.98, 2),
-                            "st_level": round((recent_high + recent_low) / 2, 2),
-                            "ltb_level": round(recent_low * 1.02, 2)
-                        }
+            # Calculate technical levels with advanced TA or fallback
+            technical_levels = await self._calculate_technical_levels(symbol, candles, quote)
             
             return {
                 "symbol": symbol.upper(),
@@ -172,6 +235,104 @@ class MarketServiceWrapper:
             logger.info("Market service ready")
         except Exception as e:
             logger.warning(f"Market service warm-up failed: {e}")
+    
+    async def _calculate_technical_levels(self, symbol: str, candles: list, quote: dict) -> dict:
+        """
+        Calculate technical levels with advanced TA module or fallback to simple calculations.
+        Implements Day 3.1 of integration plan.
+        """
+        import asyncio
+        import sys
+        import os
+        
+        # Add parent directory to path to import advanced_technical_analysis
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        try:
+            # Try to use advanced technical analysis with timeout
+            from advanced_technical_analysis import AdvancedTechnicalAnalysis
+            
+            # Extract price and volume data for advanced TA
+            prices = [c.get('close', c.get('c', 0)) for c in candles[-200:]]  # Last 200 candles
+            volumes = [c.get('volume', c.get('v', 0)) for c in candles[-200:]]  # Last 200 volumes
+            current_price = quote.get('price', quote.get('last', 0))
+            
+            # Check if we have enough data
+            if len(prices) >= 50 and current_price > 0:
+                # Apply 3-second timeout for advanced calculations
+                async def calculate_with_timeout():
+                    loop = asyncio.get_event_loop()
+                    return await loop.run_in_executor(
+                        None,
+                        AdvancedTechnicalAnalysis.calculate_advanced_levels,
+                        prices,
+                        volumes,
+                        current_price
+                    )
+                
+                try:
+                    result = await asyncio.wait_for(calculate_with_timeout(), timeout=3.0)
+                    
+                    # Ensure consistent field names (sell_high_level, buy_low_level, btd_level, retest_level)
+                    return {
+                        "sell_high_level": result.get("sell_high_level", current_price * 1.03),
+                        "buy_low_level": result.get("buy_low_level", current_price * 0.96),
+                        "btd_level": result.get("btd_level", current_price * 0.92),
+                        "retest_level": result.get("retest_level", current_price * 0.98),
+                        "ma_20": result.get("ma_20", current_price * 0.99),
+                        "ma_50": result.get("ma_50", current_price * 0.97),
+                        "ma_200": result.get("ma_200", current_price * 0.93),
+                        "recent_high": result.get("recent_high", current_price * 1.05),
+                        "recent_low": result.get("recent_low", current_price * 0.95),
+                        "fib_levels": result.get("fib_levels", {}),
+                        "volume_profile": result.get("volume_profile"),
+                        "calculation_method": "advanced"
+                    }
+                except asyncio.TimeoutError:
+                    logger.warning(f"Advanced TA calculation timed out for {symbol}, using fallback")
+            else:
+                logger.info(f"Insufficient data for advanced TA on {symbol} (only {len(prices)} candles)")
+        
+        except ImportError as e:
+            logger.warning(f"Advanced TA module not available: {e}")
+        except Exception as e:
+            logger.error(f"Error in advanced TA calculation: {e}")
+        
+        # Fallback to simple calculations (original inline logic)
+        current_price = quote.get('price', quote.get('last', 0))
+        
+        if current_price > 0:
+            # Simple percentage-based levels
+            return {
+                "sell_high_level": round(current_price * 1.03, 2),  # 3% above for sell high
+                "buy_low_level": round(current_price * 0.96, 2),  # 4% below for buy low
+                "btd_level": round(current_price * 0.92, 2), # 8% below for buy the dip
+                "retest_level": round(current_price * 0.98, 2), # 2% below for retest
+                "ma_20": round(current_price * 0.99, 2),
+                "ma_50": round(current_price * 0.97, 2),
+                "ma_200": round(current_price * 0.93, 2),
+                "recent_high": round(current_price * 1.05, 2),
+                "recent_low": round(current_price * 0.95, 2),
+                "fib_levels": {},
+                "volume_profile": None,
+                "calculation_method": "simple"
+            }
+        else:
+            # No price data available
+            return {
+                "sell_high_level": 0,
+                "buy_low_level": 0,
+                "btd_level": 0,
+                "retest_level": 0,
+                "ma_20": 0,
+                "ma_50": 0,
+                "ma_200": 0,
+                "recent_high": 0,
+                "recent_low": 0,
+                "fib_levels": {},
+                "volume_profile": None,
+                "calculation_method": "none"
+            }
     
     async def get_market_overview(self) -> dict:
         """Get market overview using Alpaca ETF proxies with MCP fallback."""
@@ -322,32 +483,38 @@ class HybridMarketService:
             raise RuntimeError("Failed to initialize any market service")
     
     async def get_stock_price(self, symbol: str) -> dict:
-        """Get stock price - prefer Direct for speed, fallback to MCP."""
-        if self.direct_available:
+        """Get stock price - prefer MCP/Alpaca for accurate data, fallback to Direct."""
+        # Try MCP/Alpaca first (has better data quality including open price)
+        if self.mcp_available:
             try:
-                return await self.direct_service.get_stock_price(symbol)
+                result = await self.mcp_service.get_stock_price(symbol)
+                logger.info(f"Stock price fetched via {result.get('data_source', 'MCP')}")
+                return result
             except Exception as e:
-                logger.warning(f"Direct price fetch failed: {e}")
-                if self.mcp_available:
-                    return await self.mcp_service.get_stock_price(symbol)
+                logger.warning(f"MCP/Alpaca price fetch failed: {e}")
+                if self.direct_available:
+                    return await self.direct_service.get_stock_price(symbol)
                 raise
-        elif self.mcp_available:
-            return await self.mcp_service.get_stock_price(symbol)
+        elif self.direct_available:
+            return await self.direct_service.get_stock_price(symbol)
         else:
             raise RuntimeError("No market service available")
     
     async def get_stock_history(self, symbol: str, days: int = 50) -> dict:
-        """Get stock history - prefer Direct for speed, fallback to MCP."""
-        if self.direct_available:
+        """Get stock history - prefer MCP/Alpaca for accurate data, fallback to Direct."""
+        # Try MCP/Alpaca first (has better data quality)
+        if self.mcp_available:
             try:
-                return await self.direct_service.get_stock_history(symbol, days)
+                result = await self.mcp_service.get_stock_history(symbol, days)
+                logger.info(f"Stock history fetched via {result.get('data_source', 'MCP')}")
+                return result
             except Exception as e:
-                logger.warning(f"Direct history fetch failed: {e}")
-                if self.mcp_available:
-                    return await self.mcp_service.get_stock_history(symbol, days)
+                logger.warning(f"MCP/Alpaca history fetch failed: {e}")
+                if self.direct_available:
+                    return await self.direct_service.get_stock_history(symbol, days)
                 raise
-        elif self.mcp_available:
-            return await self.mcp_service.get_stock_history(symbol, days)
+        elif self.direct_available:
+            return await self.direct_service.get_stock_history(symbol, days)
         else:
             raise RuntimeError("No market service available")
     
@@ -367,20 +534,21 @@ class HybridMarketService:
             raise RuntimeError("No market service available")
     
     async def get_comprehensive_stock_data(self, symbol: str) -> dict:
-        """Get comprehensive data - use Direct for price, MCP for enhanced data."""
+        """Get comprehensive data - prefer MCP/Alpaca for accurate data, fallback to Direct."""
         results = {}
         
-        # Get price data from Direct (fast)
-        if self.direct_available:
+        # Try MCP/Alpaca first (has complete data including open price and year high/low)
+        if self.mcp_available:
             try:
-                data = await self.direct_service.get_comprehensive_stock_data(symbol)
+                data = await self.mcp_service.get_comprehensive_stock_data(symbol)
                 results = data
+                logger.info(f"Comprehensive data fetched via {data.get('data_source', 'MCP')}")
             except Exception as e:
-                logger.warning(f"Direct comprehensive data failed: {e}")
-                if self.mcp_available:
-                    data = await self.mcp_service.get_comprehensive_stock_data(symbol)
+                logger.warning(f"MCP/Alpaca comprehensive data failed: {e}")
+                if self.direct_available:
+                    data = await self.direct_service.get_comprehensive_stock_data(symbol)
                     results = data
-        elif self.mcp_available:
+        elif self.direct_available:
             data = await self.mcp_service.get_comprehensive_stock_data(symbol)
             results = data
         
@@ -404,6 +572,30 @@ class HybridMarketService:
                 raise
         else:
             raise RuntimeError("Market overview not available - MCP service required")
+    
+    async def search_assets(self, query: str, limit: int = 20) -> list:
+        """Search for stock symbols using Alpaca API with fallback to MCP."""
+        # First try Alpaca via the market service's search function
+        try:
+            from services.market_service import search_assets_with_alpaca, ALPACA_AVAILABLE
+            
+            if ALPACA_AVAILABLE:
+                logger.info(f"Using Alpaca for symbol search: '{query}'")
+                results = await search_assets_with_alpaca(query, limit)
+                return results
+        except Exception as e:
+            logger.warning(f"Alpaca symbol search failed: {e}, falling back to MCP")
+        
+        # If MCP service is available, try it as fallback (though it may not have search_assets)
+        if self.mcp_available and hasattr(self.mcp_service, 'search_assets'):
+            try:
+                return await self.mcp_service.search_assets(query, limit)
+            except Exception as e:
+                logger.warning(f"MCP symbol search failed: {e}")
+        
+        # If neither works, return empty results
+        logger.warning(f"No symbol search service available for query: '{query}'")
+        return []
     
     async def warm_up(self):
         """Warm up both services, don't fail if one doesn't work."""

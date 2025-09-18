@@ -1,5 +1,6 @@
 import { TradingDashboardSimple } from './components/TradingDashboardSimple';
 import { ProviderTest } from './components/ProviderTest';
+import { IndicatorProvider } from './contexts/IndicatorContext';
 
 function App() {
   // Check URL parameter to show provider test
@@ -9,7 +10,11 @@ function App() {
     return <ProviderTest />;
   }
   
-  return <TradingDashboardSimple />;
+  return (
+    <IndicatorProvider>
+      <TradingDashboardSimple />
+    </IndicatorProvider>
+  );
 }
 
 export default App;

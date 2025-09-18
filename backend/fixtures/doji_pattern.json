@@ -1,0 +1,17 @@
+{
+  "description": "Doji Pattern Test Data",
+  "expected_patterns": ["doji"],
+  "candles": [
+    {"time": 1749528000, "open": 100, "high": 102, "low": 99, "close": 100.5, "volume": 1000000},
+    {"time": 1749614400, "open": 100.5, "high": 101.5, "low": 99.5, "close": 101, "volume": 1100000},
+    {"time": 1749700800, "open": 101, "high": 102, "low": 100, "close": 101.5, "volume": 1200000},
+    {"time": 1749787200, "open": 101.5, "high": 103, "low": 100.5, "close": 102, "volume": 1300000},
+    {"time": 1749873600, "open": 102, "high": 105, "low": 99, "close": 102.05, "volume": 1500000},
+    {"time": 1749960000, "open": 102, "high": 103, "low": 101, "close": 102.5, "volume": 900000},
+    {"time": 1750046400, "open": 102.5, "high": 103.5, "low": 101.5, "close": 103, "volume": 1100000},
+    {"time": 1750132800, "open": 103, "high": 104, "low": 102, "close": 103.5, "volume": 1000000},
+    {"time": 1750219200, "open": 103.5, "high": 104.5, "low": 102.5, "close": 104, "volume": 1200000},
+    {"time": 1750305600, "open": 104, "high": 105, "low": 103, "close": 104.5, "volume": 1000000}
+  ],
+  "notes": "Perfect doji at index 4: open 102, close 102.05 (nearly identical), with large range (high 105, low 99) showing indecision"
+}

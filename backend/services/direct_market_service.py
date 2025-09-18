@@ -19,17 +19,48 @@ logger = logging.getLogger(__name__)
 class DirectMarketDataService:
     """Direct service for fast Yahoo Finance API calls without MCP overhead."""
     
+    # Cryptocurrency symbol mapping for Yahoo Finance
+    CRYPTO_SYMBOLS = {
+        'BTC': 'BTC-USD',      # Bitcoin
+        'ETH': 'ETH-USD',      # Ethereum
+        'ADA': 'ADA-USD',      # Cardano
+        'DOGE': 'DOGE-USD',    # Dogecoin
+        'XRP': 'XRP-USD',      # Ripple
+        'DOT': 'DOT-USD',      # Polkadot
+        'UNI': 'UNI-USD',      # Uniswap
+        'BCH': 'BCH-USD',      # Bitcoin Cash
+        'LTC': 'LTC-USD',      # Litecoin
+        'SOL': 'SOL-USD',      # Solana
+        'LINK': 'LINK-USD',    # Chainlink
+        'MATIC': 'MATIC-USD',  # Polygon
+        'AVAX': 'AVAX-USD',    # Avalanche
+        'ATOM': 'ATOM-USD',    # Cosmos
+        'ALGO': 'ALGO-USD',    # Algorand
+    }
+    
     def __init__(self):
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
         self.timeout = 10.0  # 10 second timeout for fast responses
     
+    def _map_crypto_symbol(self, symbol: str) -> tuple[str, bool]:
+        """Map common crypto symbols to Yahoo Finance format.
+        Returns (mapped_symbol, is_crypto)"""
+        upper_symbol = symbol.upper()
+        if upper_symbol in self.CRYPTO_SYMBOLS:
+            return self.CRYPTO_SYMBOLS[upper_symbol], True
+        return symbol, False
+    
     async def get_stock_price(self, symbol: str) -> dict:
         """Get stock price with direct Yahoo Finance API call."""
         try:
+            # Map crypto symbols to Yahoo Finance format
+            original_symbol = symbol
+            mapped_symbol, is_crypto = self._map_crypto_symbol(symbol)
+            
             async with httpx.AsyncClient() as client:
-                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol.upper()}"
+                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{mapped_symbol.upper()}"
                 response = await client.get(url, headers=self.headers, timeout=self.timeout)
                 
                 if response.status_code == 200:
@@ -39,7 +70,7 @@ class DirectMarketDataService:
                     if result:
                         meta = result[0].get('meta', {})
                         return {
-                            "symbol": symbol.upper(),
+                            "symbol": original_symbol.upper(),  # Return original symbol for display
                             "price": meta.get('regularMarketPrice', 0),
                             "change": meta.get('regularMarketPrice', 0) - meta.get('previousClose', 0),
                             "change_percent": ((meta.get('regularMarketPrice', 0) - meta.get('previousClose', 0)) / meta.get('previousClose', 1)) * 100,
@@ -49,7 +80,8 @@ class DirectMarketDataService:
                             "day_high": meta.get('regularMarketDayHigh', 0),
                             "volume": meta.get('regularMarketVolume', 0),
                             "timestamp": datetime.now().isoformat(),
-                            "data_source": "yahoo_direct"
+                            "data_source": "yahoo_direct",
+                            "asset_type": "crypto" if is_crypto else "stock"
                         }
                 
                 raise ValueError(f"No data returned for {symbol}")
@@ -61,6 +93,10 @@ class DirectMarketDataService:
     async def get_stock_history(self, symbol: str, days: int = 50) -> dict:
         """Get stock history with direct Yahoo Finance API call."""
         try:
+            # Map crypto symbols to Yahoo Finance format
+            original_symbol = symbol
+            mapped_symbol, is_crypto = self._map_crypto_symbol(symbol)
+            
             # Calculate date range
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)
@@ -69,7 +105,7 @@ class DirectMarketDataService:
             period2 = int(end_date.timestamp())
             
             async with httpx.AsyncClient() as client:
-                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol.upper()}"
+                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{mapped_symbol.upper()}"
                 params = {
                     'period1': period1,
                     'period2': period2,
@@ -101,10 +137,11 @@ class DirectMarketDataService:
                                 })
                         
                         return {
-                            "symbol": symbol.upper(),
+                            "symbol": original_symbol.upper(),  # Return original symbol for display
                             "candles": candles,
                             "period": f"{days}D",
-                            "data_source": "yahoo_direct"
+                            "data_source": "yahoo_direct",
+                            "asset_type": "crypto" if is_crypto else "stock"
                         }
                 
                 raise ValueError(f"No history data returned for {symbol}")
@@ -203,9 +240,10 @@ class DirectMarketDataService:
                         
                         # Use frontend-compatible field names
                         technical_levels = {
-                            "qe_level": round(recent_high * 0.98, 2),  # Quick Entry
-                            "st_level": round((recent_high + recent_low) / 2, 2),  # Swing Trade  
-                            "ltb_level": round(recent_low * 1.02, 2)  # Load The Boat
+                            "sell_high_level": round(recent_high * 1.03, 2),  # Sell High (formerly SE/QE)
+                            "retest_level": round(recent_high * 0.98, 2),  # Retest
+                            "buy_low_level": round((recent_high + recent_low) / 2, 2),  # Buy Low
+                            "btd_level": round(recent_low * 0.92, 2)  # Buy The Dip
                         }
             
             return {

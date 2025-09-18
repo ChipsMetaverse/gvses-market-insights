@@ -1,0 +1,525 @@
+/* Trading Dashboard Polished - Civil Engineering UI/UX Improvements
+   Using design tokens for consistency and WCAG compliance */
+
+@import '../styles/design-tokens.css';
+
+/* ==================== BASE RESET ==================== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ==================== DASHBOARD CONTAINER ==================== */
+.trading-dashboard-simple {
+  width: 100%;
+  height: 100vh;
+  background: var(--color-bg-primary);
+  font-family: var(--font-family-primary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--color-text-primary);
+}
+
+/* ==================== HEADER (64px aligned to 8px grid) ==================== */
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--header-height);
+  padding: 0 var(--spacing-lg);
+  background: var(--color-bg-secondary);
+  border-bottom: var(--border-width-thin) solid var(--border-color-default);
+  box-shadow: var(--shadow-sm);
+}
+
+.header-left {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-md);
+}
+
+.brand {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  letter-spacing: -0.025em;
+}
+
+.subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ==================== HEADER TABS (Fixed 44px touch targets) ==================== */
+.header-tabs {
+  display: flex;
+  background: var(--color-bg-elevated);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-xs);
+  gap: var(--spacing-xs);
+}
+
+.tab-btn {
+  min-width: var(--size-touch-target-min);
+  min-height: var(--size-touch-target-min);
+  padding: 0 var(--spacing-lg);
+  background: transparent;
+  border: var(--border-width-thin) solid transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  border-radius: var(--border-radius-md);
+  transition: var(--transition-property-common) var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-primary);
+}
+
+.tab-btn:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+.tab-btn.active {
+  background: var(--color-primary-500);
+  color: #ffffff;
+  box-shadow: var(--shadow-md);
+}
+
+.back-btn {
+  min-width: var(--size-touch-target-min);
+  min-height: 36px;
+  padding: 0 var(--spacing-md);
+  background: var(--color-bg-elevated);
+  border: var(--border-width-thin) solid var(--border-color-default);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: var(--transition-property-common) var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-color-hover);
+}
+
+.back-btn:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+/* ==================== MAIN LAYOUT (CSS Grid with 8px aligned panels) ==================== */
+.dashboard-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--panel-width-left) 1fr var(--panel-width-right);
+  gap: var(--panel-gap);
+  background: var(--color-bg-primary);
+  overflow: hidden;
+  padding: var(--spacing-md);
+}
+
+/* ==================== MARKET INSIGHTS PANEL ==================== */
+.insights-panel {
+  background: var(--color-bg-panel);
+  border: var(--border-width-thin) solid var(--border-color-default);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-title {
+  padding: var(--spacing-md);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  border-bottom: var(--border-width-thin) solid var(--border-color-default);
+}
+
+/* Add Symbol Input Section */
+.add-symbol-section {
+  padding: var(--spacing-md);
+  background: var(--color-bg-elevated);
+  border-bottom: var(--border-width-thin) solid var(--border-color-default);
+}
+
+.add-symbol-input-group {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.add-symbol-input {
+  flex: 1;
+  height: var(--button-height-md);
+  padding: 0 var(--spacing-md);
+  background: var(--color-bg-primary);
+  border: var(--border-width-thin) solid var(--border-color-default);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  transition: var(--transition-property-common) var(--transition-fast);
+}
+
+.add-symbol-input:focus {
+  outline: none;
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.add-symbol-button {
+  min-width: var(--size-touch-target-min);
+  height: var(--button-height-md);
+  padding: 0 var(--spacing-lg);
+  background: var(--color-primary-500);
+  border: none;
+  border-radius: var(--border-radius-md);
+  color: #ffffff;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: var(--transition-property-common) var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-symbol-button:hover {
+  background: var(--color-primary-600);
+  box-shadow: var(--shadow-md);
+}
+
+.add-symbol-button:focus-visible {
+  outline: 2px solid var(--color-primary-300);
+  outline-offset: 2px;
+}
+
+/* Stock Cards Container */
+.stocks-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Custom Scrollbar */
+.stocks-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.stocks-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.stocks-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--border-radius-full);
+}
+
+.stocks-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Stock Card */
+.stock-card {
+  padding: var(--spacing-md);
+  background: var(--color-bg-elevated);
+  border: var(--border-width-thin) solid var(--border-color-default);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: var(--transition-property-common) var(--transition-fast);
+  position: relative;
+}
+
+.stock-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--color-primary-500);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.stock-card:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+/* Remove Button (44px touch target) */
+.remove-stock-btn {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  width: var(--size-touch-target-min);
+  height: var(--size-touch-target-min);
+  background: rgba(244, 67, 54, 0.1);
+  border: var(--border-width-thin) solid rgba(244, 67, 54, 0.3);
+  border-radius: var(--border-radius-md);
+  color: var(--color-error);
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-property-common) var(--transition-fast);
+  opacity: 0;
+}
+
+.stock-card:hover .remove-stock-btn {
+  opacity: 1;
+}
+
+.remove-stock-btn:hover {
+  background: rgba(244, 67, 54, 0.2);
+  border-color: var(--color-error);
+  transform: scale(1.1);
+}
+
+.remove-stock-btn:focus-visible {
+  outline: 2px solid var(--color-error);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+/* Stock Card Content */
+.stock-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.stock-symbol {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.stock-label {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: rgba(33, 150, 243, 0.1);
+  border: var(--border-width-thin) solid rgba(33, 150, 243, 0.3);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary-400);
+  text-transform: uppercase;
+}
+
+.price {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.change {
+  display: inline-block;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.change.positive {
+  background: rgba(76, 175, 80, 0.1);
+  color: var(--color-success);
+}
+
+.change.negative {
+  background: rgba(244, 67, 54, 0.1);
+  color: var(--color-error);
+}
+
+.stock-description {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: var(--line-height-relaxed);
+}
+
+/* ==================== MAIN CONTENT AREA ==================== */
+.content-main {
+  background: var(--color-bg-panel);
+  border: var(--border-width-thin) solid var(--border-color-default);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  overflow: hidden;
+}
+
+/* ==================== CHART ANALYSIS PANEL ==================== */
+.analysis-panel {
+  background: var(--color-bg-panel);
+  border: var(--border-width-thin) solid var(--border-color-default);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* News Scroll Container (Fixed height for better density) */
+.news-scroll-container {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.news-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.news-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.news-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--border-radius-full);
+}
+
+/* News Item */
+.news-item {
+  padding: var(--spacing-md);
+  background: var(--color-bg-elevated);
+  border: var(--border-width-thin) solid var(--border-color-default);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: var(--transition-property-common) var(--transition-fast);
+}
+
+.news-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--color-primary-500);
+  transform: translateX(4px);
+}
+
+.news-item:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+/* ==================== VOICE ASSISTANT BUTTONS (44px minimum) ==================== */
+.voice-assistant-section button,
+.listen-button,
+.control-button {
+  min-width: var(--size-touch-target-min);
+  min-height: var(--size-touch-target-min);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: var(--transition-property-common) var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+}
+
+.voice-assistant-section button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.voice-assistant-section button:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+/* ==================== FOOTER ==================== */
+.dashboard-footer {
+  height: var(--footer-height);
+  padding: 0 var(--spacing-lg);
+  background: var(--color-bg-secondary);
+  border-top: var(--border-width-thin) solid var(--border-color-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.footer-tabs {
+  display: flex;
+  gap: var(--spacing-xl);
+}
+
+.footer-tab {
+  min-width: var(--size-touch-target-min);
+  height: var(--size-touch-target-min);
+  padding: 0 var(--spacing-md);
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  transition: var(--transition-property-common) var(--transition-fast);
+  border-radius: var(--border-radius-md);
+}
+
+.footer-tab:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-primary);
+}
+
+.footer-tab:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+.footer-tab.active {
+  color: var(--color-primary-500);
+}
+
+/* ==================== RESPONSIVE ADJUSTMENTS ==================== */
+@media (max-width: 1280px) {
+  .dashboard-layout {
+    grid-template-columns: 200px 1fr 280px;
+  }
+  
+  :root {
+    --panel-width-left: 200px;
+    --panel-width-right: 280px;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+  
+  .insights-panel,
+  .analysis-panel {
+    display: none;
+  }
+  
+  .content-main {
+    grid-row: 1 / -1;
+  }
+}

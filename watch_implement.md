@@ -297,7 +297,7 @@ async def openai_realtime_proxy(websocket: WebSocket, session_id: str):
     }
     
     try:
-        async with websockets.connect(openai_url, extra_headers=headers) as openai_ws:
+        async with websockets.connect(openai_url, additional_headers=headers) as openai_ws:
             # Bidirectional message relay (same pattern as ElevenLabs)
             async def relay_to_openai():
                 async for message in websocket.iter_text():
@@ -659,7 +659,7 @@ async def openai_realtime_proxy(websocket: WebSocket):
     
     async with websockets.connect(
         "wss://api.openai.com/v1/realtime",
-        extra_headers=headers
+        additional_headers=headers
     ) as openai_ws:
         
         # Bidirectional message relay

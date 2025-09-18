@@ -1,0 +1,17 @@
+{
+  "description": "Support Level and Breakout Test Data",
+  "expected_patterns": ["breakout", "support_bounce"],
+  "candles": [
+    {"time": 1749528000, "open": 100, "high": 102, "low": 95, "close": 96, "volume": 1000000},
+    {"time": 1749614400, "open": 96, "high": 98, "low": 95, "close": 95.5, "volume": 1100000},
+    {"time": 1749700800, "open": 95.5, "high": 97, "low": 95, "close": 96.5, "volume": 1200000},
+    {"time": 1749787200, "open": 96.5, "high": 99, "low": 95.2, "close": 98, "volume": 1300000},
+    {"time": 1749873600, "open": 98, "high": 100, "low": 95, "close": 95.5, "volume": 1000000},
+    {"time": 1749960000, "open": 95.5, "high": 97, "low": 95.1, "close": 96, "volume": 900000},
+    {"time": 1750046400, "open": 96, "high": 98, "low": 95, "close": 97.5, "volume": 1100000},
+    {"time": 1750132800, "open": 97.5, "high": 99, "low": 95.3, "close": 98.5, "volume": 1000000},
+    {"time": 1750219200, "open": 98.5, "high": 102, "low": 98, "close": 101.5, "volume": 2500000},
+    {"time": 1750305600, "open": 101.5, "high": 105, "low": 101, "close": 104, "volume": 2800000}
+  ],
+  "notes": "Clear support at 95 (tested multiple times), then breakout above 100 resistance at index 8-9 with 2.5x average volume"
+}

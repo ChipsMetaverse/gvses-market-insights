@@ -369,20 +369,75 @@ class TechnicalAnalysisKnowledge:
             "original_data": price_data,
             "pattern_analysis": {},
             "indicator_suggestions": [],
-            "trading_bias": "neutral"
+            "trading_bias": "neutral",
+            "key_insights": []
         }
         
-        # Add pattern-based insights
-        if "technical_levels" in price_data:
-            # Check for potential patterns based on price levels
-            pass
+        # Process detected patterns if present
+        if "patterns" in price_data and "detected" in price_data["patterns"]:
+            detected_patterns = price_data["patterns"]["detected"]
+            
+            if detected_patterns:
+                # Analyze overall pattern sentiment
+                bullish_count = sum(1 for p in detected_patterns if p.get("signal") == "bullish")
+                bearish_count = sum(1 for p in detected_patterns if p.get("signal") == "bearish")
+                
+                # Determine trading bias
+                if bullish_count > bearish_count:
+                    enhanced["trading_bias"] = "bullish"
+                elif bearish_count > bullish_count:
+                    enhanced["trading_bias"] = "bearish"
+                
+                # Get detailed analysis for the highest confidence pattern
+                highest_confidence = max(detected_patterns, key=lambda p: p.get("confidence", 0))
+                pattern_info = self.get_pattern_analysis(highest_confidence["type"])
+                
+                if pattern_info:
+                    enhanced["pattern_analysis"] = {
+                        "primary_pattern": highest_confidence["type"],
+                        "reliability": pattern_info.get("reliability", "unknown"),
+                        "typical_target": pattern_info.get("target", "Pattern height projection"),
+                        "volume_requirement": pattern_info.get("volume", "Normal"),
+                        "timeframe": pattern_info.get("timeframe", "Variable"),
+                        "success_rate": pattern_info.get("success_rate", 0.5)
+                    }
+                    
+                    # Add actionable insights
+                    enhanced["key_insights"].append(
+                        f"{highest_confidence['type'].replace('_', ' ').title()} detected with "
+                        f"{highest_confidence['confidence']:.0f}% confidence - {pattern_info.get('reliability', 'medium')} reliability pattern"
+                    )
         
-        # Suggest relevant indicators based on volatility
+        # Process support/resistance levels
+        if "patterns" in price_data and "active_levels" in price_data["patterns"]:
+            levels = price_data["patterns"]["active_levels"]
+            if levels.get("support"):
+                enhanced["key_insights"].append(f"Key support at ${levels['support'][0]:.2f}")
+            if levels.get("resistance"):
+                enhanced["key_insights"].append(f"Key resistance at ${levels['resistance'][0]:.2f}")
+        
+        # Add pattern-based insights for technical levels
+        if "technical_levels" in price_data:
+            levels = price_data["technical_levels"]
+            # Analyze price position relative to levels
+            current_price = price_data.get("price", 0)
+            
+            if current_price and levels:
+                # Check proximity to levels
+                for level_name, level_price in levels.items():
+                    if level_price and abs(current_price - level_price) / current_price < 0.01:
+                        enhanced["key_insights"].append(
+                            f"Price approaching {level_name} level at ${level_price:.2f}"
+                        )
+        
+        # Suggest relevant indicators based on market conditions
         if "volatility" in price_data:
             if price_data["volatility"] > 0.02:  # High volatility
                 enhanced["indicator_suggestions"] = self.get_market_condition_indicators("volatile_market")
+                enhanced["key_insights"].append("High volatility - consider Bollinger Bands and ATR for risk management")
             else:
                 enhanced["indicator_suggestions"] = self.get_market_condition_indicators("ranging_market")
+                enhanced["key_insights"].append("Range-bound conditions - RSI and support/resistance levels are key")
         
         return enhanced
 

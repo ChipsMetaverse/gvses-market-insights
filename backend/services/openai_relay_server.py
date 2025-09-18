@@ -14,7 +14,7 @@ import websockets
 from websockets.client import WebSocketClientProtocol
 from fastapi import WebSocket, WebSocketDisconnect, HTTPException
 from dotenv import load_dotenv
-from .openai_tool_mapper import get_openai_tool_mapper
+# NO TOOL IMPORTS - Voice interface only
 
 load_dotenv()
 
@@ -29,11 +29,16 @@ class OpenAIRealtimeRelay:
     def __init__(self):
         self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
+            logger.error("❌ OPENAI_API_KEY not found in environment variables")
             raise ValueError("OPENAI_API_KEY not found in environment variables")
+        
+        # Log API key info (masked for security)
+        masked_key = f"{self.api_key[:8]}...{self.api_key[-4:]}" if len(self.api_key) > 12 else "***"
+        logger.info(f"🔑 OpenAI API key loaded: {masked_key}")
         
         self.openai_url = "wss://api.openai.com/v1/realtime"
         self.model = "gpt-4o-realtime-preview-2024-12-17"
-        self.tool_mapper = None
+        # NO TOOLS - Realtime API is voice-only, agent handles all tools
         self.active_sessions = {}  # Track active sessions
         
     async def handle_relay_connection(
@@ -70,27 +75,39 @@ class OpenAIRealtimeRelay:
             # Add model parameter to URL
             url_with_model = f"{self.openai_url}?model={self.model}"
             
-            openai_ws = await websockets.connect(
-                url_with_model,
-                additional_headers=headers
-            )
+            try:
+                # Note: OpenAI Realtime API doesn't use WebSocket subprotocols
+                openai_ws = await websockets.connect(
+                    url_with_model,
+                    extra_headers=headers
+                )
+            except websockets.exceptions.InvalidStatusCode as e:
+                logger.error(f"❌ OpenAI WebSocket connection rejected with status {e.status_code}")
+                if e.status_code == 401:
+                    logger.error("🔑 Authentication failed - check OPENAI_API_KEY is valid")
+                    error_msg = {"type": "error", "error": {"message": "Authentication failed - invalid API key", "type": "auth_error"}}
+                elif e.status_code == 403:
+                    logger.error("🚫 Forbidden - API key may lack realtime permissions")
+                    error_msg = {"type": "error", "error": {"message": "API key lacks realtime permissions", "type": "auth_error"}}
+                else:
+                    error_msg = {"type": "error", "error": {"message": f"Connection rejected with status {e.status_code}", "type": "connection_error"}}
+                logger.error(f"Response headers: {e.headers}")
+                await websocket.send_json(error_msg)
+                await websocket.close(code=1008, reason="Policy violation")
+                return
+            except Exception as e:
+                logger.error(f"❌ Failed to connect to OpenAI: {type(e).__name__}: {e}")
+                error_msg = {"type": "error", "error": {"message": f"Connection failed: {str(e)}", "type": "connection_error"}}
+                await websocket.send_json(error_msg)
+                await websocket.close(code=1011, reason="Server error")
+                return
             
             logger.info(f"Relay connection established for session {session_id}")
             
-            # Initialize tool mapper for this session
-            if not self.tool_mapper:
-                try:
-                    self.tool_mapper = await get_openai_tool_mapper()
-                    logger.info("Tool mapper initialized for relay")
-                except Exception as e:
-                    logger.error(f"Failed to initialize tool mapper: {e}")
-                    # Continue without tools for graceful degradation
-            
-            # Store session info
+            # Store session info - NO TOOLS (voice-only)
             self.active_sessions[session_id] = {
                 "websocket": websocket,
                 "openai_ws": openai_ws,
-                "tool_mapper": self.tool_mapper,
                 "session_configured": False
             }
             
@@ -174,80 +191,14 @@ class OpenAIRealtimeRelay:
             logger.info(f"Relay connection closed for session {session_id}")
     
     async def _configure_session(self, openai_ws: WebSocketClientProtocol):
-        """Configure the OpenAI session with tools and enhanced instructions."""
+        """Configure the OpenAI session for voice-only interaction (no tools)."""
         
-        # Get available tools
+        # NO TOOLS - Voice interface only
+        # The agent orchestrator handles all tool execution
         tools = []
-        if self.tool_mapper:
-            try:
-                tools = self.tool_mapper.get_high_priority_tools()
-                logger.info(f"Configured {len(tools)} tools for relay session")
-            except Exception as e:
-                logger.error(f"Failed to load tools: {e}")
         
-        # Load enhanced instructions from training module
-        try:
-            from pathlib import Path
-            import sys
-            training_path = Path(__file__).parent.parent / 'agent_training'
-            if training_path.exists():
-                sys.path.insert(0, str(training_path.parent))
-                instructions_file = training_path / 'instructions.md'
-                if instructions_file.exists():
-                    with open(instructions_file, 'r') as f:
-                        instructions = f.read()
-                    logger.info("Loaded enhanced instructions from training module")
-                    
-                    # Integrate technical analysis knowledge
-                    try:
-                        from agent_training.knowledge_integration import TechnicalAnalysisKnowledge, knowledge_enhancer
-                        ta_knowledge = TechnicalAnalysisKnowledge()
-                        
-                        # Add technical analysis knowledge to instructions
-                        knowledge_section = "\n\n## Technical Analysis Knowledge\n\n"
-                        knowledge_section += "You have access to comprehensive technical analysis knowledge including:\n\n"
-                        
-                        # Add chart patterns
-                        chart_patterns = ta_knowledge.knowledge_base['chart_patterns']
-                        if chart_patterns:
-                            knowledge_section += "### Chart Patterns\n"
-                            for pattern_name, pattern_info in list(chart_patterns.items())[:5]:  # Top 5 patterns
-                                knowledge_section += f"- **{pattern_name}**: {pattern_info.get('description', '')[:100]}...\n"
-                            knowledge_section += "\n"
-                        
-                        # Add candlestick patterns
-                        candlestick_patterns = ta_knowledge.knowledge_base['candlestick_patterns']
-                        if candlestick_patterns:
-                            knowledge_section += "### Candlestick Patterns\n"
-                            for pattern_name, pattern_info in list(candlestick_patterns.items())[:5]:  # Top 5 patterns
-                                knowledge_section += f"- **{pattern_name}**: {pattern_info.get('description', '')[:100]}...\n"
-                            knowledge_section += "\n"
-                        
-                        # Add technical indicators
-                        indicators = ta_knowledge.knowledge_base['technical_indicators']
-                        if indicators:
-                            knowledge_section += "### Technical Indicators\n"
-                            for indicator_name, indicator_info in list(indicators.items())[:5]:  # Top 5 indicators
-                                knowledge_section += f"- **{indicator_name}**: {indicator_info.get('description', '')[:100]}...\n"
-                            knowledge_section += "\n"
-                        
-                        knowledge_section += "Use this knowledge to provide detailed technical analysis when discussing stocks, patterns, and market movements.\n"
-                        instructions += knowledge_section
-                        
-                        logger.info(f"Integrated technical analysis knowledge: {len(chart_patterns)} chart patterns, {len(candlestick_patterns)} candlestick patterns, {len(indicators)} indicators")
-                        
-                    except Exception as knowledge_error:
-                        logger.warning(f"Failed to load technical analysis knowledge: {knowledge_error}")
-                        # Continue with basic instructions
-                    
-                else:
-                    # Fallback to basic instructions
-                    instructions = self._get_fallback_instructions()
-            else:
-                instructions = self._get_fallback_instructions()
-        except Exception as e:
-            logger.error(f"Failed to load enhanced instructions: {e}")
-            instructions = self._get_fallback_instructions()
+        # Voice-only instructions - just transcribe and speak what's provided
+        instructions = "You are a voice interface only. Transcribe user speech accurately. Only speak text that is explicitly provided to you. Do not generate responses, answer questions, or call tools."
         
         # Send session configuration
         session_config = {
@@ -261,46 +212,33 @@ class OpenAIRealtimeRelay:
                 "input_audio_transcription": {
                     "model": "whisper-1"
                 },
-                "turn_detection": {
-                    "type": "server_vad",
-                    "threshold": 0.5,
-                    "prefix_padding_ms": 300,
-                    "silence_duration_ms": 500
-                },
-                "tools": tools,
-                "tool_choice": "auto",
-                "temperature": 0.7,
-                "max_response_output_tokens": 4096
+                # Voice-only configuration - no turn detection to avoid server errors
+                # Combined with empty tools and tool_choice: "none", this enforces voice-only I/O
+                "tools": [],  # Explicitly empty
+                "tool_choice": "none",  # CRITICAL: Disable tool usage
+                "temperature": 0.6,  # Minimum allowed temperature for OpenAI Realtime API
+                "max_response_output_tokens": 10  # Absolute minimum - we don't want any generated text
             }
         }
         
         await openai_ws.send(json.dumps(session_config))
     
     def _get_fallback_instructions(self) -> str:
-        """Get fallback instructions if enhanced ones can't be loaded."""
-        return """You are MarketSage, an AI trading and market analysis assistant with real-time voice capabilities.
+        """Get fallback instructions for voice-only interface."""
+        return """You are a voice interface assistant. Your role is to:
 
-Your capabilities include:
-- Real-time stock quotes, historical data, and technical analysis
-- Market news from CNBC and Yahoo Finance
-- Cryptocurrency prices and market data
-- Market overview, movers, and sector performance
-- Analyst ratings, earnings data, and insider trading information
+1. Convert speech to text accurately
+2. Relay user queries clearly 
+3. Speak responses naturally
 
 Voice Guidelines:
-- Keep responses concise but informative for voice delivery
-- Use natural speech patterns (e.g., "Apple is trading at two hundred thirty dollars")
-- Explain analysis in simple terms accessible to all users
-- When showing numbers, speak them clearly and naturally
-- If tools fail, acknowledge gracefully and provide general guidance
-- Always specify data sources and timestamps when relevant
+- Keep responses natural and conversational
+- Use clear speech patterns for numbers (e.g., "two hundred thirty" not "230")
+- Speak at a moderate pace for clarity
+- Acknowledge when you receive input
 
-Tool Usage:
-- Use tools proactively to get real-time data for user queries
-- Chain multiple tools for comprehensive analysis when appropriate
-- Always verify tool results before presenting to user
-
-IMPORTANT: This is market data and analysis, not investment advice."""
+IMPORTANT: You are ONLY a voice interface. You do not execute tools or analyze data.
+All intelligence and tool execution is handled by the separate agent system."""
     
     async def _relay_frontend_to_openai(
         self,
@@ -325,8 +263,11 @@ IMPORTANT: This is market data and analysis, not investment advice."""
                     # Binary audio data
                     await openai_ws.send(data["bytes"])
                     
-        except WebSocketDisconnect:
-            logger.info(f"Frontend disconnected for relay session {session_id}")
+        except WebSocketDisconnect as e:
+            # Log close code and reason for debugging
+            code = getattr(e, 'code', 'unknown')
+            reason = getattr(e, 'reason', 'no reason provided')
+            logger.info(f"📱 Client WebSocket closed for session {session_id} - Code: {code}, Reason: {reason}")
         except Exception as e:
             logger.error(f"Error relaying frontend to OpenAI for session {session_id}: {e}")
     
@@ -343,119 +284,23 @@ IMPORTANT: This is market data and analysis, not investment advice."""
                     # JSON message from OpenAI
                     data = json.loads(message)
                     
-                    # Handle function calls if we have a tool mapper
-                    if (data.get("type") == "response.function_call_arguments.done" and 
-                        self.tool_mapper):
-                        await self._handle_function_call(
-                            data, openai_ws, frontend_ws, session_id
-                        )
-                    else:
-                        # Forward message to frontend
-                        await frontend_ws.send_json(data)
+                    # NO TOOL HANDLING - Just forward all messages
+                    # Tools are handled by the agent orchestrator
+                    await frontend_ws.send_json(data)
                         
                 elif isinstance(message, bytes):
                     # Binary audio data from OpenAI
                     await frontend_ws.send_bytes(message)
                     
-        except websockets.exceptions.ConnectionClosed:
-            logger.info(f"OpenAI connection closed for relay session {session_id}")
+        except websockets.exceptions.ConnectionClosed as e:
+            # Log close code and reason for debugging
+            logger.info(f"🔌 OpenAI WebSocket closed for session {session_id} - Code: {e.code}, Reason: {e.reason}")
         except Exception as e:
             logger.error(f"Error relaying OpenAI to frontend for session {session_id}: {e}")
     
-    async def _handle_function_call(
-        self,
-        data: Dict[str, Any],
-        openai_ws: WebSocketClientProtocol,
-        frontend_ws: WebSocket,
-        session_id: str
-    ):
-        """Handle function calls during relay with automatic tool execution."""
-        try:
-            call_id = data.get("call_id")
-            tool_name = data.get("name", "")
-            arguments_str = data.get("arguments", "{}")
-            
-            try:
-                arguments = json.loads(arguments_str)
-            except json.JSONDecodeError:
-                arguments = {}
-            
-            logger.info(f"Relay executing tool {tool_name} for session {session_id}")
-            
-            # Notify frontend of tool execution
-            await frontend_ws.send_json({
-                "type": "tool_call_start",
-                "call_id": call_id,
-                "tool_name": tool_name,
-                "arguments": arguments
-            })
-            
-            # Execute tool
-            if self.tool_mapper:
-                tool_result = await self.tool_mapper.execute_tool(tool_name, arguments)
-                
-                # Send result back to OpenAI
-                output = json.dumps(tool_result)
-                
-                function_output_event = {
-                    "type": "conversation.item.create",
-                    "item": {
-                        "type": "function_call_output",
-                        "call_id": call_id,
-                        "output": output
-                    }
-                }
-                
-                await openai_ws.send(json.dumps(function_output_event))
-                
-                # Trigger response
-                response_create_event = {"type": "response.create"}
-                await openai_ws.send(json.dumps(response_create_event))
-                
-                # Notify frontend of completion
-                await frontend_ws.send_json({
-                    "type": "tool_call_complete",
-                    "call_id": call_id,
-                    "tool_name": tool_name,
-                    "success": tool_result.get("success", True),
-                    "result": tool_result
-                })
-                
-                logger.info(f"Relay tool execution complete: {tool_name}")
-                
-        except Exception as e:
-            logger.error(f"Tool execution failed in relay: {e}")
-            
-            # Send error result to OpenAI
-            error_output = json.dumps({
-                "success": False,
-                "error": str(e),
-                "tool_name": tool_name
-            })
-            
-            try:
-                function_output_event = {
-                    "type": "conversation.item.create",
-                    "item": {
-                        "type": "function_call_output",
-                        "call_id": call_id,
-                        "output": error_output
-                    }
-                }
-                
-                await openai_ws.send(json.dumps(function_output_event))
-                await openai_ws.send(json.dumps({"type": "response.create"}))
-                
-                # Notify frontend of error
-                await frontend_ws.send_json({
-                    "type": "tool_call_error",
-                    "call_id": call_id,
-                    "tool_name": tool_name,
-                    "error": str(e)
-                })
-                
-            except Exception as send_error:
-                logger.error(f"Failed to send error result: {send_error}")
+    # REMOVED: _handle_function_call method
+    # Tools are NOT handled by Realtime API - voice interface only
+    # The agent orchestrator handles all tool execution
     
     async def get_session_info(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get information about an active session."""
@@ -466,11 +311,63 @@ IMPORTANT: This is market data and analysis, not investment advice."""
         return {
             session_id: {
                 "session_id": session_id,
-                "tool_mapper_available": session["tool_mapper"] is not None,
-                "connection_active": True
+                "connection_active": True,
+                "voice_only": True  # This is now a voice-only interface
             }
             for session_id, session in self.active_sessions.items()
         }
+    
+    async def send_tts_to_session(self, session_id: str, text: str) -> bool:
+        """
+        Send text to a specific session for TTS output.
+        Used by the agent orchestrator to speak responses.
+        
+        Args:
+            session_id: The session to send TTS to
+            text: The text to speak
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            session = self.active_sessions.get(session_id)
+            if not session or not session.get("openai_ws"):
+                logger.error(f"Session {session_id} not found or not connected")
+                return False
+            
+            openai_ws = session["openai_ws"]
+            
+            # Create a conversation item with the text to speak
+            tts_message = {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {"type": "input_text", "text": text}
+                    ]
+                }
+            }
+            
+            await openai_ws.send(json.dumps(tts_message))
+            
+            # Request audio response
+            response_request = {
+                "type": "response.create",
+                "response": {
+                    "modalities": ["audio"],  # Audio only for TTS
+                    "instructions": "Speak this message clearly and naturally."
+                }
+            }
+            
+            await openai_ws.send(json.dumps(response_request))
+            
+            logger.info(f"TTS request sent to session {session_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error sending TTS to session {session_id}: {e}")
+            return False
 
 # Create singleton instance
 openai_relay_server = OpenAIRealtimeRelay()

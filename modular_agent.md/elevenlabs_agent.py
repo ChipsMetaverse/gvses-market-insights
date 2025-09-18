@@ -64,7 +64,7 @@ async def stream_conversation() -> None:
     # The following block is commented out because we cannot actually connect
     # in this environment.  Uncomment and adapt it in your own deployment.
     if False:
-        async with websockets.connect(url, extra_headers=headers) as ws:
+        async with websockets.connect(url, additional_headers=headers) as ws:
             print("WebSocket connected. Start speaking!")
             # TODO: capture microphone audio and send as base64-encoded chunks.
             # For example:

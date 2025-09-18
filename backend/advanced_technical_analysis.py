@@ -200,7 +200,7 @@ class AdvancedTechnicalAnalysis:
     @staticmethod
     def calculate_advanced_levels(prices: List[float], volume: List[float], current_price: float) -> Dict[str, Any]:
         """
-        Calculate advanced trading levels (LTB, ST, QE) with confluence
+        Calculate advanced trading levels (BTD, Buy Low, SE, Retest) with confluence
         """
         if len(prices) < 200:
             # Fallback for insufficient data
@@ -223,43 +223,109 @@ class AdvancedTechnicalAnalysis:
         # Volume profile - find high volume nodes
         volume_nodes = AdvancedTechnicalAnalysis._find_volume_nodes(prices[-50:], volume[-50:])
         
-        # Calculate Load the Boat (LTB) level
+        # Calculate Buy the Dip (BTD) level
         # Confluence of 200-day MA, 61.8% Fib, and high volume node
-        ltb_candidates = [
-            ma_200,
-            fib_levels['fib_618'],
-            volume_nodes['support'] if volume_nodes else ma_200 * 0.95
-        ]
-        ltb = np.mean([x for x in ltb_candidates if x < current_price])
-        if np.isnan(ltb) or ltb == 0:
-            ltb = current_price * 0.92  # 8% below current
+        btd_candidates = []
+        
+        # Only include MA200 if it's reasonably below current price
+        if ma_200 < current_price * 0.95:  # MA200 must be at least 5% below
+            btd_candidates.append(ma_200)
+        
+        # Only include Fib 61.8% if it's below current price
+        if fib_levels['fib_618'] < current_price * 0.95:
+            btd_candidates.append(fib_levels['fib_618'])
+        
+        # Include volume support if available and below current price
+        if volume_nodes and volume_nodes.get('support', 0) > 0:
+            if volume_nodes['support'] < current_price:
+                btd_candidates.append(volume_nodes['support'])
+        
+        # Calculate BTD from valid candidates
+        if btd_candidates:
+            btd = np.mean(btd_candidates)
+            # Ensure BTD is at least 5% below current price for meaningful dip
+            if btd > current_price * 0.95:
+                btd = current_price * 0.92
+        else:
+            btd = current_price * 0.92  # Fallback: 8% below current
             
-        # Calculate Swing Trade (ST) level
+        # Calculate Buy Low level
         # Confluence of 50-day MA, 50% Fib, and consolidation zone
-        st_candidates = [
-            ma_50,
-            fib_levels['fib_500'],
-            (ma_20 + ma_50) / 2
-        ]
-        st = np.mean([x for x in st_candidates if ltb < x < current_price])
-        if np.isnan(st) or st == 0:
-            st = current_price * 0.96  # 4% below current
+        buy_low_candidates = []
+        
+        # Include MA50 if it's between BTD and current price
+        if btd < ma_50 < current_price:
+            buy_low_candidates.append(ma_50)
+        
+        # Include Fib 50% if it's in the valid range
+        if btd < fib_levels['fib_500'] < current_price:
+            buy_low_candidates.append(fib_levels['fib_500'])
+        
+        # Include consolidation zone midpoint if valid
+        consolidation_mid = (ma_20 + ma_50) / 2
+        if btd < consolidation_mid < current_price:
+            buy_low_candidates.append(consolidation_mid)
+        
+        # Calculate Buy Low from valid candidates
+        if buy_low_candidates:
+            buy_low = np.mean(buy_low_candidates)
+        else:
+            # Fallback: 4% below current, but above BTD
+            buy_low = max(current_price * 0.96, btd + (current_price - btd) * 0.3)
             
-        # Calculate Quick Entry (QE) level
+        # Calculate Sell High (SE) level
         # Near recent highs or breakout zones
-        qe_candidates = [
-            recent_high * 0.98,  # Just below recent high
-            ma_20,
-            current_price * 1.02  # 2% above current for momentum
-        ]
-        qe = np.mean([x for x in qe_candidates if x > current_price])
-        if np.isnan(qe) or qe == 0:
-            qe = current_price * 1.03  # 3% above current
+        se_candidates = []
+        
+        # Include recent high if it's above current price
+        if recent_high > current_price:
+            se_candidates.append(recent_high * 0.98)  # Just below recent high
+        
+        # Include MA20 if it's above current (resistance)
+        if ma_20 > current_price:
+            se_candidates.append(ma_20)
+        
+        # Always include a momentum target
+        se_candidates.append(current_price * 1.02)  # 2% above for momentum
+        
+        # Calculate SE from valid candidates
+        if se_candidates:
+            se = np.mean([x for x in se_candidates if x > current_price])
+            if np.isnan(se) or se == 0:
+                se = current_price * 1.03
+        else:
+            se = current_price * 1.03  # Fallback: 3% above current
+            
+        # Calculate Retest level
+        # Previous resistance turned support (between buy_low and current price)
+        retest_candidates = []
+        
+        # Include Fib 38.2% if it's in valid range
+        if buy_low < fib_levels['fib_382'] < current_price:
+            retest_candidates.append(fib_levels['fib_382'])
+        
+        # Include MA20 if it's just below current (support)
+        if buy_low < ma_20 < current_price:
+            retest_candidates.append(ma_20)
+        
+        # Include recent breakout retest level
+        if recent_high < current_price:  # We've broken above recent high
+            retest_level = recent_high * 0.98
+            if buy_low < retest_level < current_price:
+                retest_candidates.append(retest_level)
+        
+        # Calculate Retest from valid candidates
+        if retest_candidates:
+            retest = np.mean(retest_candidates)
+        else:
+            # Fallback: 2% below current, but above buy_low
+            retest = max(current_price * 0.98, buy_low + (current_price - buy_low) * 0.5)
             
         return {
-            'ltb_level': round(ltb, 2),
-            'st_level': round(st, 2),
-            'qe_level': round(qe, 2),
+            'btd_level': round(btd, 2),
+            'buy_low_level': round(buy_low, 2),
+            'sell_high_level': round(se, 2),
+            'retest_level': round(retest, 2),
             'ma_20': round(ma_20, 2),
             'ma_50': round(ma_50, 2),
             'ma_200': round(ma_200, 2),
@@ -370,9 +436,10 @@ class AdvancedTechnicalAnalysis:
     def _calculate_simple_levels(current_price: float) -> Dict[str, Any]:
         """Simple level calculation when insufficient data"""
         return {
-            'ltb_level': round(current_price * 0.92, 2),  # 8% below
-            'st_level': round(current_price * 0.96, 2),   # 4% below
-            'qe_level': round(current_price * 1.03, 2),   # 3% above
+            'btd_level': round(current_price * 0.92, 2),  # Buy the Dip - 8% below
+            'buy_low_level': round(current_price * 0.96, 2),   # Buy Low - 4% below
+            'sell_high_level': round(current_price * 1.03, 2),   # Sell High - 3% above
+            'retest_level': round(current_price * 0.98, 2),   # Retest - 2% below
             'ma_20': round(current_price * 0.99, 2),
             'ma_50': round(current_price * 0.97, 2),
             'ma_200': round(current_price * 0.93, 2),

@@ -7,6 +7,7 @@
 
 import { RealtimeClient } from '@openai/realtime-api-beta';
 import type { ItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface VoiceConnectionConfig {
   sessionId?: string;
@@ -20,41 +21,71 @@ interface VoiceConnectionConfig {
   onToolResult?: (toolName: string, result: any) => void;
 }
 
-interface MarketDataTool {
-  name: string;
-  description: string;
-  parameters: any;
-  handler: (args: any) => Promise<any>;
-}
-
 export class OpenAIRealtimeService {
   private client: RealtimeClient;
   private config: VoiceConnectionConfig;
   private connected: boolean = false;
   private sessionId: string;
-  private tools: Map<string, MarketDataTool> = new Map();
   
   constructor(config: VoiceConnectionConfig) {
     this.config = config;
     this.sessionId = config.sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Initialize RealtimeClient with relay server URL
-    const relayUrl = config.relayServerUrl || `ws://localhost:8000/openai/realtime/ws`;
+    // Store config for later use in connect()
+    console.log('🌐 OpenAIRealtimeService initialized');
+    console.log('🔍 Config.relayServerUrl:', config.relayServerUrl);
     
-    this.client = new RealtimeClient({ 
-      url: relayUrl
-    });
-    
-    this.setupEventHandlers();
-    this.setupMarketDataTools();
+    // Client will be created in connect() after fetching session
+    this.client = null as any;
   }
   
   private setupEventHandlers(): void {
-    // Connection events
+    // FIXED: Use correct RealtimeClient events from official docs
+    
+    // Error events (connection failures, etc.)
     this.client.on('error', (event) => {
-      console.error('RealtimeClient error:', event);
+      console.error('🔴 RealtimeClient error:', event);
+      this.connected = false;
       this.config.onError?.(event);
+      this.config.onDisconnected?.();
     });
+    
+    // Raw server/client events for debugging
+    this.client.on('realtime.event', ({ time, source, event }) => {
+      console.log('📡 RealtimeEvent:', source, event.type, event);
+      
+      // Handle session.created as connection confirmation
+      if (source === 'server' && event.type === 'session.created') {
+        console.log('🚀 OpenAI session created - connection established!');
+        console.log('🔧 DEBUG: About to set connected=true and call onConnected callback');
+        this.connected = true;
+        console.log('🔧 DEBUG: this.connected is now:', this.connected);
+        console.log('🔧 DEBUG: this.config.onConnected exists?', typeof this.config.onConnected);
+        if (this.config.onConnected) {
+          console.log('🔧 DEBUG: Calling onConnected callback now...');
+          this.config.onConnected();
+          console.log('🔧 DEBUG: onConnected callback completed');
+        } else {
+          console.warn('🔧 DEBUG: onConnected callback is missing!');
+        }
+      }
+      
+      // Handle session.updated
+      if (source === 'server' && event.type === 'session.updated') {
+        console.log('⚙️ OpenAI session updated:', event.session);
+      }
+      
+      // Handle connection errors
+      if (source === 'server' && event.type === 'error') {
+        console.error('❌ OpenAI server error:', event?.error?.message || JSON.stringify(event?.error));
+        this.connected = false;
+        this.config.onError?.(event.error);
+        this.config.onDisconnected?.();
+      }
+    });
+    
+    // Track current message being built up from deltas
+    const currentMessages = new Map<string, { role: string; content: string }>();
     
     // Conversation flow events
     this.client.on('conversation.interrupted', () => {
@@ -67,12 +98,27 @@ export class OpenAIRealtimeService {
       
       switch (item.type) {
         case 'message':
-          if (item.role === 'user' && delta?.transcript) {
-            // User speech transcription
-            this.config.onTranscript?.(delta.transcript, false);
-          } else if (item.role === 'assistant' && delta?.transcript) {
-            // Assistant response transcription
-            this.config.onTranscript?.(delta.transcript, true);
+          if (delta?.transcript) {
+            // Accumulate transcript deltas
+            const messageKey = `${item.role}-${item.id}`;
+            
+            if (!currentMessages.has(messageKey)) {
+              currentMessages.set(messageKey, {
+                role: item.role,
+                content: ''
+              });
+            }
+            
+            const message = currentMessages.get(messageKey)!;
+            message.content += delta.transcript;
+            
+            // Send the accumulated transcript (updating the same message)
+            if (item.role === 'user') {
+              // User transcripts: final=false during speaking (for UI updates)
+              this.config.onTranscript?.(message.content, false, item.id);
+            }
+            // Don't emit assistant transcripts - they're not needed for agent processing
+            // The agent will provide its own response text
           }
           break;
           
@@ -92,6 +138,26 @@ export class OpenAIRealtimeService {
       // Handle audio delta
       if (delta?.audio) {
         this.config.onAudioResponse?.(delta.audio);
+      }
+    });
+    
+    // Clear message when completed
+    this.client.on('conversation.item.completed', ({ item }) => {
+      if (item.type === 'message') {
+        const messageKey = `${item.role}-${item.id}`;
+        
+        // Emit final transcript for user messages before clearing
+        if (item.role === 'user') {
+          const finalMessage = currentMessages.get(messageKey);
+          if (finalMessage && finalMessage.content) {
+            console.log('📝 User speech completed, emitting final transcript:', finalMessage.content);
+            // Emit as final (true) so agent hook will process it
+            this.config.onTranscript?.(finalMessage.content, true, item.id);
+          }
+        }
+        // Note: We don't emit assistant transcripts at all - the agent provides responses
+        
+        currentMessages.delete(messageKey);
       }
     });
     
@@ -134,78 +200,61 @@ export class OpenAIRealtimeService {
     });
   }
   
-  private setupMarketDataTools(): void {
-    // Market data tools are handled by the relay server
-    // But we can define them here for type safety and documentation
-    const marketTools: MarketDataTool[] = [
-      {
-        name: 'get_stock_quote',
-        description: 'Get real-time stock quote with detailed metrics',
-        parameters: {
-          type: 'object',
-          properties: {
-            symbol: { type: 'string', description: 'Stock symbol (e.g., TSLA, AAPL)' }
-          },
-          required: ['symbol']
-        },
-        handler: async (args) => {
-          // Tools are executed by relay server, this is just for reference
-          throw new Error('Tools are executed by relay server');
-        }
-      },
-      {
-        name: 'get_market_overview',
-        description: 'Get overall market overview including major indices',
-        parameters: { type: 'object', properties: {} },
-        handler: async () => {
-          throw new Error('Tools are executed by relay server');
-        }
-      },
-      {
-        name: 'get_technical_indicators',
-        description: 'Calculate technical indicators for a stock',
-        parameters: {
-          type: 'object',
-          properties: {
-            symbol: { type: 'string', description: 'Stock symbol' },
-            indicators: { 
-              type: 'array', 
-              items: { type: 'string' },
-              description: 'Technical indicators to calculate'
-            }
-          },
-          required: ['symbol', 'indicators']
-        },
-        handler: async () => {
-          throw new Error('Tools are executed by relay server');
-        }
-      }
-    ];
-    
-    marketTools.forEach(tool => {
-      this.tools.set(tool.name, tool);
-    });
-  }
-  
   async connect(): Promise<void> {
     try {
-      console.log(`Connecting to relay server: ${this.config.relayServerUrl}`);
+      console.log('🎤 Connecting to OpenAI Realtime API...');
       
-      // Connect to relay server FIRST
+      // Use standardized API URL utility
+      const apiUrl = getApiUrl();
+      
+      // First, create a session to get the relay URL
+      const sessionResponse = await fetch(`${apiUrl}/openai/realtime/session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (!sessionResponse.ok) {
+        throw new Error(`Failed to create session: ${sessionResponse.statusText}`);
+      }
+      
+      const sessionData = await sessionResponse.json();
+      
+      // Build dynamic WebSocket URL from session
+      let relayUrl: string = sessionData.ws_url;
+      if (!relayUrl) {
+        // Construct from apiUrl and session_id if not provided
+        const wsUrl = apiUrl.replace(/^http/, 'ws');
+        relayUrl = `${wsUrl}/realtime-relay/${sessionData.session_id}`;
+      } else if (!relayUrl.startsWith('ws')) {
+        // If it's a relative path, build full URL from apiUrl
+        const wsUrl = apiUrl.replace(/^http/, 'ws');
+        relayUrl = `${wsUrl}${relayUrl}`;
+      }
+      console.log('🌐 Creating RealtimeClient with relay URL:', relayUrl);
+      
+      // Now create the client with the relay URL (this will execute tools!)
+      this.client = new RealtimeClient({ 
+        url: relayUrl
+      });
+      
+      // Set up event handlers on the new client
+      this.setupEventHandlers();
+      
+      console.log('🔗 Connecting to relay server:', relayUrl);
+      
+      // FIXED: RealtimeClient.connect() handles connection internally
+      // Success is indicated by session.created event, not explicit return
       await this.client.connect();
       
-      this.connected = true;
-      this.config.onConnected?.();
+      console.log('✅ RealtimeClient.connect() completed - waiting for session.created');
       
-      console.log('Connected to OpenAI Realtime API via relay server');
-      
-      // Note: Session configuration including tools is now handled by the relay server
-      // after receiving session.created from OpenAI. This ensures proper timing
-      // and the correct Realtime API tool format is used.
+      // Note: Connection success confirmed via 'realtime.event' with session.created
       
     } catch (error) {
-      console.error('Failed to connect to OpenAI Realtime API:', error);
+      console.error('❌ Failed to connect to OpenAI Realtime API:', error);
+      this.connected = false;
       this.config.onError?.(error);
+      this.config.onDisconnected?.();
       throw error;
     }
   }
@@ -233,9 +282,19 @@ export class OpenAIRealtimeService {
       throw new Error('Not connected to OpenAI Realtime API');
     }
     
+    console.log('📤 Sending text for TTS:', text);
+    
+    // With turn_detection disabled in the relay server, this won't auto-generate responses
+    // The text will be sent for TTS only, as configured by the relay
     this.client.sendUserMessageContent([
       { type: 'input_text', text }
     ]);
+    
+    // Explicitly request audio response for TTS
+    // Since turn_detection is disabled, we need to manually trigger the response
+    this.createResponse();
+    
+    console.log('✅ TTS request sent');
   }
   
   sendAudioData(audioData: Int16Array): void {
@@ -274,10 +333,6 @@ export class OpenAIRealtimeService {
     return this.client.conversation.getItems();
   }
   
-  getAvailableTools(): MarketDataTool[] {
-    return Array.from(this.tools.values());
-  }
-  
   getSessionId(): string {
     return this.sessionId;
   }
@@ -288,7 +343,6 @@ export class OpenAIRealtimeService {
  */
 export function createOpenAIRealtimeService(config: Partial<VoiceConnectionConfig> = {}): OpenAIRealtimeService {
   const defaultConfig: VoiceConnectionConfig = {
-    relayServerUrl: `ws://localhost:8000/realtime-relay/${config.sessionId || `session_${Date.now()}`}`,
     onConnected: () => console.log('Voice assistant connected'),
     onDisconnected: () => console.log('Voice assistant disconnected'),
     onError: (error) => console.error('Voice assistant error:', error),

@@ -181,11 +181,20 @@ export const useElevenLabsConversation = (config: UseElevenLabsConfig = {}) => {
     setIsLoading(true);
     setError(null);
     
+    // Add timeout to prevent stuck loading state
+    const timeoutId = setTimeout(() => {
+      console.warn('ElevenLabs connection timeout - clearing loading state');
+      setIsLoading(false);
+      setError('Connection timeout - please try again');
+    }, 15000); // 15 second timeout
+    
     try {
       await connectionManager.current.getConnection(apiUrl, agentId);
+      clearTimeout(timeoutId);
       // Connection status will be updated via the listener
       setIsLoading(false); // Clear loading state after successful connection
     } catch (err) {
+      clearTimeout(timeoutId);
       setError(err instanceof Error ? err.message : 'Failed to start conversation');
       setIsLoading(false);
     }

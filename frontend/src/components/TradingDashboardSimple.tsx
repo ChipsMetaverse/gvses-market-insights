@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { TradingChart } from './TradingChart';
+import { IndicatorControls } from './IndicatorControls';
 import { marketDataService, SymbolSearchResult } from '../services/marketDataService';
 import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import { useOpenAIRealtimeConversation } from '../hooks/useOpenAIRealtimeConversation';
@@ -7,7 +8,8 @@ import { useAgentVoiceConversation } from '../hooks/useAgentVoiceConversation';
 import { useSymbolSearch } from '../hooks/useSymbolSearch';
 // import { ProviderSelector } from './ProviderSelector'; // Removed - conflicts with useElevenLabsConversation
 import { chartControlService } from '../services/chartControlService';
-import { enhancedChartControl } from '../services/enhancedChartControlService';
+import { enhancedChartControl } from '../services/enhancedChartControl';
+import { useIndicatorContext } from '../contexts/IndicatorContext';
 import { CommandToast } from './CommandToast';
 import { VoiceCommandHelper } from './VoiceCommandHelper';
 import StructuredResponse from './StructuredResponse';
@@ -931,6 +933,15 @@ export const TradingDashboardSimple: React.FC = () => {
   
   // Register chart control callbacks for both services
   useEffect(() => {
+    // Connect indicator dispatch if available
+    try {
+      const { dispatch } = useIndicatorContext();
+      enhancedChartControl.setIndicatorDispatch(dispatch);
+      console.log('Indicator controls connected to agent');
+    } catch (error) {
+      console.log('IndicatorContext not available - agent indicator control disabled');
+    }
+    
     // Register with enhanced service
     enhancedChartControl.registerCallbacks({
       onSymbolChange: (symbol: string, metadata?: { assetType?: 'stock' | 'crypto' }) => {
@@ -1221,6 +1232,9 @@ export const TradingDashboardSimple: React.FC = () => {
         <main className="main-content">
           {/* Chart Section - Always Visible */}
           <div className="chart-section">
+            {/* Indicator Controls */}
+            <IndicatorControls />
+            
             <div className="chart-wrapper">
               <TradingChart 
                 symbol={selectedSymbol} 

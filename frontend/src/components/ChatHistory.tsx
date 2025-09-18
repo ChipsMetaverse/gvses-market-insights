@@ -1,10 +1,12 @@
 import React, { useEffect, useRef } from 'react';
+import StructuredResponse from './StructuredResponse';
 import './ChatHistory.css';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  provider?: 'agent' | 'elevenlabs' | 'openai';
 }
 
 interface ChatHistoryProps {
@@ -49,7 +51,11 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({ messages }) => {
             </span>
           </div>
           <div className="message-content">
-            {message.content}
+            {message.role === 'assistant' ? (
+              <StructuredResponse content={message.content} />
+            ) : (
+              message.content
+            )}
           </div>
         </div>
       ))}

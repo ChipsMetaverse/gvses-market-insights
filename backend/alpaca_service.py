@@ -5,6 +5,7 @@ Provides real-time and historical market data using Alpaca Markets API
 
 import os
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from alpaca.trading.client import TradingClient
@@ -23,6 +24,14 @@ from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
+# Rate limiting configuration
+RATE_LIMIT_THRESHOLD = 180  # Alpaca allows 200 requests per minute
+RATE_LIMIT_WINDOW = 60  # 60 seconds
+REQUEST_TRACKING = {
+    'count': 0,
+    'window_start': time.time()
+}
+
 
 class AlpacaService:
     """Service for fetching market data from Alpaca Markets."""
@@ -31,23 +40,52 @@ class AlpacaService:
         """Initialize Alpaca clients with API credentials from environment."""
         self.api_key = os.getenv('ALPACA_API_KEY')
         self.secret_key = os.getenv('ALPACA_SECRET_KEY')
+        self.is_available = False
+        self.request_count = 0
+        self.window_start = time.time()
         
         if not self.api_key or not self.secret_key:
-            raise ValueError("Alpaca API credentials not found in environment")
+            logger.warning("Alpaca API credentials not found in environment - service will be unavailable")
+            return
         
-        # Initialize clients
-        self.trading_client = TradingClient(
-            api_key=self.api_key,
-            secret_key=self.secret_key,
-            paper=True  # Always use paper trading for safety
-        )
+        try:
+            # Initialize clients
+            self.trading_client = TradingClient(
+                api_key=self.api_key,
+                secret_key=self.secret_key,
+                paper=True  # Always use paper trading for safety
+            )
+            
+            self.data_client = StockHistoricalDataClient(
+                api_key=self.api_key,
+                secret_key=self.secret_key
+            )
+            
+            self.is_available = True
+            logger.info("Alpaca service initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Alpaca clients: {e}")
+            self.is_available = False
+    
+    def _check_rate_limit(self) -> bool:
+        """Check if we're within rate limits."""
+        current_time = time.time()
         
-        self.data_client = StockHistoricalDataClient(
-            api_key=self.api_key,
-            secret_key=self.secret_key
-        )
+        # Reset counter if window has elapsed
+        if current_time - self.window_start > RATE_LIMIT_WINDOW:
+            self.request_count = 0
+            self.window_start = current_time
         
-        logger.info("Alpaca service initialized successfully")
+        # Check if we're approaching the limit
+        if self.request_count >= RATE_LIMIT_THRESHOLD:
+            logger.warning(f"Alpaca rate limit approaching: {self.request_count}/{RATE_LIMIT_THRESHOLD}")
+            return False
+        
+        return True
+    
+    def _increment_request_count(self):
+        """Increment the request counter."""
+        self.request_count += 1
     
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information."""
@@ -421,9 +459,26 @@ class AlpacaService:
 _alpaca_service: Optional[AlpacaService] = None
 
 
-def get_alpaca_service() -> AlpacaService:
-    """Get or create the singleton Alpaca service instance."""
+def get_alpaca_service() -> Optional[AlpacaService]:
+    """Get or create the singleton Alpaca service instance.
+    
+    Returns None if Alpaca credentials are missing or service initialization fails.
+    """
     global _alpaca_service
+    
     if _alpaca_service is None:
-        _alpaca_service = AlpacaService()
+        try:
+            _alpaca_service = AlpacaService()
+            if not _alpaca_service.is_available:
+                logger.warning("Alpaca service is not available - credentials missing or initialization failed")
+                return None
+        except Exception as e:
+            logger.error(f"Failed to create Alpaca service: {e}")
+            return None
+    
+    # Check if rate limit is exceeded
+    if _alpaca_service and not _alpaca_service._check_rate_limit():
+        logger.warning("Alpaca rate limit exceeded - returning None to trigger fallback")
+        return None
+    
     return _alpaca_service

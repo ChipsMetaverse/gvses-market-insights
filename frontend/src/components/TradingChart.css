@@ -1,0 +1,141 @@
+/**
+ * TradingChart.css - Styles for the enhanced trading chart with indicators
+ */
+
+.trading-chart-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.main-chart {
+  width: 100%;
+  transition: height 0.3s ease;
+}
+
+.oscillator-chart {
+  width: 100%;
+  height: 150px;
+  border-top: 2px solid #e0e0e0;
+  background: linear-gradient(to bottom, #f9fafb, white);
+}
+
+/* Loading State */
+.chart-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 10px 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  color: #666;
+}
+
+/* Error State */
+.chart-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border: 2px solid #ef4444;
+  max-width: 400px;
+  text-align: center;
+}
+
+.chart-error-title {
+  color: #ef4444;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.chart-error-message {
+  color: #666;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Indicator Labels */
+.indicator-label {
+  position: absolute;
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 5;
+  white-space: nowrap;
+}
+
+.indicator-label.ma20 {
+  color: #2962FF;
+  border: 1px solid #2962FF;
+}
+
+.indicator-label.ma50 {
+  color: #FF6B35;
+  border: 1px solid #FF6B35;
+}
+
+.indicator-label.ma200 {
+  color: #4CAF50;
+  border: 1px solid #4CAF50;
+}
+
+/* Oscillator Indicators */
+.oscillator-title {
+  position: absolute;
+  top: 5px;
+  left: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  z-index: 10;
+}
+
+.oscillator-legend {
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  display: flex;
+  gap: 15px;
+  font-size: 11px;
+  z-index: 10;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .oscillator-chart {
+    height: 120px;
+  }
+  
+  .indicator-label {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+}

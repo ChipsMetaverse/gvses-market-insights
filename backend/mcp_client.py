@@ -205,6 +205,34 @@ class MCPClient:
                 logger.error(f"Error reading MCP response: {e}")
                 break
     
+    async def list_tools(self) -> Optional[Dict[str, Any]]:
+        """
+        List available MCP tools.
+        
+        Returns:
+            Dict containing tools list or None if error
+        """
+        if not self._initialized:
+            await self.start()
+        
+        request = {
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "params": {},
+            "id": self._get_next_id()
+        }
+        
+        response = await self._send_request(request)
+        
+        if response and "result" in response:
+            return response["result"]
+        elif response and "error" in response:
+            logger.error(f"MCP tools/list error: {response['error']}")
+            return None
+        else:
+            logger.error("No response from MCP server for tools/list")
+            return None
+    
     async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """
         Call an MCP tool and return the result.
@@ -269,8 +297,10 @@ def get_mcp_client() -> MCPClient:
             # Production path in Docker
             server_path = "/app/market-mcp-server/index.js"
         else:
-            # Development path
-            server_path = "/Volumes/WD My Passport 264F Media/claude-voice-mcp/market-mcp-server/index.js"
+            # Development path - use repo-relative path
+            from pathlib import Path
+            repo_root = Path(__file__).resolve().parents[1]
+            server_path = str(repo_root / "market-mcp-server" / "index.js")
         _mcp_client = MCPClient(server_path)
     return _mcp_client
 

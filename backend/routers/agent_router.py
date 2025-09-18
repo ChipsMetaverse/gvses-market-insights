@@ -11,6 +11,7 @@ from typing import List, Optional, Dict, Any
 import json
 import logging
 from services.agent_orchestrator import get_orchestrator
+from services.openai_relay_server import openai_relay_server
 
 logger = logging.getLogger(__name__)
 
@@ -87,28 +88,29 @@ async def stream_query(request: AgentQuery):
         orchestrator = get_orchestrator()
         
         async def generate():
-            """Generate streaming response."""
+            """Generate TRUE streaming response with progressive tool execution."""
             # First, send metadata about the query
             metadata = {
                 "type": "metadata",
                 "session_id": request.session_id,
-                "model": orchestrator.model
+                "model": orchestrator.model,
+                "streaming": True,
+                "version": "2.0"  # New streaming version
             }
             yield f"data: {json.dumps(metadata)}\n\n"
             
-            # Stream the response
+            # Stream the response with progressive updates
             async for chunk in orchestrator.stream_query(
                 query=request.query,
                 conversation_history=request.conversation_history
             ):
-                data = {
-                    "type": "content",
-                    "text": chunk
-                }
-                yield f"data: {json.dumps(data)}\n\n"
-            
-            # Send completion signal
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                # The new stream_query yields dictionaries with type and data
+                # Types: content, tool_start, tool_result, done, error
+                yield f"data: {json.dumps(chunk)}\n\n"
+                
+                # If this is the done signal, we're finished
+                if chunk.get("type") == "done":
+                    break
         
         return StreamingResponse(
             generate(),
@@ -191,3 +193,55 @@ async def agent_health():
             "status": "unhealthy",
             "error": str(e)
         }
+
+@router.post("/voice-query")
+async def process_voice_query(request: AgentQuery):
+    """
+    Process a voice query: agent processes it and sends response to TTS.
+    
+    This is the integration point between the agent and voice interface:
+    1. Receives transcript from STT
+    2. Agent processes query with tools
+    3. Sends response text to TTS via Realtime API
+    
+    Returns the agent response data (text version).
+    """
+    try:
+        # Get the orchestrator
+        orchestrator = get_orchestrator()
+        
+        # Process the query with the agent
+        if request.stream:
+            # For streaming, we'd need a different approach
+            raise HTTPException(status_code=400, detail="Streaming not supported for voice queries")
+        
+        result = await orchestrator.process_query(
+            query=request.query,
+            conversation_history=request.conversation_history
+        )
+        
+        # Send the response text to TTS if session_id provided
+        if request.session_id and result.get("text"):
+            tts_success = await openai_relay_server.send_tts_to_session(
+                session_id=request.session_id,
+                text=result["text"]
+            )
+            
+            if not tts_success:
+                logger.warning(f"Failed to send TTS for session {request.session_id}")
+                # Continue anyway - the text response is still valid
+        
+        # Return the agent response
+        return AgentResponse(
+            text=result["text"],
+            tools_used=result.get("tools_used", []),
+            data=result.get("data", {}),
+            timestamp=result["timestamp"],
+            model=result.get("model", "unknown"),
+            cached=result.get("cached", False),
+            session_id=request.session_id
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing voice query: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

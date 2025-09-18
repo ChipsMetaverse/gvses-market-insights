@@ -78,9 +78,10 @@ export interface MarketOverview {
 }
 
 export interface TechnicalLevels {
-  qe_level?: number;  // Quick Entry
-  st_level?: number;  // Swing Trade
-  ltb_level?: number; // Load The Boat
+  se_level?: number;      // Sell High
+  buy_low_level?: number; // Buy Low
+  btd_level?: number;     // Buy The Dip
+  retest_level?: number;  // Retest
 }
 
 export interface SymbolSearchResult {
@@ -128,14 +129,8 @@ class MarketDataService {
       return response.data;
     } catch (error) {
       console.error(`Error fetching stock price for ${symbol}:`, error);
-      // Return mock data as fallback
-      return {
-        symbol: symbol.toUpperCase(),
-        price: 100 + Math.random() * 100,
-        change: Math.random() * 10 - 5,
-        change_percent: Math.random() * 4 - 2,
-        timestamp: new Date().toISOString()
-      };
+      // Throw error to surface backend issues during testing
+      throw new Error(`Failed to fetch stock price for ${symbol}: ${error}`);
     }
   }
 
@@ -204,8 +199,16 @@ class MarketDataService {
 
     try {
       const response = await axios.get(`${API_URL}/api/market-overview`);
-      this.setCache(cacheKey, response.data);
-      return response.data;
+      const data = response.data;
+      
+      // Map movers to top_gainers/top_losers if needed
+      if (data.movers && !data.top_gainers) {
+        data.top_gainers = data.movers.gainers || [];
+        data.top_losers = data.movers.losers || [];
+      }
+      
+      this.setCache(cacheKey, data);
+      return data;
     } catch (error) {
       console.error('Error fetching market overview:', error);
       throw error;

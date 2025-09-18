@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { OpenAIRealtimeService } from '../services/OpenAIRealtimeService';
 
 interface OpenAIMessage {
+  id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
@@ -41,6 +42,28 @@ export const useOpenAIRealtimeConversation = (config: UseOpenAIRealtimeConfig = 
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  
+  // Store current callback refs to prevent re-renders
+  const callbacksRef = useRef({
+    onUserTranscript,
+    onAgentResponse,
+    onAudioChunk,
+    onConnectionChange,
+    onToolCall,
+    onToolResult
+  });
+  
+  // Update callback refs when they change
+  useEffect(() => {
+    callbacksRef.current = {
+      onUserTranscript,
+      onAgentResponse,
+      onAudioChunk,
+      onConnectionChange,
+      onToolCall,
+      onToolResult
+    };
+  });
 
   // Initialize audio context
   const initAudioContext = useCallback(async () => {
@@ -102,47 +125,89 @@ export const useOpenAIRealtimeConversation = (config: UseOpenAIRealtimeConfig = 
   // Initialize OpenAI Realtime Service
   useEffect(() => {
     if (!serviceRef.current) {
-      const finalRelayUrl = relayServerUrl || `${apiUrl.replace('http', 'ws')}/openai/realtime/ws`;
-      
       serviceRef.current = new OpenAIRealtimeService({
         sessionId: sessionId,
-        relayServerUrl: finalRelayUrl,
         onConnected: () => {
+          console.log('🔧 HOOK DEBUG: onConnected callback received!');
+          console.log('🔧 HOOK DEBUG: About to call setIsConnected(true)');
           setIsConnected(true);
+          console.log('🔧 HOOK DEBUG: setIsConnected(true) called');
           setIsLoading(false);
-          onConnectionChange?.(true);
+          console.log('🔧 HOOK DEBUG: About to call external onConnectionChange callback');
+          callbacksRef.current.onConnectionChange?.(true);
+          console.log('🔧 HOOK DEBUG: onConnected sequence completed');
         },
         onDisconnected: () => {
           setIsConnected(false);
           setIsLoading(false);
-          onConnectionChange?.(false);
+          callbacksRef.current.onConnectionChange?.(false);
         },
         onError: (error) => {
           console.error('OpenAI Realtime error:', error);
           setError(error?.message || 'OpenAI connection error');
           setIsLoading(false);
           setIsConnected(false);
-          onConnectionChange?.(false);
+          callbacksRef.current.onConnectionChange?.(false);
         },
-        onTranscript: (text, final) => {
+        onTranscript: (text, final, messageId) => {
           if (final) {
-            // Assistant transcript (final)
-            const message: OpenAIMessage = {
-              role: 'assistant',
-              content: text,
-              timestamp: new Date().toISOString()
-            };
-            setMessages(prev => [...prev, message]);
-            onAgentResponse?.(text);
+            // Assistant transcript (final) - accumulated from deltas
+            const msgId = messageId || `assistant-${Date.now()}-${Math.random()}`;
+            
+            setMessages(prev => {
+              // Check if message already exists
+              const existingIndex = prev.findIndex(m => m.id === msgId);
+              
+              if (existingIndex >= 0) {
+                // Update existing message
+                const updated = [...prev];
+                updated[existingIndex] = {
+                  ...updated[existingIndex],
+                  content: text
+                };
+                return updated;
+              } else {
+                // Create new message
+                const newMessage: OpenAIMessage = {
+                  id: msgId,
+                  role: 'assistant',
+                  content: text,
+                  timestamp: new Date().toISOString()
+                };
+                return [...prev, newMessage];
+              }
+            });
+            
+            callbacksRef.current.onAgentResponse?.(text);
           } else {
-            // User transcript (interim)
-            const message: OpenAIMessage = {
-              role: 'user',
-              content: text,
-              timestamp: new Date().toISOString()
-            };
-            setMessages(prev => [...prev, message]);
-            onUserTranscript?.(text);
+            // User transcript (interim) - accumulated from deltas
+            const msgId = messageId || `user-${Date.now()}-${Math.random()}`;
+            
+            setMessages(prev => {
+              // Check if message already exists
+              const existingIndex = prev.findIndex(m => m.id === msgId);
+              
+              if (existingIndex >= 0) {
+                // Update existing message
+                const updated = [...prev];
+                updated[existingIndex] = {
+                  ...updated[existingIndex],
+                  content: text
+                };
+                return updated;
+              } else {
+                // Create new message
+                const newMessage: OpenAIMessage = {
+                  id: msgId,
+                  role: 'user',
+                  content: text,
+                  timestamp: new Date().toISOString()
+                };
+                return [...prev, newMessage];
+              }
+            });
+            
+            callbacksRef.current.onUserTranscript?.(text);
           }
         },
         onAudioResponse: (audioData: Int16Array) => {
@@ -151,18 +216,18 @@ export const useOpenAIRealtimeConversation = (config: UseOpenAIRealtimeConfig = 
           playNextAudio();
           
           // Convert to base64 for compatibility with existing interface
-          if (onAudioChunk) {
+          if (callbacksRef.current.onAudioChunk) {
             const audioBase64 = btoa(String.fromCharCode(...new Uint8Array(audioData.buffer)));
-            onAudioChunk(audioBase64);
+            callbacksRef.current.onAudioChunk(audioBase64);
           }
         },
         onToolCall: (toolName: string, args: any) => {
           console.log('OpenAI tool called:', toolName, args);
-          onToolCall?.(toolName, args);
+          callbacksRef.current.onToolCall?.(toolName, args);
         },
         onToolResult: (toolName: string, result: any) => {
           console.log('OpenAI tool result:', toolName, result);
-          onToolResult?.(toolName, result);
+          callbacksRef.current.onToolResult?.(toolName, result);
         }
       });
     }
@@ -174,7 +239,7 @@ export const useOpenAIRealtimeConversation = (config: UseOpenAIRealtimeConfig = 
         serviceRef.current = null;
       }
     };
-  }, [apiUrl, sessionId, relayServerUrl, onUserTranscript, onAgentResponse, onAudioChunk, onConnectionChange, onToolCall, onToolResult, playNextAudio]);
+  }, [sessionId]); // Service builds URLs dynamically via session endpoint
 
   // Start conversation
   const startConversation = useCallback(async (agentId?: string) => {
@@ -186,14 +251,24 @@ export const useOpenAIRealtimeConversation = (config: UseOpenAIRealtimeConfig = 
     setIsLoading(true);
     setError(null);
     
+    // Add timeout to prevent stuck loading state
+    const timeoutId = setTimeout(() => {
+      console.warn('OpenAI Realtime connection timeout - clearing loading state');
+      setIsLoading(false);
+      setError('Connection timeout - please try again');
+    }, 15000); // 15 second timeout
+    
     try {
       if (serviceRef.current) {
         await serviceRef.current.connect();
+        clearTimeout(timeoutId);
         // Connection status will be updated via the onConnected callback
       } else {
+        clearTimeout(timeoutId);
         throw new Error('OpenAI service not initialized');
       }
     } catch (err) {
+      clearTimeout(timeoutId);
       const errorMessage = err instanceof Error ? err.message : 'Failed to connect to OpenAI Realtime';
       setError(errorMessage);
       setIsLoading(false);

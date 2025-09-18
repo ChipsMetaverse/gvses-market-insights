@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { useProvider } from '../hooks/useProvider';
 import { ProviderSelector } from './ProviderSelector';
+import StructuredResponse from './StructuredResponse';
 
 export function ProviderTest() {
   const [testMessage, setTestMessage] = useState('');
@@ -270,7 +271,13 @@ export function ProviderTest() {
                   <div className="text-sm mb-1">
                     <strong>{message.role === 'user' ? 'You' : currentProvider?.config.name}:</strong>
                   </div>
-                  <div className="text-sm">{message.content}</div>
+                  <div className="text-sm">
+                    {message.role === 'assistant' ? (
+                      <StructuredResponse content={message.content} />
+                    ) : (
+                      message.content
+                    )}
+                  </div>
                   <div className={`text-xs mt-1 ${
                     message.role === 'user' ? 'text-blue-200' : 'text-gray-500'
                   }`}>

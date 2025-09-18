@@ -1,0 +1,17 @@
+{
+  "description": "Bullish Engulfing Pattern Test Data",
+  "expected_patterns": ["bullish_engulfing"],
+  "candles": [
+    {"time": 1749528000, "open": 100, "high": 102, "low": 99, "close": 99.5, "volume": 1000000},
+    {"time": 1749614400, "open": 99, "high": 100, "low": 98, "close": 98.5, "volume": 1100000},
+    {"time": 1749700800, "open": 98, "high": 99, "low": 97, "close": 97.5, "volume": 1200000},
+    {"time": 1749787200, "open": 97, "high": 98, "low": 96, "close": 96.5, "volume": 1300000},
+    {"time": 1749873600, "open": 96, "high": 97, "low": 95, "close": 95.5, "volume": 1000000},
+    {"time": 1749960000, "open": 95.5, "high": 96, "low": 94.5, "close": 95, "volume": 900000},
+    {"time": 1750046400, "open": 95, "high": 95.5, "low": 94, "close": 94.2, "volume": 1100000},
+    {"time": 1750132800, "open": 93.8, "high": 96.5, "low": 93.8, "close": 96.2, "volume": 1800000},
+    {"time": 1750219200, "open": 96.5, "high": 97, "low": 96, "close": 96.8, "volume": 1200000},
+    {"time": 1750305600, "open": 97, "high": 98, "low": 96.5, "close": 97.5, "volume": 1000000}
+  ],
+  "notes": "Classic bullish engulfing at index 7: previous red candle (close < open) followed by larger green candle that completely engulfs it with high volume"
+}

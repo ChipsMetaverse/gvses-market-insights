@@ -1,6 +1,65 @@
 # GVSES AI Market Analysis Assistant - Architecture
 
-## System Overview
+## System Overview 2.0 (Current)
+
+```mermaid
+graph TB
+    subgraph "Frontend (React)"
+        UI[TradingDashboardSimple]
+        Hooks[useAgentVoiceConversation]
+        SR[StructuredResponse Renderer]
+    end
+
+    subgraph "Backend (FastAPI)"
+        Relay["/openai/realtime/session\n/realtime-relay/{session_id}\nvoice-only (tools: [], tool_choice: none; no turn_detection)"]
+        Agent["/api/agent/orchestrate\nAgent Orchestrator"]
+        Factory["MarketServiceFactory (Hybrid)\nDirect (Yahoo HTTP) + MCP fallback\nAlpaca where available"]
+        Health["/health"]
+    end
+
+    subgraph "OpenAI"
+        Realtime[Realtime API (STT/TTS only)]
+    end
+
+    subgraph "External"
+        Yahoo[Yahoo Finance (Direct HTTP)]
+        MCP[Market MCP (CNBC + Yahoo)]
+        Alpaca[Alpaca Markets]
+        Supabase[(Supabase DB)]
+    end
+
+    %% Text path (independent of voice)
+    UI -- "Type message" --> Agent
+    Agent -- "Tool selection" --> Factory
+    Factory --> Yahoo
+    Factory --> MCP
+    Factory --> Alpaca
+    Agent --> UI
+    UI --> SR
+
+    %% Voice path (session-based relay)
+    UI -- "Toggle mic" --> Relay
+    Relay --> Realtime
+    Realtime -- "Transcripts (interim)" --> UI
+    Realtime -- "User final" --> UI
+    UI -- "POST final transcript" --> Agent
+    Agent -- "Formatted text" --> UI
+    UI -- "sendUserMessageContent(text)" --> Realtime
+    Realtime -- "Audio chunks" --> UI
+    UI --> User[(Playback)]
+
+    %% Data/health
+    UI -.-> Health
+    Backend[(FastAPI)] -.-> Supabase
+```
+
+Notes:
+- Voice path is voice-only via the relay: tools=[], tool_choice='none', no turn_detection.
+- Text path goes straight to the agent; no voice connection required.
+- MarketServiceFactory prefers Direct Yahoo HTTP for speed with MCP fallback; Alpaca used when available.
+- StructuredResponse renders assistant markdown across chat surfaces to match the prototype look.
+
+## System Overview (Legacy)
 
 ```mermaid
 graph TB
@@ -131,6 +190,141 @@ graph TB
     FastAPI --> Supabase
 ```
 
+## Voice Flow (Session-Based Realtime Relay)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant Relay as FastAPI Realtime Relay
+    participant OpenAI as OpenAI Realtime
+    participant Agent as Agent Orchestrator
+    participant Market as MarketServiceFactory (Hybrid)
+
+    User->>Frontend: Toggle mic
+    Frontend->>Relay: POST /openai/realtime/session
+    Relay-->>Frontend: { ws_url }
+    Frontend->>Relay: WS connect (ws_url)
+    Relay->>OpenAI: WS connect (no tools, no turn_detection)
+    OpenAI-->>Frontend: conversation.updated (interim transcripts)
+    OpenAI-->>Frontend: conversation.item.completed (user final)
+    Frontend->>Agent: POST /api/agent/orchestrate (final transcript)
+    Agent->>Market: get_* tools (Direct + MCP; Alpaca if available)
+    Market-->>Agent: price/history/news/etc.
+    Agent-->>Frontend: formatted markdown (snapshot + headlines)
+    Frontend->>OpenAI: sendUserMessageContent(text) for TTS
+    OpenAI-->>Frontend: audio chunks
+    Frontend->>User: play audio
+```
+
+## Text Flow (Voice-Independent)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant Agent as Agent Orchestrator
+    participant Market as MarketServiceFactory (Hybrid)
+
+    User->>Frontend: Type question
+    Frontend->>Agent: POST /api/agent/orchestrate
+    Agent->>Market: Select tools (Direct + MCP)
+    Market-->>Agent: Data
+    Agent-->>Frontend: Formatted markdown snapshot
+    Frontend->>User: Render via StructuredResponse
+    opt Voice session connected
+      Frontend->>OpenAI: sendUserMessageContent(text) for TTS
+      OpenAI-->>Frontend: audio chunks
+      Frontend->>User: play audio
+    end
+```
+
+## Market Service (Hybrid) Architecture
+
+```mermaid
+graph TB
+    Request[Market Request] --> Route{Type}
+    
+    Route -->|Price/History| Direct[Direct Yahoo HTTP]
+    Route -->|Fallback| MCPService[Market MCP (Yahoo + CNBC)]
+    Route -->|News| NewsMerge[CNBC (MCP) + Yahoo]
+    Route -->|Symbol Search| AlpacaSearch[Alpaca (preferred when available)]
+
+    Direct --> Result
+    MCPService --> Result
+    NewsMerge --> Result
+    AlpacaSearch --> Result
+
+    subgraph Notes
+      note1["Prefers Direct for sub-second speed\nMCP fallback for resilience\nCrypto mapping (e.g., BTC -> BTC-USD)\nShort TTL cache for tool results"]
+    end
+```
+
+## Agent Orchestrator Formatting Pipeline
+
+```mermaid
+flowchart TB
+    UserQuery[User query] --> OpenAI[OpenAI with tools]
+    OpenAI -- tool calls --> Tools[MarketServiceFactory tools]
+    Tools --> Data[Tool results]
+    
+    subgraph StructuredFormatter
+      Proto[Prototype snapshot builder]\n--> Headlines[Key Headlines]\n--> Tech[Optional Technical Levels]\n--> Suggestions[Two tailored suggestions]\n--> Disclaimer[Session-scoped disclaimer]
+    end
+    
+    Data --> StructuredFormatter
+    StructuredFormatter --> Markdown[Formatted markdown]
+    
+    OpenAI -- no tools --> Fallback[Detect symbol (search -> regex)]
+    Fallback --> Fetch[Comprehensive data + news]
+    Fetch --> StructuredFormatter
+    
+    Markdown --> Response[Return to frontend]
+```
+
+Notes:
+- Programmatic structured formatter runs before any LLM prose to ensure consistent UX.
+- Fallback symbol detection: Alpaca search first (when available), then regex on uppercase tokens.
+- Good Morning trigger generates a Morning Market Brief automatically when applicable.
+
+## Provider Gating and Rendering
+
+```mermaid
+graph LR
+    UI[TradingDashboardSimple] -->|only active mounts| Hook[useAgentVoiceConversation]
+    UI --> SR[StructuredResponse renders assistant markdown]
+    UI -. legacy .-> ELHook[useElevenLabsConversation]
+    UI -. legacy .-> OAIHook[useOpenAIRealtimeConversation]
+```
+
+Notes:
+- Only the active provider hook mounts to prevent cross-provider interference.
+- StructuredResponse replaces raw text in all assistant-rendered chat surfaces for a prototype-accurate look.
+
+## API Inventory (Current)
+
+- Voice session: POST `/openai/realtime/session`; WS `/realtime-relay/{session_id}`; GET `/realtime-relay/status`
+- Agent: POST `/api/agent/orchestrate`; POST `/api/agent/stream` (SSE); POST `/api/agent/voice-query`; GET `/api/agent/tools`; GET `/api/agent/health`; POST `/api/agent/clear-cache`
+- Market data: GET `/api/stock-price`, `/api/stock-history`, `/api/stock-news`, `/api/comprehensive-stock-data`, `/api/symbol-search`, `/api/market-overview`
+- Enhanced (MCP manager): `/api/enhanced/market-data`, `/api/enhanced/historical-data`, `/api/enhanced/alpaca-account`, `/api/enhanced/alpaca-positions`, `/api/enhanced/alpaca-orders`, `/api/enhanced/market-status`, `/api/enhanced/compare-sources`
+- v1 Dashboard bundle: `/api/v1/dashboard`, `/api/v1/chart`, `/api/v1/technical`, `/api/v1/news`, `/api/v1/options/strategic-insights`, WS `/api/v1/ws/quotes`
+- Health: GET `/health` (includes relay status and Hybrid service details)
+- Aux: POST `/conversations/record`
+- Legacy shims: WS `/openai/realtime/ws` (deprecated), GET `/elevenlabs/signed-url` (legacy)
+
+## Errors and Health
+
+- Relay: omit `turn_detection`; configure `tools: []`, `tool_choice: 'none'` to enforce voice-only. OpenAI subprotocol is accepted when provided, but not required.
+- Session flow: frontend calls `/openai/realtime/session` then connects to `/realtime-relay/{session_id}`; errors surfaced with codes and reasons.
+- Health endpoint reports: `service_mode` = Hybrid (Direct + MCP), per-service status, and relay activity/sessions.
+- Timeouts and fallbacks: tool-specific timeouts and status messages are surfaced in responses; news merges continue when one source fails.
+- MCP Node.js 22 requirement: MCP servers must run on Node 22 to avoid `undici` issues.
+
+## Wired vs Planned
+
+- Wired now: price/history (Direct + MCP fallback), hybrid news (CNBC+Yahoo), symbol search (Alpaca when available), morning brief trigger, structured snapshot formatter, tailored suggestions, disclaimers.
+- Partial: options strategies and Greeks (mock/heuristic), watchlist generation (mock), weekly trade review (basic template).
+- Planned: deeper options integrations, persistent watchlists, automated weekly review summaries.
 ## Component Hierarchy
 
 ```mermaid
@@ -162,7 +356,7 @@ graph TD
     end
 ```
 
-## Alpaca-First Data Architecture
+## Alpaca-First Data Architecture (Legacy)
 
 ```mermaid
 graph TB
@@ -194,7 +388,7 @@ graph TB
     style CNBCNews fill:#90CAF9
 ```
 
-## Data Flow - Alpaca-First Architecture
+## Data Flow - Alpaca-First Architecture (Legacy)
 
 ```mermaid
 sequenceDiagram
@@ -509,7 +703,7 @@ sequenceDiagram
 graph LR
     subgraph "WebSocket Architecture"
         Client[Browser Client]
-        WSEndpoint[/ws/quotes]
+        WSEndpoint[/api/v1/ws/quotes]
         QuoteService[get_quote()]
         MCPClient[MCP Client]
         MCPServer[Market MCP Server]
@@ -525,7 +719,7 @@ graph LR
     end
 ```
 
-## Voice Processing Pipeline
+## Voice Processing Pipeline (Legacy - ElevenLabs)
 
 ```mermaid
 graph LR
@@ -1808,4 +2002,3 @@ After migration to OpenAI SDK patterns, the agent had NO market analysis capabil
 - ✅ **Chart Label Fix**: Fixed disappearing technical level labels with instant sync
 - ✅ **Ref Pattern Implementation**: Resolved React closure issues in event handlers
 - ✅ **Performance Optimization**: Removed requestAnimationFrame for instant updates
-

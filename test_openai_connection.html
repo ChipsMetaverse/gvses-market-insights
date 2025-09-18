@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OpenAI WebSocket Test</title>
+</head>
+<body>
+    <h1>OpenAI WebSocket Connection Test</h1>
+    <button id="connect">Connect</button>
+    <button id="disconnect">Disconnect</button>
+    <button id="send">Send Test Message</button>
+    <div id="status">Not connected</div>
+    <div id="log" style="height: 400px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; margin-top: 20px;"></div>
+
+    <script>
+        let ws = null;
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+
+        function addLog(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.style.color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        document.getElementById('connect').addEventListener('click', async () => {
+            try {
+                addLog('Creating session...', 'info');
+                
+                // First create a session
+                const response = await fetch('http://localhost:8000/openai/realtime/session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Session creation failed: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                addLog(`Session created: ${data.session_id}`, 'success');
+                
+                // Build WebSocket URL
+                const wsUrl = `ws://localhost:8000/realtime-relay/${data.session_id}?model=gpt-4o-realtime-preview-2024-10-01`;
+                addLog(`Connecting to: ${wsUrl}`, 'info');
+                
+                // Connect with realtime subprotocol
+                ws = new WebSocket(wsUrl, ['realtime']);
+                
+                ws.onopen = (event) => {
+                    addLog('WebSocket opened', 'success');
+                    status.textContent = 'Connected';
+                    status.style.color = 'green';
+                };
+                
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    addLog(`Message received: ${data.type}`, 'info');
+                    console.log('Full message:', data);
+                };
+                
+                ws.onerror = (event) => {
+                    addLog(`WebSocket error: ${event}`, 'error');
+                    console.error('WebSocket error:', event);
+                };
+                
+                ws.onclose = (event) => {
+                    addLog(`WebSocket closed - Code: ${event.code}, Reason: ${event.reason || 'No reason provided'}`, 'error');
+                    status.textContent = 'Disconnected';
+                    status.style.color = 'red';
+                    ws = null;
+                };
+                
+            } catch (error) {
+                addLog(`Connection failed: ${error.message}`, 'error');
+                console.error('Connection error:', error);
+            }
+        });
+        
+        document.getElementById('disconnect').addEventListener('click', () => {
+            if (ws) {
+                addLog('Closing connection...', 'info');
+                ws.close();
+                ws = null;
+            }
+        });
+        
+        document.getElementById('send').addEventListener('click', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'conversation.item.create',
+                    item: {
+                        type: 'message',
+                        role: 'user',
+                        content: [
+                            { type: 'input_text', text: 'Hello, can you hear me?' }
+                        ]
+                    }
+                };
+                ws.send(JSON.stringify(message));
+                addLog('Sent test message', 'info');
+                
+                // Also send response.create
+                setTimeout(() => {
+                    ws.send(JSON.stringify({ type: 'response.create' }));
+                    addLog('Sent response.create', 'info');
+                }, 100);
+            } else {
+                addLog('Not connected', 'error');
+            }
+        });
+    </script>
+</body>
+</html>
