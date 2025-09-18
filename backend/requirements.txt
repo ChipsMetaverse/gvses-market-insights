@@ -4,7 +4,7 @@ httpx==0.24.1
 pydantic==2.5.0
 supabase==2.3.0
 python-multipart==0.0.6
-websockets==15.0.1
+websockets>=11.0,<13.0
 SpeechRecognition==3.10.0
 gTTS==2.5.0
 numpy==1.26.0
