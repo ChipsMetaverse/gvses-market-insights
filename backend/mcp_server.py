@@ -1162,6 +1162,33 @@ async def ask_assistant(request: QueryRequest):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@app.get("/debug/ask")
+async def debug_ask_endpoint():
+    """Debug endpoint to diagnose /ask issues."""
+    debug_info = {
+        "services_initialized": bool(orchestrator),
+        "openai_api_key_set": bool(os.getenv("OPENAI_API_KEY")),
+        "knowledge_base_exists": os.path.exists("/app/backend/knowledge_base_embedded.json") if os.path.exists("/app") else os.path.exists("backend/knowledge_base_embedded.json"),
+    }
+    
+    try:
+        # Try to get the orchestrator
+        from services.agent_orchestrator import get_orchestrator
+        test_orchestrator = get_orchestrator()
+        debug_info["orchestrator_initialized"] = True
+        debug_info["orchestrator_type"] = type(test_orchestrator).__name__
+        
+        # Check knowledge base
+        if hasattr(test_orchestrator, 'retriever') and hasattr(test_orchestrator.retriever, 'embeddings'):
+            debug_info["embeddings_count"] = len(test_orchestrator.retriever.embeddings)
+        
+    except Exception as e:
+        debug_info["orchestrator_error"] = str(e)
+        debug_info["orchestrator_initialized"] = False
+    
+    return debug_info
+
+
 @app.websocket("/openai/realtime/ws")
 async def openai_websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for OpenAI Realtime voice interaction."""
