@@ -256,13 +256,26 @@ openai_service = None  # OpenAI Realtime service
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
-    global supabase, conversation_manager, claude_service, market_service, market_service_error, openai_service
+    global supabase, conversation_manager, claude_service, market_service, market_service_error, openai_service, orchestrator
+    
     try:
+        # Initialize Supabase (required)
         supabase = get_supabase_client()
         conversation_manager = ConversationManager(supabase)
+        logger.info("✅ Supabase initialized successfully")
+        
         # Disabled Claude service - using AgentOrchestrator instead
         # claude_service = ClaudeService()
         claude_service = None
+        
+        # Initialize the agent orchestrator early (required for /ask endpoint)
+        try:
+            from services.agent_orchestrator import get_orchestrator
+            orchestrator = get_orchestrator()
+            logger.info("✅ Agent orchestrator initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize agent orchestrator: {e}")
+            orchestrator = None
         
         # Test Alpaca connectivity on startup
         if os.environ.get("ALPACA_API_KEY") and os.environ.get("ALPACA_SECRET_KEY"):
@@ -312,7 +325,7 @@ async def startup_event():
         
         logger.info("All services initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize services: {e}")
+        logger.error(f"Failed to initialize some services: {e}")
         # Services will be None, endpoints will handle gracefully
 
 
