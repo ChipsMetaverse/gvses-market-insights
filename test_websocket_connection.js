@@ -102,7 +102,7 @@ const { chromium } = require('playwright');
         if (url.includes('/realtime-relay/')) {
           console.log('   ✅ Correct relay endpoint');
         }
-        if (url.includes('model=gpt-4o-realtime')) {
+        if (url.includes('model=gpt-4.1-realtime')) {
           console.log('   ✅ Correct model specified');
         }
       });

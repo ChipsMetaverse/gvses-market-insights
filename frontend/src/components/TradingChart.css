@@ -18,6 +18,29 @@
   transition: height 0.3s ease;
 }
 
+.pattern-highlight-banner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(17, 24, 39, 0.85);
+  color: #f8fafc;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  z-index: 15;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+}
+
+.pattern-highlight-banner span {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
 .oscillator-chart {
   width: 100%;
   height: 150px;

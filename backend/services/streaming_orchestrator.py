@@ -24,7 +24,7 @@ class StreamingOrchestrator:
     def __init__(self, client: AsyncOpenAI, market_service):
         self.client = client
         self.market_service = market_service
-        self.model = "gpt-4o"
+        self.model = "gpt-4.1"
         self.temperature = 0.7
     
     async def stream_with_tools(

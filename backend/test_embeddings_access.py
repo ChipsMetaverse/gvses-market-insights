@@ -14,9 +14,8 @@ load_dotenv()
 
 # Available embedding models according to the allowed models list
 EMBEDDING_MODELS = [
-    "text-embedding-ada-002",       # Classic, widely supported
-    "text-embedding-3-small",       # Newer, smaller model
-    "text-embedding-3-large"        # Newer, larger model
+    "text-embedding-3-large",       # Preferred high-quality model
+    "text-embedding-3-small"        # Lower-cost fallback
 ]
 
 def test_sync_embeddings():

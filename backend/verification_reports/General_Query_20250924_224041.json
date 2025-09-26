@@ -1,0 +1,14 @@
+{
+  "scenario": "General_Query",
+  "timestamp": "2025-09-24T22:40:36.604077",
+  "status": "failed",
+  "screenshots": [
+    {
+      "name": "initial",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAABAAAAAMACAIAAAA12IJaAAAAAXNSR0IArs4c6QAAIABJREFUeJzs3XVYFN8aB/CXMHBVFAxUVBAR..."
+    }
+  ],
+  "actions": [],
+  "findings": [],
+  "error": "Error code: 400 - {'error': {'message': \"Invalid value: 'computer_use'. Supported values are: 'code_interpreter', 'function', 'file_search', 'web_search_preview', 'web_search_preview_2025_03_11', 'image_generation', 'mcp', and 'computer_use_preview'.\", 'type': 'invalid_request_error', 'param': 'tools[0].type', 'code': 'invalid_value'}}"
+}

@@ -13,6 +13,8 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { agentOrchestratorService, type AgentResponse } from '../services/agentOrchestratorService';
 import { OpenAIRealtimeService } from '../services/OpenAIRealtimeService';
 import { getApiUrl } from '../utils/apiConfig';
+import { chartControlService } from '../services/chartControlService';
+import { enhancedChartControl } from '../services/enhancedChartControl';
 
 interface AgentVoiceMessage {
   id: string;
@@ -154,6 +156,27 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
     }
   }, [initAudioContext]);
 
+  const executeChartCommands = useCallback(async (commands?: string[]) => {
+    if (!commands || commands.length === 0) {
+      return;
+    }
+
+    const serialized = commands.join(' ');
+    try {
+      await enhancedChartControl.processEnhancedResponse(serialized);
+    } catch (err) {
+      console.error('Enhanced chart command processing failed:', err);
+      try {
+        const parsed = await chartControlService.parseAgentResponse(serialized);
+        for (const command of parsed) {
+          chartControlService.executeCommand(command);
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback chart command execution failed:', fallbackErr);
+      }
+    }
+  }, []);
+
   // Send text to agent and get TTS response
   const sendToAgent = useCallback(async (userTranscript: string, source: 'voice' | 'text' = 'voice') => {
     try {
@@ -184,6 +207,13 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
         conversationHistoryRef.current.slice(-10) // Last 10 messages for context
       );
 
+      await executeChartCommands(agentResponse.chart_commands || agentResponse.data?.chart_commands);
+
+      const mergedData = { ...(agentResponse.data || {}) };
+      if (agentResponse.chart_commands?.length) {
+        mergedData.chart_commands = agentResponse.chart_commands;
+      }
+
       // Add agent message
       const assistantMessage: AgentVoiceMessage = {
         id: `assistant-${Date.now()}-${Math.random()}`,
@@ -192,7 +222,7 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
         timestamp: new Date().toISOString(),
         source,
         toolsUsed: agentResponse.tools_used,
-        data: agentResponse.data
+        data: mergedData
       };
       
       setMessages(prev => [...prev, assistantMessage]);
@@ -223,7 +253,7 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
       setIsThinking(false);
       callbacksRef.current.onThinking?.(false);
     }
-  }, [isConnected]);
+  }, [isConnected, executeChartCommands]);
 
   // Initialize OpenAI Realtime Service (voice I/O only)
   useEffect(() => {

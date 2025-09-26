@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ElevenLabsConnectionManager } from '../services/ElevenLabsConnectionManager';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface ElevenLabsMessage {
   role: 'user' | 'assistant';
@@ -21,7 +22,7 @@ export const useElevenLabsConversation = (config: UseElevenLabsConfig = {}) => {
     onAgentResponse,
     onAudioChunk,
     onConnectionChange,
-    apiUrl = 'http://localhost:8000'
+    apiUrl = getApiUrl()
   } = config;
 
   const [isConnected, setIsConnected] = useState(false);

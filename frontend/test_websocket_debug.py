@@ -15,7 +15,7 @@ async def test_proxy_websocket():
     
     try:
         # Connect to our proxy
-        url = "ws://localhost:8000/openai/realtime/ws?model=gpt-4o-realtime-preview-2024-10-01"
+        url = "ws://localhost:8000/openai/realtime/ws?model=gpt-realtime-2025-08-28"
         
         print(f"🌐 Connecting to proxy: {url}")
         

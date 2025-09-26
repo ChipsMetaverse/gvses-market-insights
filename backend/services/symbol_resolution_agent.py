@@ -185,7 +185,7 @@ class SymbolResolutionAgent:
             Use the check_static_mapping tool to see if a company has a predefined ticker.
             If found, return that result immediately as it has highest priority.
             This prevents issues like Google→GOOP by ensuring Google→GOOGL.''',
-            model='gpt-3.5-turbo',
+            model='gpt-4.1',
             tools=[check_static_mapping]
         )
         
@@ -198,7 +198,7 @@ class SymbolResolutionAgent:
             The tool automatically prioritizes actual company stocks over ETFs.
             This ensures "google" returns GOOGL (Alphabet stock) not GOOP (Google ETF).
             Return the best match with company name and asset type.''',
-            model='gpt-3.5-turbo', 
+            model='gpt-4.1', 
             tools=[search_alpaca_symbols]
         )
         
@@ -209,7 +209,7 @@ class SymbolResolutionAgent:
             instructions='''You validate symbol formats using validate_symbol_format.
             Check if strings look like valid ticker symbols.
             Distinguish between stocks (AAPL) and crypto (BTC-USD).''',
-            model='gpt-3.5-turbo',
+            model='gpt-4.1',
             tools=[validate_symbol_format]
         )
         
@@ -231,7 +231,7 @@ class SymbolResolutionAgent:
             4. Return the best match with source attribution
             
             Always prefer actual company stocks over ETFs or funds.''',
-            model='gpt-3.5-turbo',
+            model='gpt-4.1',
             handoffs=[self.static_mapping_agent, self.alpaca_search_agent, self.validation_agent]
         )
     

@@ -3,25 +3,185 @@
  * Standardized API URL handling across the application
  */
 
+const DEFAULT_FALLBACK_URL = 'http://localhost:8000';
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', 'host.docker.internal']);
+
+const normalizeUrlForEnvironment = (url: string | null | undefined): string | null => {
+  if (!url) {
+    return null;
+  }
+
+  if (typeof window === 'undefined') {
+    return url;
+  }
+
+  try {
+    const win = window as ApiWindow;
+    const { hostname, protocol } = win.location;
+
+    if (!hostname) {
+      return url;
+    }
+
+    const parsed = new URL(url);
+
+    // Align protocol with current origin when possible
+    if (protocol === 'https:' && parsed.protocol !== 'https:') {
+      parsed.protocol = 'https:';
+    }
+
+    // When running behind Docker desktop, replace localhost with host.docker.internal
+    if (hostname === 'host.docker.internal' && LOCAL_HOSTS.has(parsed.hostname)) {
+      parsed.hostname = hostname;
+    }
+
+    return parsed.toString().replace(/\/$/, '');
+  } catch (error) {
+    console.warn('Failed to normalize API URL for environment', error);
+    return url;
+  }
+};
+
+type ApiResolver = () => string;
+
+type ApiGlobal = typeof globalThis & {
+  __API_URL__?: string;
+  __apiUrlResolver__?: ApiResolver;
+  getApiUrl?: ApiResolver;
+};
+
+type ApiWindow = Window & {
+  __API_URL__?: string;
+  getApiUrl?: ApiResolver;
+};
+
+const globalScope = globalThis as ApiGlobal;
+
+const persistUrl = (url: string): string => {
+  if (!url) {
+    return DEFAULT_FALLBACK_URL;
+  }
+
+  const normalized = normalizeUrlForEnvironment(url) ?? url;
+
+  globalScope.__API_URL__ = normalized;
+
+  if (typeof window !== 'undefined') {
+    const win = window as ApiWindow;
+    win.__API_URL__ = normalized;
+    if (typeof win.getApiUrl !== 'function') {
+      win.getApiUrl = getApiUrl;
+    }
+  }
+
+  if (typeof globalScope.getApiUrl !== 'function') {
+    globalScope.getApiUrl = getApiUrl;
+  }
+
+  return normalized;
+};
+
+const tryEnvApiUrl = (): string | null => {
+  try {
+    const value = (import.meta as any)?.env?.VITE_API_URL;
+    if (typeof value === 'string' && value.length > 0) {
+      return normalizeUrlForEnvironment(value) ?? value;
+    }
+    return null;
+  } catch (error) {
+    console.warn('Unable to read VITE_API_URL from import.meta', error);
+    return null;
+  }
+};
+
+const tryCustomResolver = (): string | null => {
+  const candidates: Array<ApiResolver | string | undefined> = [];
+
+  if (typeof globalScope.__apiUrlResolver__ === 'function') {
+    candidates.push(globalScope.__apiUrlResolver__);
+  }
+
+  if (typeof window !== 'undefined') {
+    const win = window as ApiWindow;
+    if (typeof win.getApiUrl === 'function' && win.getApiUrl !== getApiUrl) {
+      candidates.push(win.getApiUrl);
+    }
+    if (typeof win.__API_URL__ === 'string') {
+      candidates.push(win.__API_URL__);
+    }
+  }
+
+  if (typeof globalScope.getApiUrl === 'function' && globalScope.getApiUrl !== getApiUrl) {
+    candidates.push(globalScope.getApiUrl);
+  }
+
+  if (typeof globalScope.__API_URL__ === 'string') {
+    candidates.push(globalScope.__API_URL__);
+  }
+
+  for (const resolver of candidates) {
+    if (!resolver) continue;
+    try {
+      if (typeof resolver === 'string' && resolver.length > 0) {
+        return resolver;
+      }
+      if (typeof resolver === 'function') {
+        const value = resolver();
+        if (typeof value === 'string' && value.length > 0) {
+          return value;
+        }
+      }
+    } catch (error) {
+      console.warn('Custom API URL resolver failed', error);
+    }
+  }
+
+  return null;
+};
+
+const tryLocationApiUrl = (): string | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const win = window as ApiWindow;
+  const { protocol, hostname, port } = win.location;
+
+  const normalizedProtocol = protocol === 'https:' ? 'https:' : 'http:';
+
+  if (LOCAL_HOSTS.has(hostname)) {
+    return `${normalizedProtocol}//${hostname}:8000`;
+  }
+
+  const inferredPort = port ? `:${port}` : '';
+  return `${normalizedProtocol}//${hostname}${inferredPort}`;
+};
+
 /**
  * Get the base API URL for backend services
- * Prioritizes VITE_API_URL environment variable, then falls back to
- * window.location with proper port detection for localhost
+ * Prioritizes environment variables, global overrides, then window location.
  */
 export function getApiUrl(): string {
-  // First check for environment variable
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+  try {
+    const envUrl = tryEnvApiUrl();
+    if (envUrl) {
+      return persistUrl(envUrl);
+    }
+
+    const customUrl = tryCustomResolver();
+    if (customUrl) {
+      return persistUrl(customUrl);
+    }
+
+    const locationUrl = tryLocationApiUrl();
+    if (locationUrl) {
+      return persistUrl(locationUrl);
+    }
+  } catch (error) {
+    console.error('Failed to resolve API URL, falling back to default', error);
   }
-  
-  // Build from window.location
-  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-  const host = window.location.hostname;
-  
-  // Add :8000 for localhost AND 127.0.0.1
-  const port = (host === 'localhost' || host === '127.0.0.1') ? ':8000' : '';
-  
-  return `${protocol}//${host}${port}`;
+
+  return persistUrl(DEFAULT_FALLBACK_URL);
 }
 
 /**
@@ -88,3 +248,5 @@ export async function getDetailedHealth(): Promise<{
     };
   }
 }
+
+export default getApiUrl;

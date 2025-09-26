@@ -1,0 +1,68 @@
+{
+  "timestamp": "2025-09-24T14:51:18.855629",
+  "total_scenarios": 8,
+  "passed": 5,
+  "failed": 3,
+  "success_rate": "62.5%",
+  "critical_issues": [
+    {
+      "description": "Query 'What is PLTR?' returns trading data instead of company information",
+      "priority": "Critical"
+    },
+    {
+      "description": "Chart does not synchronize when discussing different symbols",
+      "priority": "Critical"
+    }
+  ],
+  "high_priority_fixes": [],
+  "scenarios": [
+    {
+      "name": "Company Information - PLTR",
+      "status": "completed",
+      "issues_count": 1,
+      "has_screenshots": false
+    },
+    {
+      "name": "Chart Symbol Synchronization",
+      "status": "completed",
+      "issues_count": 1,
+      "has_screenshots": false
+    },
+    {
+      "name": "General Knowledge Query",
+      "status": "completed",
+      "issues_count": 1,
+      "has_screenshots": false
+    },
+    {
+      "name": "Technical Analysis - 4H Timeframe",
+      "status": "completed",
+      "issues_count": 0,
+      "has_screenshots": false
+    },
+    {
+      "name": "Sequential Symbol Changes",
+      "status": "completed",
+      "issues_count": 0,
+      "has_screenshots": false
+    },
+    {
+      "name": "Voice Assistant Query",
+      "status": "completed",
+      "issues_count": 0,
+      "has_screenshots": false
+    },
+    {
+      "name": "Invalid Symbol Handling",
+      "status": "completed",
+      "issues_count": 0,
+      "has_screenshots": false
+    },
+    {
+      "name": "Response Time Check",
+      "status": "completed",
+      "issues_count": 0,
+      "has_screenshots": false
+    }
+  ]
+}

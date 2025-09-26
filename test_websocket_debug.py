@@ -24,7 +24,7 @@ async def test_direct_openai_connection():
         "OpenAI-Beta": "realtime=v1"
     }
     
-    url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17"
+    url = "wss://api.openai.com/v1/realtime?model=gpt-realtime-2025-08-28"
     
     try:
         print(f"🔗 Connecting to: {url}")

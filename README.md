@@ -55,25 +55,31 @@ Create and fill these files with your keys (examples shown inline):
 #### Backend (`backend/.env`)
 ```bash
 # Required
-ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-openai-...
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_ANON_KEY=eyJhbGciOi...
 
-# Optional
-MODEL=claude-3-sonnet-20240229
-SYSTEM_PROMPT="You are a helpful voice assistant..."
-MCP_SERVERS=[]
+# Recommended for pro market data
+ALPACA_API_KEY=AK...   # Required to query Alpaca MCP sidecar
+ALPACA_SECRET_KEY=SK...
+ALPACA_BASE_URL=https://paper-api.alpaca.markets  # Default paper endpoint
+
+# Optional tuning
+AGENT_MODEL=gpt-5-mini
+AGENT_TEMPERATURE=0.7
+CACHE_WARM_ON_STARTUP=true
+MCP_SERVERS=[]  # Additional MCP endpoints when needed
 ```
 
 #### Frontend (`frontend/.env`)
 ```bash
-# Required
+# Required (keeps voice + chat in sync with backend)
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 
-# Optional
-VITE_WS_URL=ws://localhost:8000
+# Override when the backend is not on localhost:8000
 VITE_API_URL=http://localhost:8000
+VITE_WS_URL=ws://localhost:8000
 ```
 
 ### 3. Setup Database (Optional - for persistence)
@@ -112,6 +118,17 @@ npm run dev
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
+
+### MCP Sidecar Services
+
+The FastAPI backend automatically launches two MCP sidecars over stdio when market data is requested. Make sure their runtimes and dependencies are installed before starting the API server.
+
+| Sidecar | Location | Runtime | Setup | Notes |
+|---------|----------|---------|-------|-------|
+| Market MCP (Yahoo/CNBC) | `market-mcp-server/` | Node.js 20+ (22 recommended) | `npm install` then `node index.js` for manual testing | Provides quotes, history, news via yahoo-finance2 and scraped CNBC feeds. Runs automatically via `MCPManager` when the backend needs data. |
+| Alpaca MCP | `alpaca-mcp-server/` | Python 3.11+ | `pip install -r requirements.txt` | Requires `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, and optional `ALPACA_BASE_URL`. Supplies pro-grade quotes, bars, and account data. |
+
+When the backend starts, it spawns these processes with the current environment. Verify that the above environment variables are exported (or present in `backend/.env`) **before** launching `uvicorn`; otherwise the Alpaca sidecar will stay disabled and the factory falls back to Yahoo-only data.
 
 ## 📖 Usage
 

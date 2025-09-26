@@ -1178,22 +1178,39 @@
 }
 
 .pattern-box {
-  padding: 10px;
-  background: #e8f5e9;
-  border: 1px solid #4caf50;
-  border-radius: 4px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(14, 165, 233, 0.08));
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 6px;
+  margin-bottom: 8px;
 }
 
 .pattern-name {
   font-size: 12px;
   font-weight: 600;
-  color: #2e7d32;
-  margin-bottom: 3px;
+  color: #0f172a;
+  margin-bottom: 4px;
 }
 
 .pattern-conf {
   font-size: 10px;
-  color: #388e3c;
+  color: #046c4e;
+  margin-bottom: 4px;
+}
+
+.pattern-desc {
+  font-size: 10px;
+  color: #0f172a;
+  opacity: 0.8;
+}
+
+.pattern-empty {
+  font-size: 11px;
+  color: #555;
+  background: #f4f7fb;
+  border-radius: 6px;
+  padding: 10px;
+  border: 1px dashed #cbd5f5;
 }
 
 /* Voice Status Animation */
@@ -2509,4 +2526,3 @@
 .voice-status-text {
   font-weight: 500;
 }
-

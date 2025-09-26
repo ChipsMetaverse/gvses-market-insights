@@ -1,0 +1,41 @@
+{
+  "scenario": "PLTR_Company_Info",
+  "timestamp": "2025-09-25T06:16:02.284163",
+  "status": "failed",
+  "screenshots": [
+    {
+      "name": "initial",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAABAAAAAMACAIAAAA12IJaAAAAAXNSR0IArs4c6QAAIABJREFUeJzs3XVYFN8aB/CXMHBVFAxUVBAR..."
+    },
+    {
+      "name": "iteration_1",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAABAAAAAMACAIAAAA12IJaAAAAAXNSR0IArs4c6QAAIABJREFUeJzs3XVYFN8aB/CXMHBVFAxUVBAR..."
+    },
+    {
+      "name": "after_left_click_2",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAABAAAAAMACAIAAAA12IJaAAAAAXNSR0IArs4c6QAAIABJREFUeJzs3XVYFN8aB/CXMHBVFAxUVBAR..."
+    },
+    {
+      "name": "after_wait_3",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAABAAAAAMACAIAAAA12IJaAAAAAXNSR0IArs4c6QAAIABJREFUeJzs3XVYFN8aB/CXMHBVFAxUVBAR..."
+    },
+    {
+      "name": "after_left_click_4",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAABAAAAAMACAIAAAA12IJaAAAAAXNSR0IArs4c6QAAIABJREFUeJzs3XVYFN8aB/CXMHBVFAxUVBAR..."
+    },
+    {
+      "name": "after_left_click_5",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAABAAAAAMACAIAAAA12IJaAAAAAXNSR0IArs4c6QAAIABJREFUeJzs3XVYFN8aB/CXMHBVFAxUVBAR..."
+    }
+  ],
+  "actions": [
+    "screenshot: {'action': 'screenshot'}",
+    "left_click: {'action': 'left_click', 'coordinate': [511, 538]}",
+    "wait: {'action': 'wait', 'duration': 2}",
+    "left_click: {'action': 'left_click', 'coordinate': [511, 538]}",
+    "left_click: {'action': 'left_click', 'coordinate': [588, 469]}",
+    "key: {'action': 'key', 'text': 'Return'}"
+  ],
+  "findings": [],
+  "error": "Keyboard.press: Unknown key: \"\""
+}

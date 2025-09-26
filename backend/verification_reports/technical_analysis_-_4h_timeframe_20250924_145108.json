@@ -1,0 +1,15 @@
+{
+  "scenario": "Technical Analysis - 4H Timeframe",
+  "timestamp": "2025-09-24T14:51:08.820160",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "message",
+      "content": "Scenario 'Technical Analysis - 4H Timeframe' would be executed with Computer Use",
+      "timestamp": "2025-09-24T14:51:08.820240"
+    }
+  ],
+  "screenshots": [],
+  "issues": [],
+  "fixes": []
+}

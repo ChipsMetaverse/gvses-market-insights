@@ -11,6 +11,78 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+PATTERN_CATEGORY_MAP = {
+    # Candlestick
+    "bullish_engulfing": "candlestick",
+    "bearish_engulfing": "candlestick",
+    "doji": "candlestick",
+    "hammer": "candlestick",
+    "shooting_star": "candlestick",
+    "morning_star": "candlestick",
+    "evening_star": "candlestick",
+    "bullish_harami": "candlestick",
+    "bearish_harami": "candlestick",
+    "piercing_line": "candlestick",
+    "dark_cloud_cover": "candlestick",
+    "three_white_soldiers": "candlestick",
+    "three_black_crows": "candlestick",
+    
+    # Price action / micro-structure
+    "breakout": "price_action",
+    "breakdown": "price_action",
+    "support_bounce": "price_action",
+    "trend_acceleration": "price_action",
+    "gap_breakaway": "price_action",
+    
+    # Chart patterns / structure
+    "double_top": "chart_pattern",
+    "double_bottom": "chart_pattern",
+    "head_shoulders": "chart_pattern",
+    "inverse_head_shoulders": "chart_pattern",
+    "ascending_triangle": "chart_pattern",
+    "descending_triangle": "chart_pattern",
+    "symmetrical_triangle": "chart_pattern",
+    "bullish_flag": "chart_pattern",
+    "bearish_flag": "chart_pattern",
+    "bullish_pennant": "chart_pattern",
+    "bearish_pennant": "chart_pattern",
+    "falling_wedge": "chart_pattern",
+    "rising_wedge": "chart_pattern",
+    "cup_handle": "chart_pattern",
+
+    # Additional candlesticks
+    "marubozu_bullish": "candlestick",
+    "marubozu_bearish": "candlestick",
+    "spinning_top": "candlestick",
+    "dragonfly_doji": "candlestick",
+    "gravestone_doji": "candlestick",
+    "hanging_man": "candlestick",
+    "inverted_hammer": "candlestick",
+    "three_inside_up": "candlestick",
+    "three_inside_down": "candlestick",
+    "three_outside_up": "candlestick",
+    "three_outside_down": "candlestick",
+    "abandoned_baby": "candlestick",
+
+    # Additional price action
+    "rectangle_range": "price_action",
+    "channel_up": "price_action",
+    "channel_down": "price_action",
+    "runaway_gap": "price_action",
+    "exhaustion_gap": "price_action",
+
+    # Additional chart patterns
+    "triple_top": "chart_pattern",
+    "triple_bottom": "chart_pattern",
+    "pennant_bullish": "chart_pattern",
+    "pennant_bearish": "chart_pattern",
+    "broadening_top": "chart_pattern",
+    "broadening_bottom": "chart_pattern",
+    "diamond_top": "chart_pattern",
+    "diamond_bottom": "chart_pattern",
+    "rounding_bottom": "chart_pattern",
+}
+
 @dataclass
 class Pattern:
     """Represents a detected pattern with confidence and metadata"""
@@ -48,6 +120,56 @@ class PatternDetector:
         self.cache_seconds = cache_seconds
         self._last_detection_time = None
         self._cached_results = None
+
+        if self.candles:
+            self.opens = np.array([float(c.get('open', 0)) for c in self.candles])
+            self.highs = np.array([float(c.get('high', 0)) for c in self.candles])
+            self.lows = np.array([float(c.get('low', 0)) for c in self.candles])
+            self.closes = np.array([float(c.get('close', 0)) for c in self.candles])
+            self.volumes = np.array([float(c.get('volume', 0) or 0) for c in self.candles])
+            self.times = [c.get('time') for c in self.candles]
+        else:
+            self.opens = self.highs = self.lows = self.closes = self.volumes = np.array([])
+            self.times = []
+
+    # ------------------------------------------------------------------
+    # Helper utilities
+    # ------------------------------------------------------------------
+
+    def _volume_ratio(self, index: int, window: int = 20) -> float:
+        if len(self.volumes) == 0:
+            return 1.0
+        start = max(0, index - window)
+        window_volumes = self.volumes[start:index] if index > start else self.volumes[-window:]
+        avg_volume = np.mean(window_volumes) if len(window_volumes) else 0
+        current_volume = self.volumes[index] if index < len(self.volumes) else (window_volumes[-1] if len(window_volumes) else 0)
+        if avg_volume <= 0:
+            return 1.0
+        return current_volume / avg_volume
+
+    def _local_extrema(self, series: np.ndarray, order: int = 3, mode: str = 'max') -> List[Tuple[int, float]]:
+        extrema = []
+        if len(series) < order * 2 + 1:
+            return extrema
+        for i in range(order, len(series) - order):
+            window = series[i - order:i + order + 1]
+            if mode == 'max' and series[i] == window.max():
+                extrema.append((i, series[i]))
+            elif mode == 'min' and series[i] == window.min():
+                extrema.append((i, series[i]))
+        return extrema
+
+    def _percent_diff(self, a: float, b: float) -> float:
+        if max(abs(a), abs(b)) == 0:
+            return 0.0
+        return abs(a - b) / max(abs(a), abs(b))
+
+    def _fit_slope(self, values: np.ndarray) -> float:
+        if len(values) < 2:
+            return 0.0
+        x = np.arange(len(values))
+        slope, _ = np.polyfit(x, values, 1)
+        return slope
         
     def detect_all_patterns(self) -> Dict[str, Any]:
         """
@@ -64,6 +186,10 @@ class PatternDetector:
         # Detect candlestick patterns
         candlestick_patterns = self._detect_candlestick_patterns()
         detected_patterns.extend(candlestick_patterns)
+
+        # Detect multi-candle candlestick formations (3-candle etc.)
+        advanced_candles = self._detect_multi_candle_patterns()
+        detected_patterns.extend(advanced_candles)
         
         # Detect support/resistance levels
         support_levels, resistance_levels = self._detect_support_resistance()
@@ -71,6 +197,29 @@ class PatternDetector:
         # Detect breakouts
         breakout_patterns = self._detect_breakouts(support_levels, resistance_levels)
         detected_patterns.extend(breakout_patterns)
+
+        # Detect trend/pattern structure
+        detected_patterns.extend(self._detect_double_tops_bottoms())
+        detected_patterns.extend(self._detect_head_shoulders())
+        detected_patterns.extend(self._detect_triangles())
+        detected_patterns.extend(self._detect_flags())
+        detected_patterns.extend(self._detect_wedges())
+        detected_patterns.extend(self._detect_cup_handle())
+        detected_patterns.extend(self._detect_trend_acceleration())
+        detected_patterns.extend(self._detect_breakaway_gaps())
+
+        # Newly enabled detections (expanded coverage)
+        detected_patterns.extend(self._detect_spinning_top_and_marubozu())
+        detected_patterns.extend(self._detect_special_doji())
+        detected_patterns.extend(self._detect_hanging_inverted())
+        detected_patterns.extend(self._detect_three_inside_outside())
+        detected_patterns.extend(self._detect_abandoned_baby())
+        detected_patterns.extend(self._detect_rectangles_channels())
+        detected_patterns.extend(self._detect_triple_tops_bottoms_extra())
+        detected_patterns.extend(self._detect_pennants())
+        detected_patterns.extend(self._detect_broadening())
+        detected_patterns.extend(self._detect_diamond())
+        detected_patterns.extend(self._detect_rounding_bottom())
         
         # Filter low confidence patterns
         high_confidence_patterns = [p for p in detected_patterns if p.confidence >= 70]
@@ -85,7 +234,10 @@ class PatternDetector:
                 "total_patterns": len(high_confidence_patterns),
                 "bullish_count": sum(1 for p in high_confidence_patterns if p.signal == "bullish"),
                 "bearish_count": sum(1 for p in high_confidence_patterns if p.signal == "bearish"),
-                "neutral_count": sum(1 for p in high_confidence_patterns if p.signal == "neutral")
+                "neutral_count": sum(1 for p in high_confidence_patterns if p.signal == "neutral"),
+                "candlestick_count": sum(1 for p in high_confidence_patterns if PATTERN_CATEGORY_MAP.get(p.pattern_type) == "candlestick"),
+                "chart_pattern_count": sum(1 for p in high_confidence_patterns if PATTERN_CATEGORY_MAP.get(p.pattern_type) == "chart_pattern"),
+                "price_action_count": sum(1 for p in high_confidence_patterns if PATTERN_CATEGORY_MAP.get(p.pattern_type) == "price_action")
             }
         }
         
@@ -97,6 +249,452 @@ class PatternDetector:
         self._last_detection_time = datetime.now()
         
         return results
+
+    # ------------------------------------------------------------------
+    # Additional candlestick detections
+    # ------------------------------------------------------------------
+
+    def _detect_spinning_top_and_marubozu(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        for i, c in enumerate(self.candles):
+            o, h, l, cl = float(c['open']), float(c['high']), float(c['low']), float(c['close'])
+            rng = max(h - l, 1e-9)
+            body = abs(cl - o)
+            upper = h - max(cl, o)
+            lower = min(cl, o) - l
+            # Spinning top: small body, relatively symmetric shadows
+            if body <= 0.25 * rng and upper >= 0.25 * rng and lower >= 0.25 * rng:
+                patterns.append(Pattern(
+                    pattern_id=f"spinning_top_{i}_{self.times[i]}",
+                    pattern_type="spinning_top",
+                    confidence=70,
+                    start_candle=i,
+                    end_candle=i,
+                    description="Spinning Top - market indecision",
+                    signal="neutral",
+                    action="wait"
+                ))
+            # Marubozu: body occupies most of range, tiny wicks
+            if body >= 0.9 * rng and upper <= 0.05 * rng and lower <= 0.05 * rng:
+                bullish = cl > o
+                patterns.append(Pattern(
+                    pattern_id=f"marubozu_{i}_{self.times[i]}",
+                    pattern_type="marubozu_bullish" if bullish else "marubozu_bearish",
+                    confidence=78,
+                    start_candle=i,
+                    end_candle=i,
+                    description=f"Marubozu - strong {'bullish' if bullish else 'bearish'} candle",
+                    signal="bullish" if bullish else "bearish",
+                    action="watch_closely"
+                ))
+        return patterns
+
+    def _detect_special_doji(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        for i, c in enumerate(self.candles):
+            o, h, l, cl = float(c['open']), float(c['high']), float(c['low']), float(c['close'])
+            rng = max(h - l, 1e-9)
+            body = abs(cl - o)
+            upper = h - max(cl, o)
+            lower = min(cl, o) - l
+            # Dragonfly: tiny body near high, long lower shadow
+            if body <= 0.1 * rng and upper <= 0.05 * rng and lower >= 0.6 * rng:
+                patterns.append(Pattern(
+                    pattern_id=f"dragonfly_doji_{i}_{self.times[i]}",
+                    pattern_type="dragonfly_doji",
+                    confidence=72,
+                    start_candle=i,
+                    end_candle=i,
+                    description="Dragonfly Doji - potential bullish reversal",
+                    signal="bullish",
+                    action="watch_closely"
+                ))
+            # Gravestone: tiny body near low, long upper shadow
+            if body <= 0.1 * rng and lower <= 0.05 * rng and upper >= 0.6 * rng:
+                patterns.append(Pattern(
+                    pattern_id=f"gravestone_doji_{i}_{self.times[i]}",
+                    pattern_type="gravestone_doji",
+                    confidence=72,
+                    start_candle=i,
+                    end_candle=i,
+                    description="Gravestone Doji - potential bearish reversal",
+                    signal="bearish",
+                    action="watch_closely"
+                ))
+        return patterns
+
+    def _detect_hanging_inverted(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        n = len(self.candles)
+        if n < 2:
+            return patterns
+        for i in range(1, n):
+            o, h, l, cl = [float(self.candles[i][k]) for k in ('open','high','low','close')]
+            prev_o, prev_c = float(self.candles[i-1]['open']), float(self.candles[i-1]['close'])
+            rng = max(h - l, 1e-9)
+            body = abs(cl - o)
+            upper = h - max(cl, o)
+            lower = min(cl, o) - l
+            # Uptrend if prev close > prev open and cl >= prev_c
+            uptrend = prev_c >= prev_o and cl >= prev_c
+            downtrend = prev_c <= prev_o and cl <= prev_c
+            # Hanging man (after uptrend): small body near top, long lower shadow
+            if uptrend and body <= 0.35*rng and lower >= 2*body and upper <= 0.2*rng:
+                patterns.append(Pattern(
+                    pattern_id=f"hanging_man_{i}_{self.times[i]}",
+                    pattern_type="hanging_man",
+                    confidence=72,
+                    start_candle=i,
+                    end_candle=i,
+                    description="Hanging Man - potential bearish reversal",
+                    signal="bearish",
+                    action="watch_closely"
+                ))
+            # Inverted hammer (after downtrend): small body near bottom, long upper shadow
+            if downtrend and body <= 0.35*rng and upper >= 2*body and lower <= 0.2*rng:
+                patterns.append(Pattern(
+                    pattern_id=f"inverted_hammer_{i}_{self.times[i]}",
+                    pattern_type="inverted_hammer",
+                    confidence=72,
+                    start_candle=i,
+                    end_candle=i,
+                    description="Inverted Hammer - potential bullish reversal",
+                    signal="bullish",
+                    action="watch_closely"
+                ))
+        return patterns
+
+    def _detect_three_inside_outside(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 3:
+            return patterns
+        for i in range(2, len(self.candles)):
+            c1, c2, c3 = self.candles[i-2], self.candles[i-1], self.candles[i]
+            # Three inside up/down: 2nd contained within 1st; 3rd confirms reversal
+            if c1['close'] < c1['open'] and c2['open'] > c1['close'] and c2['close'] < c1['open'] and c3['close'] > c1['open']:
+                patterns.append(Pattern(
+                    pattern_id=f"three_inside_up_{i}_{self.times[i]}",
+                    pattern_type="three_inside_up",
+                    confidence=70,
+                    start_candle=i-2,
+                    end_candle=i,
+                    description="Three Inside Up - bullish confirmation",
+                    signal="bullish"
+                ))
+            if c1['close'] > c1['open'] and c2['open'] < c1['close'] and c2['close'] > c1['open'] and c3['close'] < c1['open']:
+                patterns.append(Pattern(
+                    pattern_id=f"three_inside_down_{i}_{self.times[i]}",
+                    pattern_type="three_inside_down",
+                    confidence=70,
+                    start_candle=i-2,
+                    end_candle=i,
+                    description="Three Inside Down - bearish confirmation",
+                    signal="bearish"
+                ))
+            # Three outside up/down: engulfing then confirmation
+            if c2['open'] < c1['close'] and c2['close'] > c1['open'] and c3['close'] > c2['close']:
+                patterns.append(Pattern(
+                    pattern_id=f"three_outside_up_{i}_{self.times[i]}",
+                    pattern_type="three_outside_up",
+                    confidence=70,
+                    start_candle=i-2,
+                    end_candle=i,
+                    description="Three Outside Up - strong bullish pattern",
+                    signal="bullish"
+                ))
+            if c2['open'] > c1['close'] and c2['close'] < c1['open'] and c3['close'] < c2['close']:
+                patterns.append(Pattern(
+                    pattern_id=f"three_outside_down_{i}_{self.times[i]}",
+                    pattern_type="three_outside_down",
+                    confidence=70,
+                    start_candle=i-2,
+                    end_candle=i,
+                    description="Three Outside Down - strong bearish pattern",
+                    signal="bearish"
+                ))
+        return patterns
+
+    # ------------------------------------------------------------------
+    # Structure/continuation detections
+    # ------------------------------------------------------------------
+
+    def _detect_rectangles_channels(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 20:
+            return patterns
+        highs = self.highs
+        lows = self.lows
+        # Rectangle: flat SR with multiple touches
+        support_ext = self._local_extrema(lows, order=3, mode='min')
+        resistance_ext = self._local_extrema(highs, order=3, mode='max')
+        if len(support_ext) >= 2 and len(resistance_ext) >= 2:
+            sup_vals = [v for _, v in support_ext[-4:]]
+            res_vals = [v for _, v in resistance_ext[-4:]]
+            if sup_vals and res_vals:
+                sup_mean = float(np.median(sup_vals))
+                res_mean = float(np.median(res_vals))
+                # Near-flat tolerance
+                if abs(self._fit_slope(np.array([sup_mean, sup_mean*1.0001, sup_mean*0.9999]))) < 1e-4:
+                    patterns.append(Pattern(
+                        pattern_id=f"rectangle_{len(self.candles)-1}_{self.times[-1]}",
+                        pattern_type="rectangle_range",
+                        confidence=72,
+                        start_candle=max(0, len(self.candles)-50),
+                        end_candle=len(self.candles)-1,
+                        description="Rectangle range - sideways consolidation",
+                        signal="neutral",
+                        action="wait"
+                    ))
+        # Channels: parallel trendlines (approx by similar slopes)
+        win = min(60, len(self.candles))
+        highs_win = highs[-win:]
+        lows_win = lows[-win:]
+        slope_high = self._fit_slope(highs_win)
+        slope_low = self._fit_slope(lows_win)
+        if slope_high * slope_low > 0 and abs(abs(slope_high) - abs(slope_low)) / max(abs(slope_high), 1e-9) < 0.4:
+            if slope_high > 0:
+                ptype = "channel_up"
+                signal = "bullish"
+            else:
+                ptype = "channel_down"
+                signal = "bearish"
+            patterns.append(Pattern(
+                pattern_id=f"{ptype}_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type=ptype,
+                confidence=70,
+                start_candle=len(self.candles)-win,
+                end_candle=len(self.candles)-1,
+                description=f"{ptype.replace('_',' ').title()} detected",
+                signal=signal,
+                action="watch_closely"
+            ))
+        return patterns
+
+    def _detect_triple_tops_bottoms_extra(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        ex_max = self._local_extrema(self.highs, order=3, mode='max')
+        ex_min = self._local_extrema(self.lows, order=3, mode='min')
+        # Triple top: three highs within tolerance
+        if len(ex_max) >= 3:
+            last3 = ex_max[-5:]
+            vals = [v for _, v in last3]
+            if len(vals) >= 3:
+                vals_sorted = sorted(vals[-3:])
+                if self._percent_diff(vals_sorted[0], vals_sorted[-1]) < 0.02:
+                    idx = [i for i,_ in last3][-3:]
+                    patterns.append(Pattern(
+                        pattern_id=f"triple_top_{idx[-1]}_{self.times[idx[-1]]}",
+                        pattern_type="triple_top",
+                        confidence=75,
+                        start_candle=idx[0],
+                        end_candle=idx[-1],
+                        description="Triple Top - bearish reversal potential",
+                        signal="bearish",
+                        action="watch_closely"
+                    ))
+        # Triple bottom
+        if len(ex_min) >= 3:
+            last3 = ex_min[-5:]
+            vals = [v for _, v in last3]
+            if len(vals) >= 3:
+                vals_sorted = sorted(vals[-3:])
+                if self._percent_diff(vals_sorted[0], vals_sorted[-1]) < 0.02:
+                    idx = [i for i,_ in last3][-3:]
+                    patterns.append(Pattern(
+                        pattern_id=f"triple_bottom_{idx[-1]}_{self.times[idx[-1]]}",
+                        pattern_type="triple_bottom",
+                        confidence=75,
+                        start_candle=idx[0],
+                        end_candle=idx[-1],
+                        description="Triple Bottom - bullish reversal potential",
+                        signal="bullish",
+                        action="watch_closely"
+                    ))
+        return patterns
+
+    def _detect_pennants(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 20:
+            return patterns
+        # Look for short, converging highs/lows following a strong directional pole
+        win = min(20, len(self.candles))
+        highs = self.highs[-win:]
+        lows = self.lows[-win:]
+        slope_high = self._fit_slope(highs)
+        slope_low = self._fit_slope(lows)
+        converging = slope_high < 0 and slope_low > 0
+        # Pole: strong prior move in last 30-60 candles
+        lookback = min(60, len(self.candles))
+        pole_change = (self.closes[-1] - self.closes[-lookback]) / max(self.closes[-lookback], 1e-9)
+        if converging and abs(pole_change) > 0.08:
+            bullish = pole_change > 0
+            ptype = "pennant_bullish" if bullish else "pennant_bearish"
+            patterns.append(Pattern(
+                pattern_id=f"{ptype}_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type=ptype,
+                confidence=72,
+                start_candle=len(self.candles)-win,
+                end_candle=len(self.candles)-1,
+                description=f"Pennant - {'bullish' if bullish else 'bearish'} continuation",
+                signal="bullish" if bullish else "bearish",
+                action="watch_closely"
+            ))
+        return patterns
+
+    def _detect_broadening(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 30:
+            return patterns
+        # Broadening: higher highs and lower lows (diverging trendlines)
+        win = min(60, len(self.candles))
+        highs = self.highs[-win:]
+        lows = self.lows[-win:]
+        slope_high = self._fit_slope(highs)
+        slope_low = self._fit_slope(lows)
+        if slope_high > 0 and slope_low < 0:
+            patterns.append(Pattern(
+                pattern_id=f"broadening_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type="broadening_top" if self.closes[-1] < self.closes[-win] else "broadening_bottom",
+                confidence=70,
+                start_candle=len(self.candles)-win,
+                end_candle=len(self.candles)-1,
+                description="Broadening formation (megaphone)",
+                signal="neutral",
+                action="watch_closely"
+            ))
+        return patterns
+
+    def _detect_diamond(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 40:
+            return patterns
+        # Approximate: brief broadening followed by converging (diamond at top/bottom)
+        mid = len(self.candles) // 2
+        highs1 = self.highs[:mid]
+        lows1 = self.lows[:mid]
+        highs2 = self.highs[mid:]
+        lows2 = self.lows[mid:]
+        if len(highs1) > 10 and len(highs2) > 10:
+            if self._fit_slope(highs1) > 0 and self._fit_slope(lows1) < 0 and self._fit_slope(highs2) < 0 and self._fit_slope(lows2) > 0:
+                top = self.closes[mid] > np.median(self.closes)
+                ptype = "diamond_top" if top else "diamond_bottom"
+                patterns.append(Pattern(
+                    pattern_id=f"{ptype}_{len(self.candles)-1}_{self.times[-1]}",
+                    pattern_type=ptype,
+                    confidence=70,
+                    start_candle=0,
+                    end_candle=len(self.candles)-1,
+                    description="Diamond pattern",
+                    signal="bearish" if ptype == "diamond_top" else "bullish",
+                    action="watch_closely"
+                ))
+        return patterns
+
+    def _detect_rounding_bottom(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 30:
+            return patterns
+        # Simple U-shape approximation: lows decreasing then increasing with small slopes
+        lows = self.lows
+        win = min(80, len(lows))
+        lows_win = lows[-win:]
+        # Split into two halves and check trend reversal with gentle slopes
+        half = len(lows_win) // 2
+        if half >= 10:
+            slope1 = self._fit_slope(lows_win[:half])
+            slope2 = self._fit_slope(lows_win[half:])
+            if slope1 < 0 and slope2 > 0 and abs(slope1) < np.std(lows_win)*0.01 and abs(slope2) < np.std(lows_win)*0.01:
+                patterns.append(Pattern(
+                    pattern_id=f"rounding_bottom_{len(self.candles)-1}_{self.times[-1]}",
+                    pattern_type="rounding_bottom",
+                    confidence=70,
+                    start_candle=len(self.candles)-win,
+                    end_candle=len(self.candles)-1,
+                    description="Rounding Bottom (saucer)",
+                    signal="bullish",
+                    action="watch_closely"
+                ))
+        return patterns
+
+    def _detect_abandoned_baby(self) -> List[Pattern]:
+        """Detect Abandoned Baby (rare): doji gapped on both sides."""
+        patterns: List[Pattern] = []
+        n = len(self.candles)
+        if n < 3:
+            return patterns
+        for i in range(1, n-1):
+            prev = self.candles[i-1]
+            doji = self.candles[i]
+            nxt = self.candles[i+1]
+            # Doji criteria
+            rng = max(float(doji['high']) - float(doji['low']), 1e-9)
+            body = abs(float(doji['close']) - float(doji['open']))
+            if body > 0.1 * rng:
+                continue
+            # Gaps on both sides
+            gap_up_prev = float(doji['low']) > float(prev['high'])
+            gap_down_prev = float(doji['high']) < float(prev['low'])
+            gap_up_next = float(nxt['low']) > float(doji['high'])
+            gap_down_next = float(nxt['high']) < float(doji['low'])
+            if (gap_up_prev and gap_down_next) or (gap_down_prev and gap_up_next):
+                bullish = gap_down_prev and gap_up_next
+                patterns.append(Pattern(
+                    pattern_id=f"abandoned_baby_{i}_{self.times[i]}",
+                    pattern_type="abandoned_baby",
+                    confidence=75,
+                    start_candle=i-1,
+                    end_candle=i+1,
+                    description="Abandoned Baby - strong reversal",
+                    signal="bullish" if bullish else "bearish",
+                    action="watch_closely"
+                ))
+        return patterns
+
+    def _detect_breakaway_gaps(self) -> List[Pattern]:
+        """Detect and classify gaps: breakaway, runaway, exhaustion."""
+        patterns: List[Pattern] = []
+        n = len(self.candles)
+        if n < 5:
+            return patterns
+        # Helper to compute average true range for scale
+        atr = np.mean(self.highs - self.lows) if len(self.highs) else 0
+        for i in range(1, n):
+            prev = self.candles[i-1]
+            curr = self.candles[i]
+            gap = float(curr['open']) - float(prev['close'])
+            gap_pct = gap / max(abs(prev['close']), 1e-9)
+            # Consider significant if > 0.5 ATR or > 1%
+            if abs(gap) < max(0.5 * atr, 0.01 * abs(prev['close'])):
+                continue
+            # Classify by trend context
+            look = max(3, min(20, i))
+            trend_change = np.sign(self.closes[i-1] - self.closes[i-look]) if i - look >= 0 else 0
+            same_dir = (gap > 0 and self.closes[i-1] >= self.closes[i-look]) or (gap < 0 and self.closes[i-1] <= self.closes[i-look])
+            vol_ratio = self._volume_ratio(i)
+            base_conf = 72 if vol_ratio > 1.2 else 68
+            if same_dir and abs(gap_pct) > 0.015:
+                ptype = "runaway_gap"
+                desc = "Runaway gap - continuation"
+                signal = "bullish" if gap > 0 else "bearish"
+            elif trend_change == 0:
+                ptype = "breakaway_gap"
+                desc = "Breakaway gap - start of move"
+                signal = "bullish" if gap > 0 else "bearish"
+            else:
+                ptype = "exhaustion_gap"
+                desc = "Exhaustion gap - potential end of move"
+                signal = "bearish" if gap > 0 else "bullish"
+            patterns.append(Pattern(
+                pattern_id=f"{ptype}_{i}_{self.times[i]}",
+                pattern_type=ptype,
+                confidence=min(90, self._apply_confidence_weights(base_conf, vol_ratio)),
+                start_candle=i-1,
+                end_candle=i,
+                description=desc,
+                signal=signal,
+                action="watch_closely"
+            ))
+        return patterns
     
     def _detect_candlestick_patterns(self) -> List[Pattern]:
         """Detect the 3 high-value candlestick patterns"""
@@ -125,7 +723,146 @@ class PatternDetector:
                 patterns.append(hammer_or_star)
         
         return patterns
-    
+
+    def _detect_multi_candle_patterns(self) -> List[Pattern]:
+        """Detect three-candle formations and complex candlestick setups."""
+        patterns: List[Pattern] = []
+        if len(self.candles) < 3:
+            return patterns
+
+        for i in range(2, len(self.candles)):
+            c1, c2, c3 = self.candles[i-2], self.candles[i-1], self.candles[i]
+            o1, c1_close = c1['open'], c1['close']
+            o2, c2_close = c2['open'], c2['close']
+            o3, c3_close = c3['open'], c3['close']
+
+            # Morning Star (bullish reversal)
+            if (c1_close < o1 and  # First candle bearish
+                abs(c2_close - o2) < abs(c1_close - o1) * 0.4 and  # Small-bodied star
+                c3_close > o3 and  # Third bullish
+                c3_close > (o1 + c1_close) / 2):  # Closes above midpoint of first candle
+                volume_ratio = self._volume_ratio(i)
+                confidence = min(95, 80 * (1.1 if volume_ratio > 1 else 0.9))
+                patterns.append(Pattern(
+                    pattern_id=f"morning_star_{i}_{self.times[i]}",
+                    pattern_type="morning_star",
+                    confidence=confidence,
+                    start_candle=i-2,
+                    end_candle=i,
+                    description="Morning Star - bullish candlestick reversal",
+                    signal="bullish",
+                    action="watch_closely",
+                    typical_duration="3-7 candles"
+                ))
+
+            # Evening Star (bearish reversal)
+            if (c1_close > o1 and
+                abs(c2_close - o2) < abs(c1_close - o1) * 0.4 and
+                c3_close < o3 and
+                c3_close < (o1 + c1_close) / 2):
+                volume_ratio = self._volume_ratio(i)
+                confidence = min(95, 80 * (1.1 if volume_ratio > 1 else 0.9))
+                patterns.append(Pattern(
+                    pattern_id=f"evening_star_{i}_{self.times[i]}",
+                    pattern_type="evening_star",
+                    confidence=confidence,
+                    start_candle=i-2,
+                    end_candle=i,
+                    description="Evening Star - bearish candlestick reversal",
+                    signal="bearish",
+                    action="watch_closely",
+                    typical_duration="3-7 candles"
+                ))
+
+            # Piercing Line (bullish)
+            if (c1_close < o1 and c2_close > o2 and  # bearish then bullish
+                c2_close > (c1_close + o1) / 2 and  # Close penetrates body midpoint
+                c2_close < o1):  # Doesn't close above open entirely
+                confidence = 72
+                patterns.append(Pattern(
+                    pattern_id=f"piercing_line_{i-1}_{self.times[i-1]}",
+                    pattern_type="piercing_line",
+                    confidence=confidence,
+                    start_candle=i-1,
+                    end_candle=i-1,
+                    description="Piercing Line - bullish two-candle reversal",
+                    signal="bullish",
+                    action="watch_closely"
+                ))
+
+            # Dark Cloud Cover (bearish)
+            if (c1_close > o1 and c2_close < o2 and
+                c2_close < (c1_close + o1) / 2 and
+                c2_close > o1):
+                confidence = 72
+                patterns.append(Pattern(
+                    pattern_id=f"dark_cloud_cover_{i-1}_{self.times[i-1]}",
+                    pattern_type="dark_cloud_cover",
+                    confidence=confidence,
+                    start_candle=i-1,
+                    end_candle=i-1,
+                    description="Dark Cloud Cover - bearish two-candle reversal",
+                    signal="bearish",
+                    action="watch_closely"
+                ))
+
+            # Harami (Bullish / Bearish)
+            if abs(c2_close - o2) < abs(c1_close - o1) * 0.5:
+                if c1_close < o1 and c2_close > o2 and c2_close < o1 and c2_close > c1_close:
+                    patterns.append(Pattern(
+                        pattern_id=f"bullish_harami_{i-1}_{self.times[i-1]}",
+                        pattern_type="bullish_harami",
+                        confidence=70,
+                        start_candle=i-1,
+                        end_candle=i-1,
+                        description="Bullish Harami - potential reversal",
+                        signal="bullish",
+                        action="wait"
+                    ))
+                if c1_close > o1 and c2_close < o2 and c2_close < c1_close and c2_close > o1:
+                    patterns.append(Pattern(
+                        pattern_id=f"bearish_harami_{i-1}_{self.times[i-1]}",
+                        pattern_type="bearish_harami",
+                        confidence=70,
+                        start_candle=i-1,
+                        end_candle=i-1,
+                        description="Bearish Harami - potential reversal",
+                        signal="bearish",
+                        action="wait"
+                    ))
+
+        # Three white soldiers / three black crows
+        for i in range(2, len(self.candles)):
+            c1, c2, c3 = self.candles[i-2], self.candles[i-1], self.candles[i]
+            if (c1['close'] > c1['open'] and c2['close'] > c2['open'] and c3['close'] > c3['open'] and
+                c2['open'] > c1['open'] and c3['open'] > c2['open'] and
+                c3['close'] > c2['close'] > c1['close']):
+                patterns.append(Pattern(
+                    pattern_id=f"three_white_soldiers_{i}_{self.times[i]}",
+                    pattern_type="three_white_soldiers",
+                    confidence=78,
+                    start_candle=i-2,
+                    end_candle=i,
+                    description="Three White Soldiers - strong bullish continuation",
+                    signal="bullish",
+                    action="watch_closely"
+                ))
+
+            if (c1['close'] < c1['open'] and c2['close'] < c2['open'] and c3['close'] < c3['open'] and
+                c2['open'] < c1['open'] and c3['open'] < c2['open'] and
+                c3['close'] < c2['close'] < c1['close']):
+                patterns.append(Pattern(
+                    pattern_id=f"three_black_crows_{i}_{self.times[i]}",
+                    pattern_type="three_black_crows",
+                    confidence=78,
+                    start_candle=i-2,
+                    end_candle=i,
+                    description="Three Black Crows - strong bearish continuation",
+                    signal="bearish",
+                    action="watch_closely"
+                ))
+
+        return patterns
     def _detect_engulfing(self, curr: Dict, prev: Dict, index: int) -> Optional[Pattern]:
         """
         Detect Bullish/Bearish Engulfing patterns

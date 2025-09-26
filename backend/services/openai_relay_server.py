@@ -37,7 +37,7 @@ class OpenAIRealtimeRelay:
         logger.info(f"🔑 OpenAI API key loaded: {masked_key}")
         
         self.openai_url = "wss://api.openai.com/v1/realtime"
-        self.model = "gpt-4o-realtime-preview-2024-12-17"
+        self.model = "gpt-realtime-2025-08-28"
         # NO TOOLS - Realtime API is voice-only, agent handles all tools
         self.active_sessions = {}  # Track active sessions
         

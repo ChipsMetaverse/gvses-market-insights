@@ -1,0 +1,143 @@
+{
+  "scenario": "Quick Test - Find and Click Input",
+  "timestamp": "2025-09-24T15:40:23.646442",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "action",
+      "action": {
+        "type": "wait"
+      },
+      "timestamp": "2025-09-24T15:40:36.109475"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "wait"
+      },
+      "timestamp": "2025-09-24T15:40:43.903087"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "wait"
+      },
+      "timestamp": "2025-09-24T15:40:53.137208"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "wait"
+      },
+      "timestamp": "2025-09-24T15:41:00.452522"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 1048,
+        "y": 779
+      },
+      "timestamp": "2025-09-24T15:41:10.190052"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 516,
+        "y": 46
+      },
+      "timestamp": "2025-09-24T15:41:20.109670"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 1116,
+        "y": 778
+      },
+      "timestamp": "2025-09-24T15:41:35.129382"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 38,
+        "y": 70
+      },
+      "timestamp": "2025-09-24T15:41:46.483035"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 41,
+        "y": 65
+      },
+      "timestamp": "2025-09-24T15:41:54.114142"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 396,
+        "y": 32
+      },
+      "timestamp": "2025-09-24T15:42:06.188097"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "154036_0.png",
+      "timestamp": "2025-09-24T15:40:36.230374",
+      "file": "embedded"
+    },
+    {
+      "name": "154043_1.png",
+      "timestamp": "2025-09-24T15:40:43.962838",
+      "file": "embedded"
+    },
+    {
+      "name": "154053_2.png",
+      "timestamp": "2025-09-24T15:40:53.315512",
+      "file": "embedded"
+    },
+    {
+      "name": "154100_3.png",
+      "timestamp": "2025-09-24T15:41:00.640891",
+      "file": "embedded"
+    },
+    {
+      "name": "154110_4.png",
+      "timestamp": "2025-09-24T15:41:10.259724",
+      "file": "embedded"
+    },
+    {
+      "name": "154120_5.png",
+      "timestamp": "2025-09-24T15:41:20.175822",
+      "file": "embedded"
+    },
+    {
+      "name": "154135_6.png",
+      "timestamp": "2025-09-24T15:41:35.718618",
+      "file": "embedded"
+    },
+    {
+      "name": "154146_7.png",
+      "timestamp": "2025-09-24T15:41:46.582611",
+      "file": "embedded"
+    },
+    {
+      "name": "154154_8.png",
+      "timestamp": "2025-09-24T15:41:54.232081",
+      "file": "embedded"
+    },
+    {
+      "name": "154206_9.png",
+      "timestamp": "2025-09-24T15:42:06.359469",
+      "file": "embedded"
+    }
+  ],
+  "issues": [],
+  "fixes": []
+}

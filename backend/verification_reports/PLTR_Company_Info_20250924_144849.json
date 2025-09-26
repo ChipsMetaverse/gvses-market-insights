@@ -1,0 +1,13 @@
+{
+  "scenario": "PLTR_Company_Info",
+  "timestamp": "2025-09-24T14:48:34.249306",
+  "status": "completed",
+  "screenshots": [
+    {
+      "name": "initial",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAABAAAAAMACAIAAAA12IJaAAAAAXNSR0IArs4c6QAAIABJREFUeJzs3XVYFN8aB/CXMHBVFAxUVBAR..."
+    }
+  ],
+  "actions": [],
+  "findings": []
+}

@@ -1,0 +1,28 @@
+{
+  "scenario": "Simple Click and Type",
+  "timestamp": "2025-09-24T22:22:15.926716",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "action",
+      "action": {
+        "type": "screenshot"
+      },
+      "timestamp": "2025-09-24T22:22:30.990466"
+    },
+    {
+      "type": "message",
+      "content": "There are multiple possible locations to save screenshots. Would you like me to save them in the default location, or is there a specific directory you'd prefer?",
+      "timestamp": "2025-09-24T22:22:55.962778"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "222231_0.png",
+      "timestamp": "2025-09-24T22:22:31.072089",
+      "file": "embedded"
+    }
+  ],
+  "issues": [],
+  "fixes": []
+}

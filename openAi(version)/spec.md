@@ -158,7 +158,7 @@ class RealtimeVoiceSession {
   constructor() {
     this.agent = new TradingAgent({
       name: 'TradingAssistant',
-      model: 'gpt-4o-realtime-preview-2025-06-03',
+      model: 'gpt-realtime-2025-08-28-2025-06-03',
       instructions: this.buildInstructions(),
       tools: this.loadTools(),
       voice: 'nova',

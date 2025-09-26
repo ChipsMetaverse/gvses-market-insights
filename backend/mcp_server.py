@@ -15,7 +15,7 @@ import uuid
 import datetime
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Header
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -23,6 +23,9 @@ import httpx
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import logging
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from market_data_service import MarketDataService
 from routers.dashboard_router import router as dashboard_router
 from mcp_client import get_stock_history as mcp_get_stock_history
@@ -39,6 +42,11 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(title="Voice Assistant MCP Server")
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure CORS - allow all localhost ports for development
 app.add_middleware(
@@ -82,6 +90,17 @@ except ImportError as e:
 except Exception as e:
     logger.error(f"Error mounting agent router: {e}")
 
+# Mount Computer Use verification router if enabled
+if os.getenv("USE_COMPUTER_USE", "false").lower() == "true":
+    try:
+        from routers.computer_use_router import router as computer_use_router
+        app.include_router(computer_use_router)
+        logger.info("Computer Use verification router mounted successfully")
+    except ImportError as e:
+        logger.warning(f"Computer Use router not available: {e}")
+    except Exception as e:
+        logger.error(f"Error mounting Computer Use router: {e}")
+
 # Initialize Supabase client
 def get_supabase_client() -> Client:
     """Initialize and return Supabase client."""
@@ -107,29 +126,61 @@ class QueryResponse(BaseModel):
     session_id: str
     timestamp: str
     audio_url: Optional[str] = None
+    tool_results: Optional[Dict[str, Any]] = None
+    chart_commands: Optional[List[str]] = None
 
 
 class ConversationManager:
     """Manages conversation history and persistence."""
     
-    def __init__(self, supabase: Client):
+    def __init__(self, supabase: Client, max_attempts: int = 2, retry_delay: float = 0.05):
         self.supabase = supabase
         self.active_sessions: Dict[str, List[Dict[str, str]]] = {}
+        self.max_attempts = max_attempts
+        self.retry_delay = retry_delay
+    
+    def _get_or_create_session(self, session_id: str, user_id: Optional[str] = None) -> None:
+        """Ensure the session row exists before saving messages."""
+        payload: Dict[str, Any] = {
+            "id": session_id,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        if user_id:
+            payload["user_id"] = user_id
+
+        try:
+            self.supabase.table("sessions").upsert(payload, on_conflict="id").execute()
+        except Exception as exc:
+            # Ignore duplicate-key errors (23505); propagate anything else.
+            if "23505" in str(exc):
+                return
+            logger.warning(f"Sessions upsert failed for {session_id[:8]}…: {exc}")
     
     async def get_history(self, session_id: str, limit: int = 10) -> List[Dict[str, str]]:
         """Retrieve conversation history from Supabase."""
         try:
+            logger.info(f"🔍 Fetching history for session {session_id}")
             response = self.supabase.table("conversations").select("*").eq(
                 "session_id", session_id
             ).order("created_at", desc=True).limit(limit).execute()
             
+            # Debug log the raw response
+            logger.info(f"📦 Supabase response data count: {len(response.data) if response.data else 0}")
             if response.data:
-                return [
+                logger.debug(f"📋 Raw Supabase data (first 2): {response.data[:2] if len(response.data) > 0 else []}")
+                
+            if response.data:
+                history = [
                     {"role": msg["role"], "content": msg["content"]}
                     for msg in reversed(response.data)
                 ]
+                logger.info(f"✅ Retrieved {len(history)} messages for session {session_id[:8]}...")
+                return history
+            else:
+                logger.warning(f"⚠️ No data returned from Supabase for session {session_id}")
         except Exception as e:
-            logger.error(f"Error fetching history: {e}")
+            logger.error(f"❌ Error fetching history for {session_id}: {e}")
+        logger.info(f"📭 No history found for session {session_id[:8]}...")
         return []
     
     async def save_message(
@@ -138,21 +189,58 @@ class ConversationManager:
         role: str, 
         content: str,
         user_id: Optional[str] = None
-    ):
-        """Save message to Supabase."""
-        try:
-            data = {
-                "session_id": session_id,
-                "role": role,
-                "content": content,
-                "created_at": datetime.utcnow().isoformat(),
-            }
-            if user_id:
-                data["user_id"] = user_id
-            
-            self.supabase.table("conversations").insert(data).execute()
-        except Exception as e:
-            logger.error(f"Error saving message: {e}")
+    ) -> bool:
+        """Save message to Supabase with automatic session creation and fallback."""
+        import time
+        start_time = time.time()
+        attempts = 0
+        last_error: Optional[Exception] = None
+
+        while attempts < self.max_attempts:
+            attempts += 1
+            try:
+                logger.info(f"💾 Saving {role} message for session {session_id} (attempt {attempts})")
+                
+                # Ensure session exists before saving messages
+                self._get_or_create_session(session_id, user_id)
+                
+                # Now save the message
+                data = {
+                    "session_id": session_id,
+                    "role": role,
+                    "content": content[:5000],  # Limit content size
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+                if user_id:
+                    data["user_id"] = user_id
+                
+                response = self.supabase.table("conversations").insert(data).execute()
+                logger.info(
+                    f"✅ Saved {role} message for session {session_id[:8]}... "
+                    f"(response has data: {response.data is not None})"
+                )
+                elapsed = (time.time() - start_time) * 1000
+                if elapsed > 500:
+                    logger.warning(f"Slow Supabase save: {elapsed:.0f}ms for session {session_id}")
+                return True
+            except Exception as exc:
+                last_error = exc
+                elapsed = (time.time() - start_time) * 1000
+                err_str = str(exc)
+                logger.warning(
+                    f"⚠️ Supabase save attempt {attempts}/{self.max_attempts} failed for session "
+                    f"{session_id[:8]}… after {elapsed:.0f}ms: {err_str}"
+                )
+                # Foreign key violation: recreate session row and retry immediately
+                if "23503" in err_str:
+                    self._get_or_create_session(session_id, user_id)
+                if attempts < self.max_attempts:
+                    await asyncio.sleep(self.retry_delay)
+
+        logger.warning(
+            f"Skipping history save for {session_id[:8]}… after {self.max_attempts} attempts: {last_error}"
+        )
+        return False
 
 
 class ClaudeService:
@@ -273,6 +361,14 @@ async def startup_event():
             from services.agent_orchestrator import get_orchestrator
             orchestrator = get_orchestrator()
             logger.info("✅ Agent orchestrator initialized successfully")
+            
+            # Pre-warm cache with common queries for instant responses
+            cache_warm_enabled = os.getenv("CACHE_WARM_ON_STARTUP", "true").lower() == "true"
+            if cache_warm_enabled:
+                asyncio.create_task(orchestrator.prewarm_cache())
+                logger.info("🔥 Cache pre-warming started in background")
+            else:
+                logger.info("📦 Cache pre-warming disabled by CACHE_WARM_ON_STARTUP=false")
         except Exception as e:
             logger.error(f"❌ Failed to initialize agent orchestrator: {e}")
             orchestrator = None
@@ -362,7 +458,20 @@ async def health_check():
     service_status = MarketServiceFactory.get_service_status()
     if service_status:
         response["services"] = service_status
-    
+
+    # Report MCP sidecar status
+    try:
+        from mcp_client import get_mcp_manager
+        mcp_manager = get_mcp_manager()
+        if hasattr(mcp_manager, "initialized") and not mcp_manager.initialized:
+            try:
+                await mcp_manager.initialize()
+            except Exception as exc:
+                logger.warning(f"MCP manager initialization during health check failed: {exc}")
+        response["mcp_sidecars"] = mcp_manager.get_status_snapshot() if hasattr(mcp_manager, "get_status_snapshot") else {"status": "unavailable"}
+    except Exception as exc:
+        response["mcp_sidecars"] = {"status": "error", "error": str(exc)}
+
     # Add OpenAI relay details if available
     try:
         # Try to import the relay server directly
@@ -419,7 +528,7 @@ async def health_check():
         "bounded_llm_insights": {  # Day 4.2: AI insights
             "enabled": True,
             "max_chars": 250,
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1",
             "timeout_s": 2.0,
             "fallback_enabled": True
         },
@@ -435,6 +544,34 @@ async def health_check():
     response["agent_version"] = "1.5.0"  # Agent orchestrator version
     
     return response
+
+
+@app.get("/metrics")
+@limiter.limit("10/minute")  # Allow 10 requests per minute per IP
+async def get_metrics(request: Request, authorization: Optional[str] = Header(None)):
+    """Get knowledge system performance metrics with authentication and rate limiting."""
+    # Check for metrics token
+    metrics_token = os.getenv("METRICS_TOKEN")
+    if metrics_token:
+        # If token is configured, require it
+        if not authorization or authorization != f"Bearer {metrics_token}":
+            raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    # Get metrics from orchestrator if available
+    try:
+        from services.agent_orchestrator import get_orchestrator
+        orchestrator = get_orchestrator()
+        if orchestrator and hasattr(orchestrator, 'metrics'):
+            stats = orchestrator.metrics.get_stats()
+            # Add response cache metrics
+            stats['response_cache_size'] = len(orchestrator._response_cache) if hasattr(orchestrator, '_response_cache') else 0
+            stats['knowledge_cache_size'] = len(orchestrator._knowledge_cache) if hasattr(orchestrator, '_knowledge_cache') else 0
+            return stats
+        else:
+            return {"status": "metrics not available", "reason": "orchestrator not initialized"}
+    except Exception as e:
+        logger.error(f"Error getting metrics: {e}")
+        return {"status": "error", "error": str(e)}
 
 
 async def get_market_service():
@@ -1057,13 +1194,14 @@ async def record_conversation(request: ConversationRecordRequest):
         raise HTTPException(status_code=503, detail="Database service not initialized")
     
     try:
-        await conversation_manager.save_message(
+        # Fire-and-forget to avoid blocking user request on DB latency
+        asyncio.create_task(conversation_manager.save_message(
             session_id=request.session_id,
             role=request.role,
             content=request.content,
             user_id=request.user_id
-        )
-        return {"status": "success", "timestamp": datetime.utcnow().isoformat()}
+        ))
+        return {"status": "accepted", "timestamp": datetime.utcnow().isoformat()}
     except Exception as e:
         logger.error(f"Error recording conversation: {e}")
         raise HTTPException(status_code=500, detail="Failed to record conversation")
@@ -1086,6 +1224,63 @@ async def orchestrate_agent(request: QueryRequest):
     except Exception as e:
         logger.error(f"Agent orchestration error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/agent/diag")
+async def agent_diagnostics():
+    """Diagnostic endpoint: SDK, flags, and last per-phase timings from orchestrator."""
+    import openai
+    from openai import AsyncOpenAI
+    import time
+    import os
+    
+    # Check SDK version and available methods
+    client = AsyncOpenAI()
+    
+    # Collect diagnostics
+    diag_data = {
+        "sdk": {
+            "version": openai.__version__,
+            "responses_api": hasattr(client, 'responses'),
+            "responses_methods": sorted([m for m in dir(client.responses) if not m.startswith('_')]) if hasattr(client, 'responses') else []
+        },
+        "environment": {
+            "USE_RESPONSES": os.getenv("USE_RESPONSES", "false"),
+            "model": os.getenv("MODEL", "gpt-4o-mini"),
+            "python_version": sys.version.split()[0]
+        },
+        "feature_flags": {
+            "responses_api_enabled": os.getenv("USE_RESPONSES", "false").lower() == "true",
+            "use_mcp": os.getenv("USE_MCP", "true").lower() == "true",
+            "single_pass": True
+        },
+        "performance_targets": {
+            "price_query": "< 3s",
+            "technical_analysis": "6-9s",
+            "news_query": "3-5s"
+        },
+        "extraction_priority": [
+            "response.output_text (SDK property)",
+            "response.text (direct attribute)",
+            "response.output[].content[].text (manual)",
+            "reasoning content (fallback)"
+        ],
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Include orchestrator metrics if available
+    try:
+        from services.agent_orchestrator import get_orchestrator
+        orch = get_orchestrator()
+        last_diag = getattr(orch, 'last_diag', None)
+        diag_data["orchestrator"] = {
+            "model": getattr(orch, 'model', None),
+            "use_responses_client": bool(getattr(orch, '_responses_client', None)),
+            "last_diag": last_diag,
+        }
+    except Exception as e:
+        diag_data["orchestrator_error"] = str(e)
+    
+    return diag_data
 
 @app.get("/api/agent/health")
 async def agent_health():
@@ -1126,7 +1321,11 @@ async def ask_assistant(request: QueryRequest):
         # Get conversation history if requested
         history = []
         if request.include_history and conversation_manager:
+            logger.info(f"📚 include_history=True for session {session_id}, fetching history...")
             history = await conversation_manager.get_history(session_id)
+            logger.info(f"📖 Retrieved {len(history)} messages from history")
+        else:
+            logger.info(f"⏭️ Skipping history: include_history={request.include_history}, conversation_manager={conversation_manager is not None}")
         
         # Convert history to orchestrator format if needed
         conversation_history = []
@@ -1138,6 +1337,7 @@ async def ask_assistant(request: QueryRequest):
                 })
         
         # Process query through orchestrator
+        logger.info(f"🤖 Processing query for session {session_id[:8]}... with {len(conversation_history)} history messages")
         result = await orchestrator.process_query(
             request.query, 
             conversation_history,
@@ -1147,14 +1347,22 @@ async def ask_assistant(request: QueryRequest):
         # Extract response text
         response_text = result.get("text", "")
         
-        # Save conversation to Supabase if available
-        if conversation_manager:
-            await conversation_manager.save_message(
-                session_id, "user", request.query, request.user_id
-            )
-            await conversation_manager.save_message(
-                session_id, "assistant", response_text, request.user_id
-            )
+        # Only save conversation to Supabase if not cached
+        if not result.get("cached", False) and conversation_manager:
+            try:
+                # Save in background to keep hot path fast
+                asyncio.create_task(conversation_manager.save_message(
+                    session_id, "user", request.query, request.user_id
+                ))
+                asyncio.create_task(conversation_manager.save_message(
+                    session_id, "assistant", response_text, request.user_id
+                ))
+                logger.debug(f"Saved conversation for session {session_id[:8]}...")
+            except Exception as e:
+                # Log but don't fail the request
+                logger.warning(f"History save failed for {session_id}: {e}")
+        elif result.get("cached", False):
+            logger.debug(f"Skipped Supabase save for cached response (session {session_id[:8]}...)")
         
         # Generate audio URL if voice is enabled
         audio_url = None
@@ -1168,6 +1376,8 @@ async def ask_assistant(request: QueryRequest):
             session_id=session_id,
             timestamp=datetime.utcnow().isoformat(),
             audio_url=audio_url,
+            tool_results=result.get("data", {}),
+            chart_commands=result.get("chart_commands", [])
         )
         
     except Exception as e:
@@ -1343,13 +1553,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     # Get Claude's response
                     response = await claude_service.ask(query, history)
                     
-                    # Save to database
-                    await conversation_manager.save_message(
+                    # Save to database (non-blocking)
+                    asyncio.create_task(conversation_manager.save_message(
                         session_id, "user", query
-                    )
-                    await conversation_manager.save_message(
+                    ))
+                    asyncio.create_task(conversation_manager.save_message(
                         session_id, "assistant", response
-                    )
+                    ))
                     
                     # Send response back
                     await websocket.send_json({

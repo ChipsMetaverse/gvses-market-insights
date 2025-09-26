@@ -1,0 +1,27 @@
+{
+  "scenario": "General Knowledge Query",
+  "timestamp": "2025-09-24T14:51:06.813800",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "message",
+      "content": "Scenario 'General Knowledge Query' would be executed with Computer Use",
+      "timestamp": "2025-09-24T14:51:06.813827"
+    }
+  ],
+  "screenshots": [],
+  "issues": [
+    {
+      "description": "General queries incorrectly routed to trading analysis",
+      "priority": "High"
+    }
+  ],
+  "fixes": [
+    {
+      "file": "backend/services/agent_orchestrator.py",
+      "line": "3344-3438",
+      "description": "Route general queries to LLM instead of early return",
+      "code": "Allow 'general' intent to reach Claude for proper response"
+    }
+  ]
+}

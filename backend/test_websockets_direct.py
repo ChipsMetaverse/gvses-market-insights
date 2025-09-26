@@ -18,7 +18,7 @@ async def test_openai_connection():
         print("❌ No OPENAI_API_KEY found")
         return
     
-    url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17"
+    url = "wss://api.openai.com/v1/realtime?model=gpt-realtime-2025-08-28"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "OpenAI-Beta": "realtime=v1"

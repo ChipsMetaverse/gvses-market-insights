@@ -8,8 +8,9 @@ import { useIndicatorContext, useCachedIndicatorData } from '../contexts/Indicat
 import { IndicatorDataFormatter, IndicatorApiResponse } from '../utils/indicatorDataFormatter';
 import axios from 'axios';
 import { useDebounce } from './useDebounce';
+import { getApiUrl } from '../utils/apiConfig';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = getApiUrl();
 
 export interface UseIndicatorStateOptions {
   autoFetch?: boolean;
@@ -146,7 +147,19 @@ export function useIndicatorState(options: UseIndicatorStateOptions = {}) {
       dispatch({ type: 'SET_LOADING', payload: { indicator: 'all', loading: false } });
       return formattedData;
       
-    } catch (error) {
+    } catch (error: any) {
+      const isCanceled = axios.isCancel(error) || error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError' || error?.name === 'AbortError';
+
+      dispatch({ type: 'SET_LOADING', payload: { indicator: 'all', loading: false } });
+
+      if (isCanceled) {
+        setDataState(prev => ({
+          ...prev,
+          loading: false
+        }));
+        return null;
+      }
+
       const errorMessage = axios.isAxiosError(error)
         ? error.message
         : 'Failed to fetch indicator data';
@@ -158,7 +171,6 @@ export function useIndicatorState(options: UseIndicatorStateOptions = {}) {
         error: errorMessage
       }));
       
-      dispatch({ type: 'SET_LOADING', payload: { indicator: 'all', loading: false } });
       throw error;
     }
   }, [state.symbol, state.timeframe, state.indicators, dispatch, cacheEnabled, getCacheKey]);
@@ -176,7 +188,8 @@ export function useIndicatorState(options: UseIndicatorStateOptions = {}) {
     try {
       return await fetchIndicatorData(abortControllerRef.current.signal);
     } catch (error: any) {
-      if (error.name !== 'AbortError') {
+      const isCanceled = axios.isCancel(error) || error?.name === 'AbortError' || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED';
+      if (!isCanceled) {
         console.error('Failed to refetch indicator data:', error);
       }
       return null;
@@ -227,8 +240,9 @@ export function useIndicatorState(options: UseIndicatorStateOptions = {}) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
     
-    fetchIndicatorData(controller.signal).catch(error => {
-      if (error.name !== 'AbortError') {
+    fetchIndicatorData(controller.signal).catch((error: any) => {
+      const isCanceled = axios.isCancel(error) || error?.name === 'AbortError' || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED';
+      if (!isCanceled) {
         console.error('Auto-fetch failed:', error);
       }
     });

@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { OpenAIRealtimeService } from '../services/OpenAIRealtimeService';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface OpenAIMessage {
   id: string;
@@ -28,7 +29,7 @@ export const useOpenAIRealtimeConversation = (config: UseOpenAIRealtimeConfig = 
     onConnectionChange,
     onToolCall,
     onToolResult,
-    apiUrl = 'http://localhost:8000',
+    apiUrl = getApiUrl(),
     sessionId,
     relayServerUrl
   } = config;

@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Trading Pattern Schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pattern_id",
+    "category",
+    "display_name",
+    "description",
+    "recognition_rules",
+    "trading_playbook",
+    "sources"
+  ],
+  "properties": {
+    "pattern_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]+$"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["candlestick", "chart_pattern", "price_action", "indicator", "macro"]
+    },
+    "display_name": { "type": "string" },
+    "aliases": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "description": { "type": "string" },
+    "recognition_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candle_structure", "trend_context", "invalidations"],
+      "properties": {
+        "candle_structure": { "type": "string" },
+        "trend_context": { "type": "string" },
+        "volume_confirmation": { "type": ["string", "null"] },
+        "invalidations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "trading_playbook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signal", "entry", "stop_loss"],
+      "properties": {
+        "signal": { "type": "string", "enum": ["bullish", "bearish", "neutral"] },
+        "entry": { "type": "string" },
+        "stop_loss": { "type": "string" },
+        "targets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "risk_notes": { "type": ["string", "null"] },
+        "timeframe_bias": { "type": ["string", "null"] }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "historical_success_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "typical_duration": { "type": ["string", "null"] }
+      },
+      "default": {}
+    },
+    "visual_examples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source"],
+        "properties": {
+          "source": { "type": "string" },
+          "page": { "type": ["integer", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "default": []
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["doc"],
+        "properties": {
+          "doc": { "type": "string" },
+          "page": { "type": ["integer", "null"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
+
+

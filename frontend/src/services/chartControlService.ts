@@ -6,7 +6,7 @@
 import { marketDataService, SymbolSearchResult } from './marketDataService';
 
 export interface ChartCommand {
-  type: 'symbol' | 'timeframe' | 'indicator' | 'zoom' | 'scroll' | 'style' | 'reset' | 'crosshair';
+  type: 'symbol' | 'timeframe' | 'indicator' | 'zoom' | 'scroll' | 'style' | 'reset' | 'crosshair' | 'drawing';
   value: any;
   metadata?: {
     assetType?: 'stock' | 'crypto';
@@ -22,6 +22,7 @@ export interface ChartControlCallbacks {
   onZoomChange?: (level: number) => void;
   onScrollToTime?: (time: number) => void;
   onStyleChange?: (style: 'candles' | 'line' | 'area') => void;
+  onPatternHighlight?: (pattern: string, info?: { description?: string; indicator?: string }) => void;
   onCommandExecuted?: (command: ChartCommand, success: boolean, message: string) => void;
   onCommandError?: (error: string) => void;
 }
@@ -551,10 +552,137 @@ class ChartControlService {
   }
 
   /**
+   * Parse drawing command from API format
+   */
+  private parseDrawingCommand(cmd: string): ChartCommand | null {
+    const parts = cmd.split(':');
+    const type = parts[0];
+    
+    switch(type) {
+      case 'SUPPORT':
+        return {
+          type: 'drawing',
+          value: {
+            action: 'support',
+            price: parseFloat(parts[1])
+          },
+          timestamp: Date.now()
+        };
+        
+      case 'RESISTANCE':
+        return {
+          type: 'drawing',
+          value: {
+            action: 'resistance',
+            price: parseFloat(parts[1])
+          },
+          timestamp: Date.now()
+        };
+        
+      case 'ENTRY':
+        return {
+          type: 'drawing',
+          value: {
+            action: 'entry',
+            price: parseFloat(parts[1])
+          },
+          timestamp: Date.now()
+        };
+        
+      case 'TARGET':
+        return {
+          type: 'drawing',
+          value: {
+            action: 'target',
+            price: parseFloat(parts[1])
+          },
+          timestamp: Date.now()
+        };
+        
+      case 'STOPLOSS':
+        return {
+          type: 'drawing',
+          value: {
+            action: 'stoploss',
+            price: parseFloat(parts[1])
+          },
+          timestamp: Date.now()
+        };
+        
+      case 'TRENDLINE':
+        return {
+          type: 'drawing',
+          value: {
+            action: 'trendline',
+            startPrice: parseFloat(parts[1]),
+            startTime: parseInt(parts[2]),
+            endPrice: parseFloat(parts[3]),
+            endTime: parseInt(parts[4])
+          },
+          timestamp: Date.now()
+        };
+        
+      case 'FIBONACCI':
+        return {
+          type: 'drawing',
+          value: {
+            action: 'fibonacci',
+            high: parseFloat(parts[1]),
+            low: parseFloat(parts[2])
+          },
+          timestamp: Date.now()
+        };
+        
+      case 'PATTERN':
+        return {
+          type: 'drawing',
+          value: {
+            action: 'pattern',
+            patternType: parts[1],
+            startCandle: parseInt(parts[2]),
+            endCandle: parseInt(parts[3])
+          },
+          timestamp: Date.now()
+        };
+        
+      default:
+        return null;
+    }
+  }
+
+  /**
    * Parse agent response for chart commands (async for symbol search)
    */
-  async parseAgentResponse(response: string): Promise<ChartCommand[]> {
+  async parseAgentResponse(response: string, chartCommandsFromApi?: string[]): Promise<ChartCommand[]> {
     const commands: ChartCommand[] = [];
+    
+    // Process explicit chart commands from API first
+    if (chartCommandsFromApi && chartCommandsFromApi.length > 0) {
+      for (const cmd of chartCommandsFromApi) {
+        // Check if it's a drawing command
+        const drawingCommand = this.parseDrawingCommand(cmd);
+        if (drawingCommand) {
+          commands.push(drawingCommand);
+        } else {
+          // Handle other command types
+          if (cmd.startsWith('CHART:')) {
+            const symbol = cmd.substring(6);
+            commands.push({
+              type: 'symbol',
+              value: symbol,
+              timestamp: Date.now()
+            });
+          } else if (cmd.startsWith('TIMEFRAME:')) {
+            const timeframe = cmd.substring(10);
+            commands.push({
+              type: 'timeframe', 
+              value: timeframe,
+              timestamp: Date.now()
+            });
+          }
+        }
+      }
+    }
     
     // Detect context from the response
     const assetContext = this.detectAssetType(response);
@@ -697,6 +825,17 @@ class ChartControlService {
   }
 
   /**
+   * Execute drawing command
+   */
+  private executeDrawingCommand(drawing: any): boolean {
+    // Base chartControlService doesn't handle drawings directly
+    // Drawing commands should be handled by enhancedChartControl
+    // Return false to indicate the command wasn't handled here
+    console.log('Drawing command received by base service:', drawing.action);
+    return false;
+  }
+
+  /**
    * Execute a chart command
    */
   executeCommand(command: ChartCommand): boolean {
@@ -705,6 +844,16 @@ class ChartControlService {
     
     try {
       switch (command.type) {
+        case 'drawing':
+          success = this.executeDrawingCommand(command.value);
+          if (success) {
+            const action = command.value.action;
+            message = `Drew ${action} ${command.value.price ? `at $${command.value.price}` : ''}`;
+          } else {
+            message = 'Failed to execute drawing';
+          }
+          break;
+          
         case 'symbol':
           if (this.callbacks.onSymbolChange) {
             this.currentSymbol = command.value;
@@ -879,8 +1028,8 @@ class ChartControlService {
   /**
    * Process agent response and execute any chart commands (async)
    */
-  async processAgentResponse(response: string): Promise<ChartCommand[]> {
-    const commands = await this.parseAgentResponse(response);
+  async processAgentResponse(response: string, chartCommandsFromApi?: string[]): Promise<ChartCommand[]> {
+    const commands = await this.parseAgentResponse(response, chartCommandsFromApi);
     const executedCommands: ChartCommand[] = [];
     
     for (const command of commands) {

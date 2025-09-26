@@ -231,7 +231,7 @@ from agents.realtime import RealtimeAgent, RealtimeRunner
 voice_agent = RealtimeAgent(
     name="Voice Assistant",
     instructions="Respond conversationally and briefly",
-    model="gpt-4o-realtime-preview",
+    model="gpt-realtime-2025-08-28",
     voice="alloy"
 )
 

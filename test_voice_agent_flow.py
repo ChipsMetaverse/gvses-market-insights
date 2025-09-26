@@ -44,7 +44,7 @@ class VoiceAgentFlowTest:
             self.log(f"Session created: {self.session_id}", "SUCCESS")
         
         # Connect to WebSocket
-        ws_url = f"ws://localhost:8000/realtime-relay/{self.session_id}?model=gpt-4o-realtime-preview-2024-12-17"
+        ws_url = f"ws://localhost:8000/realtime-relay/{self.session_id}?model=gpt-realtime-2025-08-28"
         
         async with websockets.connect(ws_url, subprotocols=["realtime"]) as websocket:
             self.log("Connected to Realtime API", "VOICE")

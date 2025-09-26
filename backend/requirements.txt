@@ -1,7 +1,7 @@
 fastapi==0.110.0
 uvicorn[standard]==0.29.0
 httpx==0.24.1
-pydantic==2.5.0
+pydantic>=2.6.0,<3.0.0
 supabase==2.3.0
 python-multipart==0.0.6
 websockets>=11.0,<13.0
@@ -14,3 +14,18 @@ anthropic==0.25.0
 beautifulsoup4==4.12.3
 pytz==2024.1
 openai>=1.70.0
+playwright>=1.45.0
+
+# PDF Processing & Knowledge Extraction
+pypdf==3.17.4
+PyMuPDF==1.23.8  # For advanced PDF extraction
+pytesseract==0.3.10  # OCR support
+Pillow==10.2.0  # Image processing for OCR
+camelot-py[base]==0.11.0  # Table extraction
+sympy==1.12  # Mathematical formula parsing
+redis==5.0.1  # For semantic caching
+slowapi==0.1.9  # Rate limiting for FastAPI
+
+# Dataset builder dependencies
+PyYAML==6.0.1
+jsonschema==4.22.0

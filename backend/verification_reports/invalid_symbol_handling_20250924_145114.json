@@ -1,0 +1,15 @@
+{
+  "scenario": "Invalid Symbol Handling",
+  "timestamp": "2025-09-24T14:51:14.834453",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "message",
+      "content": "Scenario 'Invalid Symbol Handling' would be executed with Computer Use",
+      "timestamp": "2025-09-24T14:51:14.838180"
+    }
+  ],
+  "screenshots": [],
+  "issues": [],
+  "fixes": []
+}

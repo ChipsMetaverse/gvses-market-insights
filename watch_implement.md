@@ -105,7 +105,7 @@ const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
 
 #### Azure OpenAI Connection
 ```http
-wss://my-eastus2-openai-resource.openai.azure.com/openai/realtime?api-version=2024-10-01-preview&deployment=gpt-4o-realtime-preview-1001
+wss://my-eastus2-openai-resource.openai.azure.com/openai/realtime?api-version=2024-10-01-preview&deployment=gpt-realtime-2025-08-28-1001
 ```
 
 ### Authentication Methods
@@ -348,7 +348,7 @@ ELEVENLABS_AGENT_ID=your_agent_id
 
 # New OpenAI Realtime config
 OPENAI_API_KEY=sk-...
-OPENAI_REALTIME_MODEL=gpt-4o-realtime-preview
+OPENAI_REALTIME_MODEL=gpt-realtime-2025-08-28
 OPENAI_DEFAULT_VOICE=alloy
 
 # Voice provider selection

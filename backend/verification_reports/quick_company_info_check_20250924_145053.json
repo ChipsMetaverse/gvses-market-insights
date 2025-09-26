@@ -1,0 +1,15 @@
+{
+  "scenario": "Quick Company Info Check",
+  "timestamp": "2025-09-24T14:50:53.529057",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "message",
+      "content": "Scenario 'Quick Company Info Check' would be executed with Computer Use",
+      "timestamp": "2025-09-24T14:50:53.529068"
+    }
+  ],
+  "screenshots": [],
+  "issues": [],
+  "fixes": []
+}

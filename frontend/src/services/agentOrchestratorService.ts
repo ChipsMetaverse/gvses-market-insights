@@ -3,6 +3,8 @@
  * Handles communication with the backend agent orchestrator for intelligent responses
  */
 
+import { getApiUrl } from '../utils/apiConfig';
+
 interface AgentQuery {
   query: string;
   conversation_history?: Array<{ role: string; content: string }>;
@@ -20,6 +22,7 @@ interface AgentResponse {
   cached: boolean;
   session_id?: string;
   structured_output?: StructuredMarketAnalysis; // New field for Responses API
+  chart_commands?: string[];
 }
 
 interface StructuredMarketAnalysis {
@@ -52,7 +55,7 @@ class AgentOrchestratorService {
   private sessionId: string;
 
   constructor() {
-    this.baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    this.baseUrl = getApiUrl();
     this.sessionId = this.generateSessionId();
   }
 

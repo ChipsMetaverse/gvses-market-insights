@@ -8,9 +8,71 @@ import {
   StrategicInsights, 
   TimeRange 
 } from '../types/dashboard';
+import getApiUrl, { getWebSocketUrl } from '../utils/apiConfig';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Make API_URL dynamic to handle Computer Use Docker access
 const BASE = '/api/v1';
+
+type ApiGlobal = typeof globalThis & {
+  getApiUrl?: () => string;
+  __API_URL__?: string;
+};
+
+type ApiWindow = Window & {
+  getApiUrl?: () => string;
+  __API_URL__?: string;
+};
+
+const DEFAULT_FALLBACK_URL = 'http://localhost:8000';
+
+function resolveApiUrl(): string {
+  const globalScope = globalThis as ApiGlobal;
+  const candidates: Array<string | (() => string) | undefined> = [];
+
+  if (typeof window !== 'undefined') {
+    const win = window as ApiWindow;
+    candidates.push(win.__API_URL__);
+    if (typeof win.getApiUrl === 'function') {
+      candidates.push(win.getApiUrl);
+    }
+  }
+
+  candidates.push(globalScope.__API_URL__);
+  if (typeof globalScope.getApiUrl === 'function') {
+    candidates.push(globalScope.getApiUrl);
+  }
+
+  candidates.push(getApiUrl);
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      if (typeof candidate === 'string' && candidate.length > 0) {
+        return candidate;
+      }
+      if (typeof candidate === 'function') {
+        const value = candidate();
+        if (typeof value === 'string' && value.length > 0) {
+          return value;
+        }
+      }
+    } catch (error) {
+      console.warn('API URL resolver failed; continuing to next candidate', error);
+    }
+  }
+
+  return DEFAULT_FALLBACK_URL;
+}
+
+const resolveWebSocketUrl = (): string => {
+  try {
+    return getWebSocketUrl();
+  } catch (error) {
+    console.warn('Falling back to default WebSocket URL', error);
+    const httpUrl = resolveApiUrl();
+    return httpUrl.replace(/^http/, 'ws');
+  }
+};
 
 export interface StockPrice {
   symbol: string;
@@ -78,10 +140,19 @@ export interface MarketOverview {
 }
 
 export interface TechnicalLevels {
-  se_level?: number;      // Sell High
+  sell_high_level?: number;      // Sell High
   buy_low_level?: number; // Buy Low
   btd_level?: number;     // Buy The Dip
   retest_level?: number;  // Retest
+}
+
+export interface SwingTradeLevels extends TechnicalLevels {
+  entry_points?: number[];     // Swing trade entry levels
+  stop_loss?: number;          // Stop loss level
+  targets?: number[];          // Take profit targets
+  risk_reward?: number;        // Risk/reward ratio
+  support_levels?: number[];   // Support levels
+  resistance_levels?: number[]; // Resistance levels
 }
 
 export interface SymbolSearchResult {
@@ -122,7 +193,8 @@ class MarketDataService {
     if (cached) return cached;
 
     try {
-      const response = await axios.get(`${API_URL}/api/stock-price`, {
+      const apiUrl = resolveApiUrl();
+      const response = await axios.get(`${apiUrl}/api/stock-price`, {
         params: { symbol }
       });
       this.setCache(cacheKey, response.data);
@@ -145,7 +217,8 @@ class MarketDataService {
     if (cached) return cached;
 
     try {
-      const response = await axios.get(`${API_URL}/api/stock-history`, {
+      const apiUrl = resolveApiUrl();
+      const response = await axios.get(`${apiUrl}/api/stock-history`, {
         params: { symbol, days }
       });
       this.setCache(cacheKey, response.data);
@@ -158,7 +231,8 @@ class MarketDataService {
 
   async getComprehensiveData(symbol: string): Promise<any> {
     try {
-      const response = await axios.get(`${API_URL}/api/comprehensive-stock-data`, {
+      const apiUrl = resolveApiUrl();
+      const response = await axios.get(`${apiUrl}/api/comprehensive-stock-data`, {
         params: { symbol }
       });
       return response.data;
@@ -170,7 +244,8 @@ class MarketDataService {
 
   async getStockNews(symbol: string): Promise<StockNews[]> {
     try {
-      const response = await axios.get(`${API_URL}/api/stock-news`, {
+      const apiUrl = resolveApiUrl();
+      const response = await axios.get(`${apiUrl}/api/stock-news`, {
         params: { symbol }
       });
       return response.data.news || [];
@@ -182,7 +257,8 @@ class MarketDataService {
 
   async getAnalystRatings(symbol: string): Promise<AnalystRating[]> {
     try {
-      const response = await axios.get(`${API_URL}/api/analyst-ratings`, {
+      const apiUrl = resolveApiUrl();
+      const response = await axios.get(`${apiUrl}/api/analyst-ratings`, {
         params: { symbol }
       });
       return response.data.ratings || [];
@@ -198,7 +274,8 @@ class MarketDataService {
     if (cached) return cached;
 
     try {
-      const response = await axios.get(`${API_URL}/api/market-overview`);
+      const apiUrl = resolveApiUrl();
+      const response = await axios.get(`${apiUrl}/api/market-overview`);
       const data = response.data;
       
       // Map movers to top_gainers/top_losers if needed
@@ -222,7 +299,8 @@ class MarketDataService {
       return cached;
     }
 
-    const response = await axios.get(`${API_URL}/api/symbol-search`, {
+    const apiUrl = resolveApiUrl();
+    const response = await axios.get(`${apiUrl}/api/symbol-search`, {
       params: { query, limit },
       timeout: 5000
     });
@@ -233,7 +311,8 @@ class MarketDataService {
 
   async getMarketMovers(): Promise<any> {
     try {
-      const response = await axios.get(`${API_URL}/api/market-movers`);
+      const apiUrl = resolveApiUrl();
+      const response = await axios.get(`${apiUrl}/api/market-movers`);
       return response.data;
     } catch (error) {
       console.error('Error fetching market movers:', error);
@@ -304,42 +383,48 @@ class MarketDataService {
 
 // New dashboard API functions
 export const getDashboard = async (symbol: string, range: TimeRange = '1D'): Promise<ApiResponse<DashboardData>> => {
-  const res = await axios.get(`${API_URL}${BASE}/dashboard`, {
+  const apiUrl = resolveApiUrl();
+  const res = await axios.get(`${apiUrl}${BASE}/dashboard`, {
     params: { symbol, range }
   });
   return res.data;
 };
 
 export const getChart = async (symbol: string, range: TimeRange): Promise<ApiResponse<ChartData>> => {
-  const res = await axios.get(`${API_URL}${BASE}/chart`, {
+  const apiUrl = resolveApiUrl();
+  const res = await axios.get(`${apiUrl}${BASE}/chart`, {
     params: { symbol, range }
   });
   return res.data;
 };
 
 export const getTechnical = async (symbol: string, range: TimeRange): Promise<ApiResponse<TechnicalOverview>> => {
-  const res = await axios.get(`${API_URL}${BASE}/technical`, {
+  const apiUrl = resolveApiUrl();
+  const res = await axios.get(`${apiUrl}${BASE}/technical`, {
     params: { symbol, range }
   });
   return res.data;
 };
 
 export const getNews = async (symbol: string, limit = 6): Promise<ApiResponse<RelatedNews>> => {
-  const res = await axios.get(`${API_URL}${BASE}/news`, {
+  const apiUrl = resolveApiUrl();
+  const res = await axios.get(`${apiUrl}${BASE}/news`, {
     params: { symbol, limit }
   });
   return res.data;
 };
 
 export const getStrategicInsights = async (symbol: string, horizonDays = 30): Promise<ApiResponse<StrategicInsights>> => {
-  const res = await axios.get(`${API_URL}${BASE}/options/strategic-insights`, {
+  const apiUrl = resolveApiUrl();
+  const res = await axios.get(`${apiUrl}${BASE}/options/strategic-insights`, {
     params: { symbol, horizon_days: horizonDays }
   });
   return res.data;
 };
 
 export const subscribeQuotes = (symbol: string, onMessage: (msg: any) => void): WebSocket => {
-  const wsUrl = `${API_URL.replace('http', 'ws')}${BASE}/ws/quotes?symbol=${encodeURIComponent(symbol)}`;
+  const wsBase = resolveWebSocketUrl();
+  const wsUrl = `${wsBase}${BASE}/ws/quotes?symbol=${encodeURIComponent(symbol)}`;
   const ws = new WebSocket(wsUrl);
   
   ws.onmessage = (event) => {

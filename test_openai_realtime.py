@@ -24,7 +24,7 @@ async def test_session_creation():
             response = await client.post(
                 f"{BACKEND_URL}/openai/realtime/session",
                 json={
-                    "model": "gpt-4o-realtime-preview",
+                    "model": "gpt-realtime-2025-08-28",
                     "voice": "alloy"
                 }
             )

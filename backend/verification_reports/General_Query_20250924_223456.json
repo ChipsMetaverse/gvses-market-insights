@@ -1,0 +1,16 @@
+{
+  "scenario": "General_Query",
+  "timestamp": "2025-09-24T22:34:43.709654",
+  "status": "failed",
+  "screenshots": [
+    {
+      "name": "initial",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAABAAAAAMACAIAAAA12IJaAAAAAXNSR0IArs4c6QAAIABJREFUeJzs3XVYFN8aB/CXMHBVFAxUVBAR..."
+    }
+  ],
+  "actions": [
+    "ActionClick(button='left', type='click', x=29, y=64)"
+  ],
+  "findings": [],
+  "error": "'ActionClick' object has no attribute 'get'"
+}

@@ -1,0 +1,207 @@
+# Computer Use Verification Scenarios
+# ====================================
+# Define test scenarios for automated UI verification
+
+scenarios:
+  # Issue 1: Company Information Queries
+  - name: "Company Information - PLTR"
+    description: "Verify that asking about a company returns company info, not just trading data"
+    priority: "Critical"
+    steps:
+      - action: "Click on the Voice Assistant input field on the RIGHT panel (class: voice-text-input)"
+        expected: "Input field is focused and ready for typing"
+      
+      - action: "Type 'What is PLTR?' in the RIGHT panel input and press Enter"
+        expected: "Query is submitted to the agent"
+      
+      - action: "Wait for response to appear (max 5 seconds)"
+        expected: "Response text appears in the chat area"
+      
+      - action: "Read the response text"
+        expected: "Response mentions 'Palantir Technologies' and describes it as a 'data analytics' or 'software' company"
+      
+      - action: "Check the chart header for symbol"
+        expected: "Chart displays 'PLTR' as the active symbol"
+    
+    validation:
+      response_must_contain:
+        - "Palantir"
+        - "data"
+      response_must_not_be_only:
+        - "price"
+        - "resistance"
+        - "support"
+      chart_symbol: "PLTR"
+  
+  # Issue 2: Chart Synchronization
+  - name: "Chart Symbol Synchronization"
+    description: "Verify chart switches when discussing different symbols"
+    priority: "Critical"
+    steps:
+      - action: "Ensure chart is currently showing a symbol other than MSFT (note current symbol)"
+        expected: "Chart shows any symbol except MSFT"
+      
+      - action: "Type 'Show me Microsoft' in the RIGHT panel input and submit"
+        expected: "Query is processed"
+      
+      - action: "Wait for chart to update (max 3 seconds)"
+        expected: "Chart transitions to new data"
+      
+      - action: "Check chart header for symbol"
+        expected: "Chart now displays 'MSFT' as the active symbol"
+    
+    validation:
+      chart_must_change_to: "MSFT"
+      
+  # Issue 3: General Query Handling  
+  - name: "General Knowledge Query"
+    description: "Verify non-trading queries get appropriate responses"
+    priority: "High"
+    steps:
+      - action: "Type 'What is artificial intelligence?' in the RIGHT panel input and submit"
+        expected: "Query is processed"
+      
+      - action: "Wait for response"
+        expected: "Response appears within 5 seconds"
+      
+      - action: "Analyze response content"
+        expected: "Response explains AI concepts, not stock prices or trading"
+    
+    validation:
+      response_type: "educational"
+      must_not_contain:
+        - "trading at"
+        - "price"
+        - "support"
+        - "resistance"
+  
+  # Technical Analysis with Timeframes
+  - name: "Technical Analysis - 4H Timeframe"
+    description: "Verify technical analysis requests with specific timeframes"
+    priority: "High"
+    steps:
+      - action: "Type 'Show me the 4hr chart for META' in the RIGHT panel input and submit"
+        expected: "Query is processed"
+      
+      - action: "Wait for chart update"
+        expected: "Chart loads META data"
+      
+      - action: "Check chart symbol"
+        expected: "Chart shows 'META'"
+      
+      - action: "Check timeframe indicator (usually shown as buttons or dropdown)"
+        expected: "Timeframe shows '4H' or 'H4'"
+      
+      - action: "Verify chart has updated to show 4-hour candles"
+        expected: "Candle width and time axis reflect 4-hour periods"
+    
+    validation:
+      chart_symbol: "META"
+      timeframe: ["4H", "H4"]
+  
+  # Multi-Symbol Navigation
+  - name: "Sequential Symbol Changes"
+    description: "Verify chart updates correctly with multiple symbol changes"
+    priority: "Medium"
+    steps:
+      - action: "Type 'Show AAPL' in the RIGHT panel input and submit"
+        expected: "Chart switches to AAPL"
+      
+      - action: "Wait 2 seconds, then type 'Show GOOGL' in the RIGHT panel input and submit"
+        expected: "Chart switches to GOOGL"
+      
+      - action: "Wait 2 seconds, then type 'Show NVDA' in the RIGHT panel input and submit"  
+        expected: "Chart switches to NVDA"
+    
+    validation:
+      final_chart_symbol: "NVDA"
+      all_transitions_smooth: true
+  
+  # Voice Assistant Integration
+  - name: "Voice Assistant Query"
+    description: "Verify voice assistant processes queries correctly"
+    priority: "Medium"
+    steps:
+      - action: "Click the microphone/voice button to activate voice mode"
+        expected: "Voice interface becomes active (visual feedback)"
+      
+      - action: "Type 'What is Tesla?' in the RIGHT panel input (or speak via voice)"
+        expected: "Query is processed as if spoken"
+      
+      - action: "Check response"
+        expected: "Response explains Tesla as an electric vehicle company"
+      
+      - action: "Verify chart updated"
+        expected: "Chart shows TSLA"
+    
+    validation:
+      voice_mode_activates: true
+      response_appropriate: true
+      chart_symbol: "TSLA"
+  
+  # Error Recovery
+  - name: "Invalid Symbol Handling"
+    description: "Verify graceful handling of invalid symbols"
+    priority: "Low"
+    steps:
+      - action: "Type 'Show me XYZABC123' in the RIGHT panel input and submit"
+        expected: "Query is processed"
+      
+      - action: "Check for error message"
+        expected: "User-friendly error message appears"
+      
+      - action: "Verify chart remains on last valid symbol"
+        expected: "Chart doesn't break or show empty state"
+    
+    validation:
+      error_message_present: true
+      chart_remains_stable: true
+      
+  # Performance Test
+  - name: "Response Time Check"
+    description: "Verify response times meet SLA targets"
+    priority: "Medium"
+    steps:
+      - action: "Type 'AAPL price' in the RIGHT panel input and start timer"
+        expected: "Query submitted"
+      
+      - action: "Stop timer when response appears"
+        expected: "Response appears in under 4 seconds"
+      
+      - action: "Type 'Show technical analysis for NVDA' in the RIGHT panel input and start timer"
+        expected: "Query submitted"
+      
+      - action: "Stop timer when analysis appears"
+        expected: "Response appears in under 9 seconds"
+    
+    validation:
+      price_query_time: "<4s"
+      technical_query_time: "<9s"
+
+# Configuration for verification runs
+config:
+  default_timeout: 30  # seconds
+  screenshot_on_failure: true
+  screenshot_on_success: false
+  max_retries: 1
+  pause_between_scenarios: 2  # seconds
+  
+# Expected fixes for common issues
+expected_fixes:
+  company_info_not_showing:
+    file: "backend/services/agent_orchestrator.py"
+    function: "_classify_intent"
+    line_range: "3285-3312"
+    description: "Add 'company-info' intent classification before price-only check"
+    
+  chart_not_syncing:
+    file: "backend/services/agent_orchestrator.py"
+    function: "_build_chart_commands"
+    line_range: "865-1055"
+    description: "Always generate LOAD command when symbol is detected"
+    
+  general_queries_failing:
+    file: "backend/services/agent_orchestrator.py"
+    function: "process_query"
+    line_range: "3344-3438"
+    description: "Ensure general intent queries reach LLM instead of early return"

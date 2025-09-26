@@ -33,57 +33,89 @@ class MCPClient:
         self.request_id = 0
         self.pending_requests = {}
         self._initialized = False
+        self._reader_task: Optional[asyncio.Task] = None
+        self._keepalive_task: Optional[asyncio.Task] = None
+        self._start_lock = asyncio.Lock()
+        self._last_restart: float = 0.0
+        self._min_restart_interval: float = 3.0  # seconds
         
     async def start(self):
         """Start the MCP server subprocess and initialize communication."""
-        if self.process:
+        async with self._start_lock:
+            if self.process:
+                if self.process.returncode is None:
+                    return
+                # Clean up terminated process before restarting
+                await self.stop()
+
+            try:
+                # Configure environment for production
+                env = os.environ.copy()
+                env['NODE_ENV'] = 'production'
+                env['NODE_OPTIONS'] = '--max-old-space-size=256'  # Reduce memory usage for Docker
+
+                # Log the attempt
+                logger.info(f"Attempting to start MCP server at {self.server_path}")
+                logger.info(f"Working directory: {self.server_path.parent}")
+                logger.info(f"Node.js path check: {os.path.exists('/usr/local/bin/node')}")
+
+                # Start the MCP server as a subprocess with longer startup time
+                self.process = await asyncio.create_subprocess_exec(
+                    'node',
+                    str(self.server_path),
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=self.server_path.parent,
+                    env=env,
+                    limit=1024*1024  # Increase buffer size to 1MB
+                )
+
+                logger.info(f"MCP server process started with PID: {self.process.pid}")
+
+                # Give it more time to start in production
+                await asyncio.sleep(2.0)
+
+                # Start reading responses before sending initialization
+                if not self._reader_task or self._reader_task.done():
+                    self._reader_task = asyncio.create_task(self._read_responses())
+
+                # Initialize communication
+                await self._initialize()
+                self._initialized = True
+
+                logger.info("MCP server initialized successfully")
+                # Start keepalive monitor
+                if not self._keepalive_task or self._keepalive_task.done():
+                    self._keepalive_task = asyncio.create_task(self._keepalive_loop())
+            
+            except Exception as e:
+                logger.error(f"Failed to start MCP server: {e}")
+                logger.error(f"Error type: {type(e).__name__}")
+                if self._reader_task and not self._reader_task.done():
+                    self._reader_task.cancel()
+                    try:
+                        await self._reader_task
+                    except asyncio.CancelledError:
+                        pass
+                    finally:
+                        self._reader_task = None
+                if self.process and self.process.stderr:
+                    stderr_output = await self.process.stderr.read(1000)
+                    if stderr_output:
+                        logger.error(f"MCP server stderr: {stderr_output.decode('utf-8', errors='ignore')}")
+                raise
+
+    async def _ensure_running(self):
+        """Ensure process is alive, restart if needed with backoff."""
+        if self.process and self.process.returncode is None and self._initialized:
             return
-            
-        try:
-            # Configure environment for production
-            env = os.environ.copy()
-            env['NODE_ENV'] = 'production'
-            env['NODE_OPTIONS'] = '--max-old-space-size=256'  # Reduce memory usage for Docker
-            
-            # Log the attempt
-            logger.info(f"Attempting to start MCP server at {self.server_path}")
-            logger.info(f"Working directory: {self.server_path.parent}")
-            logger.info(f"Node.js path check: {os.path.exists('/usr/local/bin/node')}")
-            
-            # Start the MCP server as a subprocess with longer startup time
-            self.process = await asyncio.create_subprocess_exec(
-                'node',
-                str(self.server_path),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=self.server_path.parent,
-                env=env,
-                limit=1024*1024  # Increase buffer size to 1MB
-            )
-            
-            logger.info(f"MCP server process started with PID: {self.process.pid}")
-            
-            # Give it more time to start in production
-            await asyncio.sleep(2.0)
-            
-            # Initialize communication
-            await self._initialize()
-            self._initialized = True
-            
-            # Start reading responses
-            asyncio.create_task(self._read_responses())
-            
-            logger.info("MCP server initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to start MCP server: {e}")
-            logger.error(f"Error type: {type(e).__name__}")
-            if self.process and self.process.stderr:
-                stderr_output = await self.process.stderr.read(1000)
-                if stderr_output:
-                    logger.error(f"MCP server stderr: {stderr_output.decode('utf-8', errors='ignore')}")
-            raise
+        now = asyncio.get_event_loop().time()
+        # Backoff to avoid restart thrash
+        if now - self._last_restart < self._min_restart_interval:
+            return
+        self._last_restart = now
+        await self.start()
     
     async def _initialize(self):
         """Send initialization message to MCP server."""
@@ -119,11 +151,26 @@ class MCPClient:
     async def stop(self):
         """Stop the MCP server subprocess."""
         if self.process:
-            self.process.terminate()
-            await self.process.wait()
-            self.process = None
-            self._initialized = False
-            logger.info("MCP server stopped")
+            if self.process.returncode is None:
+                self.process.terminate()
+                await self.process.wait()
+        self.process = None
+        self._initialized = False
+        if self._reader_task and not self._reader_task.done():
+            self._reader_task.cancel()
+            try:
+                await self._reader_task
+            except asyncio.CancelledError:
+                pass
+        self._reader_task = None
+        if self._keepalive_task and not self._keepalive_task.done():
+            self._keepalive_task.cancel()
+            try:
+                await self._keepalive_task
+            except asyncio.CancelledError:
+                pass
+        self._keepalive_task = None
+        logger.info("MCP server stopped")
     
     def _get_next_id(self) -> str:
         """Generate next request ID."""
@@ -133,7 +180,9 @@ class MCPClient:
     async def _send_request(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Send a request to the MCP server and wait for response."""
         if not self.process:
-            raise RuntimeError("MCP server not started")
+            await self._ensure_running()
+            if not self.process:
+                raise RuntimeError("MCP server not started")
         
         request_id = request.get("id")
         
@@ -144,8 +193,25 @@ class MCPClient:
         
         # Send request
         request_json = json.dumps(request) + "\n"
-        self.process.stdin.write(request_json.encode())
-        await self.process.stdin.drain()
+        try:
+            self.process.stdin.write(request_json.encode())
+            await self.process.stdin.drain()
+        except Exception as exc:
+            logger.error(f"Failed to write MCP request {request_id}: {exc}")
+            # Attempt a one-time restart-and-retry
+            try:
+                await self._ensure_running()
+                if self.process and self.process.stdin:
+                    self.process.stdin.write(request_json.encode())
+                    await self.process.stdin.drain()
+                else:
+                    raise exc
+            except Exception as exc2:
+                if request_id and request_id in self.pending_requests:
+                    future = self.pending_requests.pop(request_id)
+                    if not future.done():
+                        future.set_exception(exc2)
+                raise
         
         # Wait for response if this is a request (not a notification)
         if request_id:
@@ -175,15 +241,18 @@ class MCPClient:
         notification_json = json.dumps(notification) + "\n"
         self.process.stdin.write(notification_json.encode())
         await self.process.stdin.drain()
-    
+
     async def _read_responses(self):
         """Read responses from the MCP server."""
         while self.process and self.process.stdout:
             try:
                 line = await self.process.stdout.readline()
                 if not line:
+                    # Underlying process likely exited
+                    logger.warning("MCP stdout closed; marking client uninitialized")
+                    self._initialized = False
                     break
-                    
+                logger.debug(f"MCP raw response: {line.decode(errors='ignore').strip()}")
                 try:
                     response = json.loads(line.decode())
                     
@@ -203,7 +272,26 @@ class MCPClient:
                     
             except Exception as e:
                 logger.error(f"Error reading MCP response: {e}")
+                self._initialized = False
                 break
+
+    async def _keepalive_loop(self):
+        """Periodically checks liveness and restarts if needed."""
+        try:
+            while True:
+                # Sleep modestly to reduce overhead
+                await asyncio.sleep(15)
+                try:
+                    if not self._initialized or not self.process or self.process.returncode is not None:
+                        await self._ensure_running()
+                        continue
+                    # Lightweight ping
+                    await self.list_tools()
+                except Exception as ping_exc:
+                    logger.warning(f"MCP keepalive ping failed: {ping_exc}; attempting restart")
+                    await self._ensure_running()
+        except asyncio.CancelledError:
+            return
     
     async def list_tools(self) -> Optional[Dict[str, Any]]:
         """
@@ -246,6 +334,8 @@ class MCPClient:
         """
         if not self._initialized:
             await self.start()
+        else:
+            await self._ensure_running()
         
         request = {
             "jsonrpc": "2.0",

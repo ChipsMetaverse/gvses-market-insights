@@ -26,7 +26,7 @@ async def test_simple_audio():
     
     # Connect WebSocket
     print("2️⃣ Connecting...")
-    ws_url = f"ws://localhost:8000/realtime-relay/{session_id}?model=gpt-4o-realtime-preview-2024-12-17"
+    ws_url = f"ws://localhost:8000/realtime-relay/{session_id}?model=gpt-realtime-2025-08-28"
     
     async with websockets.connect(ws_url, subprotocols=["realtime"]) as websocket:
         print(f"   Connected!\n")

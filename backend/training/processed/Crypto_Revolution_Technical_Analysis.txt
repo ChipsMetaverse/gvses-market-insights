@@ -1,0 +1,56 @@
+Factors that can be included while determining day trading crypto strategies:
+#1 Volume
+By trading volume, you can understand the popularity of particular crypto, 
+and the amount of activity that happens around that coin or token. 
+A cryptocurrency must have considerable volume for day trading. 
+A good trading volume is an indication of a healthy investment. 
+Cryptocurrency trading volume is determined by the number of trades. 
+The higher the number of trades, the better the volume.
+#2 Volatility
+Volatility refers to the price fluctuation, that is predominant in the cryptocurrency market which means 
+the digital asset can be either a success or a failure for the trader. 
+For day trading, one should choose a cryptocurrency with upward price volatility 
+so that you can make a profit as and when it spikes.
+It is not unusual for a coin price to fluctuate by 10-50% in a day.
+#3 Cryptocurrency Exchanges
+You must remember that the crypto you choose must be supported by the reputable exchanges.
+Mostly the day traders store their asset in cryptocurrency exchanges which is quite risky, 
+so the security is high. 
+You must look out for the number of coins listed on the exchange along with transparency and transaction fees.
+#4 Recent News
+News can affect any industry and if it's good, the prices might rise and vice versa. 
+Cryptocurrency industry is sensitive to negative news as it is not regulated, unlike fiat currencies. 
+Popularity and impressions play an important role in the cryptocurrency industry as its being managed 
+by people all across the world.
+#5 Active Team
+For any crypto project success, you must see how active the team is! 
+The more they are active, the more prompt they can be in answering your queries.
+A strong and active team is helpful as they send regular updates regarding the particular token or coin.
+Let’s not digress and move directly to day trading. 
+Understanding and using Risk Management and Position Sizing is literally the
+most important thing you can do to improve your trading!
+When considering any trade, you need to know three different prices: 
+• Your Entry Price (the price you buy at) 
+• Your Stop Loss Price (the price where you exit an unsuccessful trade) 
+• Your Take Profit Price (your target price where you will close the trade) 
+Managing risk means that in any trade, your potential loss (or Risk) is limited to an amount that you determine in 
+advance. 
+The suggested Risk is 1% of trading capital per trade. 
+Using a 1% Risk level protects your capital when you eventually run into a string of losing trades.
+If you lose on 5 consecutive trades, you’ve only lost 5% of your capital, 
+which can be recovered quickly. 
+New traders and those with a smaller amount of trading capital may be better off risking only 0.5% at first, while 
+more experienced traders may risk as much as 3%. 
+Anything greater than 3% Risk is not recommended. 
+You manage Risk by using a Stop Loss order. 
+The potential loss in a trade is determined by the difference between your Entry Price and 
+your Stop Loss Price. 
+The Stop Loss order limits your loss to whatever amount you already determined as your acceptable Risk (1% of 
+your trading capital, for example). 
+The level for your Stop Loss should always be derived from a proper analysis, and not by picking an arbitrary 
+number. 
+A Stop Loss order is designed to get you out of a bad trade with minimal loss of capital. 
+Do not get discouraged if your Stop Loss gets hit! Its part of the plan, its expected and normal to get stopped out 
+of a trade.
+• We suggest that you do not enter more than 2 or 3 trades at a time. 
+It can be difficult to effectively manage more than 3 trades at once.

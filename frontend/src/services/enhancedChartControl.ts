@@ -27,26 +27,66 @@ interface DrawingCommand {
 
 class EnhancedChartControl {
   private chartRef: IChartApi | null = null;
+  private mainSeriesRef: ISeriesApi<SeriesType> | null = null;
   private indicatorDispatch: any = null;
-  private drawings: Map<string, any> = new Map();
-  private annotations: Map<string, ISeriesApi<SeriesType>> = new Map();
+  private drawingsMap: Map<string, any> = new Map();
+  private annotationsMap: Map<string, ISeriesApi<SeriesType>> = new Map();
   
+  private overlayControls: {
+    setOverlayVisibility?: (indicator: string, enabled: boolean) => void;
+    clearOverlays?: () => void;
+    highlightPattern?: (pattern: string, payload?: any) => void;
+  } = {};
+
   // Link to original service
   private baseService = chartControlService;
   
   /**
-   * Initialize with chart reference and indicator dispatch
+   * Initialize with chart reference, main series, and indicator dispatch
    */
-  initialize(chart: IChartApi, indicatorDispatch: any) {
+  initialize(chart: IChartApi, mainSeries: ISeriesApi<SeriesType>, indicatorDispatch: any) {
     this.chartRef = chart;
+    this.mainSeriesRef = mainSeries;
     this.indicatorDispatch = indicatorDispatch;
     this.baseService.setChartRef(chart);
     console.log('Enhanced chart control initialized');
   }
   
+  /**
+   * Get drawings count (for testing)
+   */
+  get drawings(): Map<string, any> {
+    return this.drawingsMap;
+  }
+  
+  /**
+   * Get annotations count (for testing)
+   */
+  get annotations(): Map<string, ISeriesApi<SeriesType>> {
+    return this.annotationsMap;
+  }
+  
   setChartRef(chart: IChartApi) {
     this.chartRef = chart;
     this.baseService.setChartRef(chart);
+  }
+  
+  /**
+   * Get chart reference (for testing)
+   */
+  getChartRef(): IChartApi | null {
+    return this.chartRef;
+  }
+
+  setOverlayControls(controls: {
+    setOverlayVisibility?: (indicator: string, enabled: boolean) => void;
+    clearOverlays?: () => void;
+    highlightPattern?: (pattern: string, payload?: any) => void;
+  }) {
+    this.overlayControls = {
+      ...this.overlayControls,
+      ...controls,
+    };
   }
   
   /**
@@ -94,7 +134,9 @@ class EnhancedChartControl {
         payload: config 
       });
     }
-    
+
+    this.overlayControls.setOverlayVisibility?.(indicatorName, enabled);
+
     return `${indicatorName} ${enabled ? 'enabled' : 'disabled'}`;
   }
   
@@ -108,7 +150,8 @@ class EnhancedChartControl {
     
     // First reset all indicators
     this.indicatorDispatch({ type: 'RESET_TO_DEFAULTS' });
-    
+    this.overlayControls.clearOverlays?.();
+
     // Apply preset
     switch (preset) {
       case 'basic':
@@ -176,7 +219,7 @@ class EnhancedChartControl {
       ]);
       
       const id = `trend_${Date.now()}`;
-      this.annotations.set(id, trendSeries);
+      this.annotationsMap.set(id, trendSeries);
       
       return `Drew ${label ? label + ' ' : ''}trend line from $${startPrice.toFixed(2)} to $${endPrice.toFixed(2)}`;
     } catch (error) {
@@ -189,7 +232,7 @@ class EnhancedChartControl {
    * Agent can highlight support/resistance levels
    */
   highlightLevel(price: number, type: 'support' | 'resistance' | 'pivot', label?: string): string {
-    if (!this.chartRef) {
+    if (!this.chartRef || !this.mainSeriesRef) {
       return 'Chart not available';
     }
     
@@ -200,22 +243,20 @@ class EnhancedChartControl {
     };
     
     try {
-      const series = this.chartRef.getSeries()[0];
-      if (series) {
-        const priceLine = series.createPriceLine({
-          price,
-          color: colors[type],
-          lineWidth: 2,
-          lineStyle: 2, // Dashed
-          axisLabelVisible: true,
-          title: label || `${type.charAt(0).toUpperCase() + type.slice(1)} $${price.toFixed(2)}`
-        });
-        
-        this.drawings.set(`${type}_${price}`, priceLine);
-        return `Highlighted ${type} level at $${price.toFixed(2)}`;
-      }
+      const priceLine = this.mainSeriesRef.createPriceLine({
+        price,
+        color: colors[type],
+        lineWidth: 2,
+        lineStyle: 2, // Dashed
+        axisLabelVisible: true,
+        title: label || `${type.charAt(0).toUpperCase() + type.slice(1)} $${price.toFixed(2)}`
+      });
+      
+      this.drawingsMap.set(`${type}_${price}`, priceLine);
+      return `Highlighted ${type} level at $${price.toFixed(2)}`;
     } catch (error) {
       console.error('Error highlighting level:', error);
+      return `Error: ${error}`;
     }
     
     return 'Failed to highlight level';
@@ -226,16 +267,16 @@ class EnhancedChartControl {
    */
   clearDrawings(): string {
     // Remove price lines
-    this.drawings.forEach((line) => {
+    this.drawingsMap.forEach((line) => {
       if (line && line.remove) {
         line.remove();
       }
     });
-    this.drawings.clear();
+    this.drawingsMap.clear();
     
     // Remove annotation series
     if (this.chartRef) {
-      this.annotations.forEach(series => {
+      this.annotationsMap.forEach(series => {
         try {
           this.chartRef!.removeSeries(series);
         } catch (error) {
@@ -243,7 +284,8 @@ class EnhancedChartControl {
         }
       });
     }
-    this.annotations.clear();
+    this.annotationsMap.clear();
+    this.overlayControls.clearOverlays?.();
     
     return 'Cleared all drawings';
   }
@@ -255,10 +297,7 @@ class EnhancedChartControl {
    * @param patternType - Type of pattern for styling
    */
   highlightPattern(patternId: string, candles: number[], patternType: string): void {
-    if (!this.chartRef) return;
-    
-    const series = this.chartRef.getSeries();
-    if (!series || !series[0]) return;
+    if (!this.chartRef || !this.mainSeriesRef) return;
     
     // For now, add markers to highlight pattern candles
     // This is a simplified visualization approach
@@ -292,6 +331,7 @@ class EnhancedChartControl {
     
     // Note: setMarkers would need the actual time values from candle data
     // This is a simplified example - in production, you'd map indices to timestamps
+    this.overlayControls.highlightPattern?.(patternType, { title: patternType });
   }
   
   /**
@@ -299,14 +339,11 @@ class EnhancedChartControl {
    * @param levels - Object with support and resistance arrays
    */
   drawSupportResistanceLevels(levels: { support: number[], resistance: number[] }): void {
-    if (!this.chartRef) return;
-    
-    const series = this.chartRef.getSeries();
-    if (!series || !series[0]) return;
+    if (!this.chartRef || !this.mainSeriesRef) return;
     
     // Draw support levels
     levels.support?.forEach((level, index) => {
-      const priceLine = series[0].createPriceLine({
+      const priceLine = this.mainSeriesRef.createPriceLine({
         price: level,
         color: '#22c55e',
         lineWidth: 1,
@@ -314,12 +351,12 @@ class EnhancedChartControl {
         title: `S${index + 1}`,
         axisLabelVisible: true
       });
-      this.drawings.set(`support_${index}`, priceLine);
+      this.drawingsMap.set(`support_${index}`, priceLine);
     });
     
     // Draw resistance levels
     levels.resistance?.forEach((level, index) => {
-      const priceLine = series[0].createPriceLine({
+      const priceLine = this.mainSeriesRef.createPriceLine({
         price: level,
         color: '#ef4444',
         lineWidth: 1,
@@ -327,7 +364,7 @@ class EnhancedChartControl {
         title: `R${index + 1}`,
         axisLabelVisible: true
       });
-      this.drawings.set(`resistance_${index}`, priceLine);
+      this.drawingsMap.set(`resistance_${index}`, priceLine);
     });
   }
   
@@ -355,6 +392,11 @@ class EnhancedChartControl {
           candles.push(i);
         }
         this.highlightPattern(bestPattern.id, candles, bestPattern.type);
+        this.overlayControls.highlightPattern?.(bestPattern.type, {
+          title: bestPattern.description || bestPattern.type,
+          description: bestPattern.agent_explanation,
+          indicator: bestPattern.related_indicator,
+        });
         
         return `Showing ${bestPattern.description} (${bestPattern.confidence}% confidence)`;
       }
@@ -478,6 +520,14 @@ class EnhancedChartControl {
     this.indicatorDispatch = dispatch;
     console.log('Indicator dispatch connected to enhanced chart control');
   }
+
+  revealPattern(pattern: string, info?: { description?: string; indicator?: string; title?: string }) {
+    if (info?.indicator) {
+      this.overlayControls.setOverlayVisibility?.(info.indicator, true);
+    }
+    this.overlayControls.highlightPattern?.(pattern, info);
+    return `Highlighting ${pattern}`;
+  }
   
   /**
    * Process enhanced response - combines chart commands and indicator commands
@@ -485,7 +535,16 @@ class EnhancedChartControl {
   async processEnhancedResponse(response: string): Promise<any[]> {
     const commands = [];
     
-    // Process indicator commands first
+    // Process drawing commands first (SUPPORT:, RESISTANCE:, FIBONACCI:, TRENDLINE:)
+    const drawingCommands = this.parseDrawingCommands(response);
+    for (const drawCmd of drawingCommands) {
+      const result = this.executeDrawingCommand(drawCmd);
+      if (result) {
+        commands.push({ type: 'drawing', command: drawCmd, result });
+      }
+    }
+    
+    // Process indicator commands
     const indicatorResult = await this.processIndicatorCommand(response);
     if (indicatorResult) {
       commands.push({ type: 'indicator', result: indicatorResult });
@@ -500,6 +559,115 @@ class EnhancedChartControl {
     }
     
     return commands;
+  }
+  
+  /**
+   * Parse drawing commands from agent response
+   */
+  private parseDrawingCommands(response: string): any[] {
+    const commands = [];
+    const lines = response.split(/\s+/);
+    
+    for (const line of lines) {
+      if (line.startsWith('SUPPORT:')) {
+        const price = parseFloat(line.substring(8));
+        if (!isNaN(price)) {
+          commands.push({ action: 'support', price });
+        }
+      } else if (line.startsWith('RESISTANCE:')) {
+        const price = parseFloat(line.substring(11));
+        if (!isNaN(price)) {
+          commands.push({ action: 'resistance', price });
+        }
+      } else if (line.startsWith('FIBONACCI:')) {
+        const parts = line.substring(10).split(':');
+        if (parts.length === 2) {
+          const high = parseFloat(parts[0]);
+          const low = parseFloat(parts[1]);
+          if (!isNaN(high) && !isNaN(low)) {
+            commands.push({ action: 'fibonacci', high, low });
+          }
+        }
+      } else if (line.startsWith('TRENDLINE:')) {
+        const parts = line.substring(10).split(':');
+        if (parts.length >= 4) {
+          commands.push({
+            action: 'trendline',
+            startPrice: parseFloat(parts[0]),
+            startTime: parseInt(parts[1]),
+            endPrice: parseFloat(parts[2]),
+            endTime: parseInt(parts[3])
+          });
+        }
+      }
+    }
+    
+    return commands;
+  }
+  
+  /**
+   * Execute a drawing command
+   */
+  private executeDrawingCommand(drawing: any): string | null {
+    try {
+      switch(drawing.action) {
+        case 'support':
+          this.highlightLevel(drawing.price, 'support');
+          return `Support level at ${drawing.price}`;
+          
+        case 'resistance':
+          this.highlightLevel(drawing.price, 'resistance');
+          return `Resistance level at ${drawing.price}`;
+        
+        case 'entry':
+          this.highlightLevel(drawing.price, 'pivot', 'Entry');
+          return `Entry level at ${drawing.price}`;
+        
+        case 'target':
+          this.highlightLevel(drawing.price, 'pivot', 'Target');
+          return `Target level at ${drawing.price}`;
+        
+        case 'stoploss':
+          this.highlightLevel(drawing.price, 'pivot', 'Stop');
+          return `Stop loss at ${drawing.price}`;
+          
+        case 'fibonacci':
+          // Calculate and draw Fibonacci levels
+          const fibLevels = [
+            { level: 0, price: drawing.low },
+            { level: 0.236, price: drawing.low + (drawing.high - drawing.low) * 0.236 },
+            { level: 0.382, price: drawing.low + (drawing.high - drawing.low) * 0.382 },
+            { level: 0.5, price: drawing.low + (drawing.high - drawing.low) * 0.5 },
+            { level: 0.618, price: drawing.low + (drawing.high - drawing.low) * 0.618 },
+            { level: 0.786, price: drawing.low + (drawing.high - drawing.low) * 0.786 },
+            { level: 1, price: drawing.high }
+          ];
+          
+          fibLevels.forEach(fib => {
+            this.highlightLevel(
+              parseFloat(fib.price.toFixed(2)),
+              'pivot',
+              `Fib ${(fib.level * 100).toFixed(1)}%`
+            );
+          });
+          return `Fibonacci levels from ${drawing.low} to ${drawing.high}`;
+          
+        case 'trendline':
+          this.drawTrendLine(
+            drawing.startTime,
+            drawing.startPrice,
+            drawing.endTime,
+            drawing.endPrice
+          );
+          return `Trend line drawn`;
+          
+        default:
+          return null;
+      }
+    } catch (error) {
+      console.error('Error executing drawing command:', error);
+      return null;
+    }
   }
   
   /**

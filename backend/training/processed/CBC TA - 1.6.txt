@@ -1,0 +1,11 @@
+or coin.
+Let’s not digress and move directly to day trading. Understanding and using Risk Management and Position Sizing is literally the
+most important thing you can do to improve your trading!
+When considering any trade, you need to know three different prices: • Your EntryPrice (the price you buy at) • Your Stop Loss Price (the price where you exit an unsuccessful trade) • Your Take Profit 
+P rice (your target price where you will c
+l ose the trade) Managing risk means that in anytrade, your potential loss (or Risk) is limited to an amount that you determine in advance. The suggested Risk is 1% of trading capital per trade. Using a 1% Risk level protects your capital when you eventually run into a string of losing trades.If you lose on 5 consecutive trades, you’ve only lost 5% of your capital, which can be recovered quickly. New traders and those with a smaller amount of trading capital may be better off risking only 0.5%at first, while more experienced traders may risk as much as 3%. Anything greater than 3% Risk is not recommended. You manage Risk by using a Stop Loss order. The potential loss in a trade is determined by the difference between your Entry Price and your Stop Loss Price. The Stop Loss order limits your loss to whatever amount you already determined as your acceptable Risk (1% of your trading capital, for example). The level for your Stop Loss should always be derived from a proper analysis, and not by picking an arbitrary number. A Stop Loss order is designed to get you out of a bad trade with minimal loss of capital. Do not get discouraged if your Stop Loss gets hit! Its part of the plan, its expected and normal to get stopped out 
+of a trade.
+• We suggest that you do not enter more than 2 or 3 trades at a time. 
+It can be difficult to effectively manage more than 3 trades at once.
+Watch the Videos and Take Notes
+click here

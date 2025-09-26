@@ -1,0 +1,51 @@
+# Copy this file to pattern_index.yaml and fill in real markers/pages.
+# This drives semi-structured extraction for each pattern from processed text.
+
+patterns:
+  - pattern_id: bullish_engulfing
+    display_name: Bullish Engulfing
+    category: candlestick
+    aliases: ["engulfing (bullish)"]
+    sources:
+      - doc: technical_analysis_for_dummies_2nd_edition.pdf
+        start_marker: "Bullish engulfing"
+        end_marker: "Bearish engulfing"
+        page_hint: 140
+    overrides:
+      recognition_rules:
+        candle_structure: ""
+        trend_context: ""
+        volume_confirmation: ""
+        invalidations: []
+      trading_playbook:
+        signal: bullish
+        entry: ""
+        stop_loss: ""
+        targets: []
+        risk_notes: ""
+        timeframe_bias: short-term
+
+  - pattern_id: cup_and_handle
+    display_name: Cup and Handle
+    category: chart_pattern
+    aliases: ["cup & handle"]
+    sources:
+      - doc: Encyclopedia of Chart Patterns.pdf
+        start_marker: "Cup and Handle"
+        end_marker: "V-Bottom"  # adjust
+        page_hint: 120
+    overrides:
+      recognition_rules:
+        candle_structure: ""
+        trend_context: ""
+        volume_confirmation: ""
+        invalidations: []
+      trading_playbook:
+        signal: bullish
+        entry: ""
+        stop_loss: ""
+        targets: []
+        risk_notes: ""
+        timeframe_bias: medium-term
+
+

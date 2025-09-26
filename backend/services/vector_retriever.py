@@ -14,6 +14,10 @@ from openai import AsyncOpenAI
 import asyncio
 import os
 from dotenv import load_dotenv
+import hashlib
+import re
+import sys
+from pathlib import Path
 
 load_dotenv()
 
@@ -40,7 +44,27 @@ class VectorRetriever:
         self.knowledge_base = self._load_embedded_knowledge(embedded_file)
         self.embeddings_matrix = None
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.embedding_model = "text-embedding-ada-002"  # Match what we used for generation
+        
+        # Auto-detect embedding model based on dimension
+        if self.knowledge_base and self.knowledge_base[0].get("embedding"):
+            embedding_dim = len(self.knowledge_base[0]["embedding"])
+            if embedding_dim == 1536:
+                self.embedding_model = "text-embedding-3-small"  # 1536 dimensions
+            elif embedding_dim == 3072:
+                self.embedding_model = "text-embedding-3-large"  # 3072 dimensions
+            else:
+                self.embedding_model = "text-embedding-ada-002"  # Default fallback
+            logger.info(f"Detected embedding dimension: {embedding_dim}, using model: {self.embedding_model}")
+        else:
+            self.embedding_model = "text-embedding-3-small"  # Safe default
+        
+        # Initialize embedding cache
+        self.embedding_cache = {}  # Maps query text to embedding
+        self.cache_hits = 0
+        self.cache_misses = 0
+        
+        # Fallback training docs cache (raw chunks)
+        self._training_docs_cache: Dict[str, List[Dict[str, Any]]] = {}
         
         # Build embeddings matrix for efficient search
         if self.knowledge_base:
@@ -94,19 +118,36 @@ class VectorRetriever:
         return np.dot(chunk_embeddings, query_embedding)
     
     async def embed_query(self, query: str) -> Optional[List[float]]:
-        """Generate embedding for a query text."""
+        """Generate embedding for a query text with caching."""
+        # Check cache first
+        cache_key = query[:8000]  # Use truncated query as cache key
+        if cache_key in self.embedding_cache:
+            self.cache_hits += 1
+            logger.debug(f"Embedding cache hit (total hits: {self.cache_hits})")
+            return self.embedding_cache[cache_key]
+        
+        # Cache miss - generate embedding
+        self.cache_misses += 1
+        logger.debug(f"Embedding cache miss (total misses: {self.cache_misses})")
+        
         try:
             response = await self.client.embeddings.create(
                 model=self.embedding_model,
                 input=query[:8000]  # Truncate if necessary
             )
-            return response.data[0].embedding
+            embedding = response.data[0].embedding
+            
+            # Store in cache (limit cache size to prevent memory issues)
+            if len(self.embedding_cache) < 1000:  # Max 1000 cached embeddings
+                self.embedding_cache[cache_key] = embedding
+            
+            return embedding
         except Exception as e:
-            logger.error(f"Failed to embed query: {e}")
-            return None
+            logger.error(f"Embedding failed: {type(e).__name__}: {e}", exc_info=True)
+            raise
     
-    async def search_knowledge(self, query: str, top_k: int = 5, 
-                              min_score: float = 0.7) -> List[Dict[str, Any]]:
+    async def search_knowledge(self, query: str, top_k: int = 3, 
+                              min_score: float = 0.65) -> List[Dict[str, Any]]:
         """
         Search for relevant knowledge chunks using vector similarity.
         
@@ -119,8 +160,8 @@ class VectorRetriever:
             List of relevant knowledge chunks with similarity scores
         """
         if not self.knowledge_base or self.embeddings_matrix is None:
-            logger.warning("No embedded knowledge available")
-            return []
+            logger.warning("No embedded knowledge available – using raw-docs fallback if present")
+            return self._fallback_search_training_docs(query, top_k=top_k)
         
         # Generate embedding for query
         query_embedding = await self.embed_query(query)
@@ -155,9 +196,115 @@ class VectorRetriever:
             logger.info(f"Found {len(results)} relevant chunks for query: '{query[:50]}...'")
             logger.info(f"Top similarity score: {results[0]['similarity_score']:.3f}")
         else:
-            logger.info(f"No chunks found above threshold {min_score} for query: '{query[:50]}...'")
+            logger.info(f"No chunks found above threshold {min_score} for query: '{query[:50]}...' – trying raw-docs fallback")
+            results = self._fallback_search_training_docs(query, top_k=top_k)
         
         return results
+
+    # ------------------------------------------------------------------
+    # Raw-docs fallback: loads training json_docs and does keyword scoring
+    # ------------------------------------------------------------------
+    def _load_training_doc(self, name: str) -> List[Dict[str, Any]]:
+        if name in self._training_docs_cache:
+            return self._training_docs_cache[name]
+        try:
+            base = Path(__file__).resolve().parents[1] / 'training' / 'json_docs'
+            path = base / name
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            chunks = data.get('chunks', [])
+            # Normalize to common format
+            norm = []
+            for ch in chunks:
+                norm.append({
+                    'id': ch.get('chunk_id', ''),
+                    'text': ch.get('text', ''),
+                    'source': 'Encyclopedia of Chart Patterns' if 'encyclopedia' in name else name,
+                    'source_file': name,
+                })
+            self._training_docs_cache[name] = norm
+            logger.info(f"Loaded {len(norm)} raw chunks from {name}")
+            return norm
+        except Exception as e:
+            logger.warning(f"Failed to load training doc {name}: {e}")
+            self._training_docs_cache[name] = []
+            return []
+
+    def _fallback_search_training_docs(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
+        docs = []
+        # Focus on encyclopedia_of_chart_patterns per request
+        docs.extend(self._load_training_doc('encyclopedia_of_chart_patterns.json'))
+        docs.extend(self._load_training_doc('price-action-patterns.json'))
+        docs.extend(self._load_training_doc('the_candlestick_trading_bible.json'))
+        docs.extend(self._load_training_doc('the-candlestick-trading-bible.json'))
+        docs.extend(self._load_training_doc('technical_analysis_for_dummies_2nd_edition.json'))
+        if not docs:
+            return []
+        # Simple keyword scoring
+        q = query.lower()
+        tokens = [t for t in re.split(r"[^a-z0-9]+", q) if len(t) > 2]
+        if not tokens:
+            tokens = q.split()
+        scored = []
+        for ch in docs:
+            text_l = ch.get('text', '').lower()
+            if not text_l:
+                continue
+            score = 0
+            for t in tokens:
+                # weight frequent TA terms slightly more
+                w = 2 if t in {'pattern','triangle','flag','wedge','head','shoulders','double','triple','breakout','pennant','rectangle','gap','doji','hammer','harami','engulfing'} else 1
+                if t in text_l:
+                    score += w
+            if score > 0:
+                item = ch.copy()
+                item['similarity_score'] = min(0.99, 0.5 + 0.01 * score)
+                # naive topic extraction: first TA keyword hit
+                topic = None
+                for key in ['head and shoulders','double top','double bottom','triple top','triple bottom','ascending triangle','descending triangle','symmetrical triangle','flag','pennant','wedge','rectangle','broadening','diamond','rounding bottom','doji','hammer','harami','engulfing','marubozu']:
+                    if key in text_l:
+                        topic = key
+                        break
+                if topic:
+                    item['topic'] = topic
+                docs_path = ch.get('source_file', 'encyclopedia_of_chart_patterns.json')
+                item['source'] = 'Encyclopedia of Chart Patterns'
+                scored.append(item)
+        scored.sort(key=lambda x: x['similarity_score'], reverse=True)
+        return scored[:top_k]
+    
+    async def prewarm_embeddings(self, queries: List[str]) -> int:
+        """
+        Pre-warm the embedding cache with common queries.
+        
+        Args:
+            queries: List of common queries to pre-compute embeddings for
+            
+        Returns:
+            Number of embeddings successfully cached
+        """
+        cached_count = 0
+        for query in queries:
+            try:
+                # This will cache the embedding if not already cached
+                await self.embed_query(query)
+                cached_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to pre-warm embedding for '{query[:50]}...': {e}")
+        
+        logger.info(f"Pre-warmed {cached_count} embeddings. Cache size: {len(self.embedding_cache)}")
+        return cached_count
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        total_requests = self.cache_hits + self.cache_misses
+        hit_rate = (self.cache_hits / total_requests * 100) if total_requests > 0 else 0
+        return {
+            "cache_size": len(self.embedding_cache),
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+            "hit_rate": hit_rate
+        }
     
     async def get_pattern_knowledge(self, pattern_type: str) -> List[Dict[str, Any]]:
         """

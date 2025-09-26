@@ -24,12 +24,75 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
   const [error, setError] = useState<string | null>(null)
   const [levelPositions, setLevelPositions] = useState<{ sell_high?: number; buy_low?: number; btd?: number }>({})
   const [isChartReady, setIsChartReady] = useState(false)
-  
+
   // Indicator state and series management
   const { state: indicatorState, actions: indicatorActions } = useIndicatorState()
   const { dispatch: indicatorDispatch } = useIndicatorContext()
   const mainChartSeries = useChartSeries(isChartReady ? chartRef.current : null)
   const oscillatorSeries = useChartSeries(isChartReady ? oscillatorChartRef.current : null)
+
+  const [overlayVisibility, setOverlayVisibility] = useState({
+    movingAverages: false,
+    bollinger: false,
+    rsi: false,
+    macd: false,
+  })
+
+  const [patternHighlight, setPatternHighlight] = useState<{ title: string; description?: string } | null>(null)
+
+  const showOscillatorPane =
+    (overlayVisibility.rsi && indicatorState.indicators.rsi.enabled) ||
+    (overlayVisibility.macd && indicatorState.indicators.macd.enabled)
+
+  const mapIndicatorToOverlayKey = useCallback((indicator: string) => {
+    const name = indicator.toLowerCase();
+    if (name.includes('bollinger')) return 'bollinger' as const;
+    if (name.includes('macd')) return 'macd' as const;
+    if (name.includes('rsi')) return 'rsi' as const;
+    if (name.includes('ma') || name.includes('moving average')) return 'movingAverages' as const;
+    if (['ma20', 'ma50', 'ma200'].includes(name)) return 'movingAverages' as const;
+    return null;
+  }, [])
+
+  const setOverlayVisibilityForIndicator = useCallback((indicator: string, enabled: boolean) => {
+    const key = mapIndicatorToOverlayKey(indicator)
+    if (!key) return
+    setOverlayVisibility(prev => (prev[key] === enabled ? prev : { ...prev, [key]: enabled }))
+  }, [mapIndicatorToOverlayKey])
+
+  const clearAllOverlays = useCallback(() => {
+    setOverlayVisibility({ movingAverages: false, bollinger: false, rsi: false, macd: false })
+    setPatternHighlight(null)
+  }, [])
+
+  useEffect(() => {
+    enhancedChartControl.setOverlayControls({
+      setOverlayVisibility: setOverlayVisibilityForIndicator,
+      clearOverlays: clearAllOverlays,
+      highlightPattern: (pattern: string, info?: { description?: string; indicator?: string; title?: string }) => {
+        if (info?.indicator) {
+          setOverlayVisibilityForIndicator(info.indicator, true)
+        }
+        setPatternHighlight({
+          title: info?.title || pattern,
+          description: info?.description,
+        })
+      },
+    })
+    return () => {
+      enhancedChartControl.setOverlayControls({
+        setOverlayVisibility: undefined,
+        clearOverlays: undefined,
+        highlightPattern: undefined,
+      })
+    }
+  }, [setOverlayVisibilityForIndicator, clearAllOverlays])
+
+  useEffect(() => {
+    if (!patternHighlight) return
+    const timer = setTimeout(() => setPatternHighlight(null), 6000)
+    return () => clearTimeout(timer)
+  }, [patternHighlight])
   
   // Lifecycle management refs
   const isMountedRef = useRef(true)
@@ -211,6 +274,82 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
         priceLineRefsRef.current.push(line)
       }
       
+      // Add swing trade levels if available
+      const swingLevels = technicalLevels as any // Type will be SwingTradeLevels
+      
+      // Entry points - green dashed lines
+      if (swingLevels?.entry_points?.length) {
+        swingLevels.entry_points.forEach((entry: number, index: number) => {
+          const line = candlestickSeriesRef.current.createPriceLine({
+            price: entry,
+            color: '#22c55e',  // Bright green for entries
+            lineWidth: 2,
+            lineStyle: 1,  // Dashed
+            axisLabelVisible: true,
+            title: `Entry ${index + 1}`,
+          })
+          priceLineRefsRef.current.push(line)
+        })
+      }
+      
+      // Stop loss - red solid line
+      if (swingLevels?.stop_loss) {
+        const line = candlestickSeriesRef.current.createPriceLine({
+          price: swingLevels.stop_loss,
+          color: '#ef4444',  // Red for stop loss
+          lineWidth: 2,
+          lineStyle: 0,  // Solid
+          axisLabelVisible: true,
+          title: 'Stop',
+        })
+        priceLineRefsRef.current.push(line)
+      }
+      
+      // Targets - purple dashed lines
+      if (swingLevels?.targets?.length) {
+        swingLevels.targets.forEach((target: number, index: number) => {
+          const line = candlestickSeriesRef.current.createPriceLine({
+            price: target,
+            color: '#a855f7',  // Purple for targets
+            lineWidth: 2,
+            lineStyle: 1,  // Dashed
+            axisLabelVisible: true,
+            title: `T${index + 1}`,
+          })
+          priceLineRefsRef.current.push(line)
+        })
+      }
+      
+      // Support levels - orange dotted lines
+      if (swingLevels?.support_levels?.length) {
+        swingLevels.support_levels.forEach((support: number) => {
+          const line = candlestickSeriesRef.current.createPriceLine({
+            price: support,
+            color: '#fb923c',  // Orange for support
+            lineWidth: 1,
+            lineStyle: 3,  // Dotted
+            axisLabelVisible: true,
+            title: 'S',
+          })
+          priceLineRefsRef.current.push(line)
+        })
+      }
+      
+      // Resistance levels - cyan dotted lines  
+      if (swingLevels?.resistance_levels?.length) {
+        swingLevels.resistance_levels.forEach((resistance: number) => {
+          const line = candlestickSeriesRef.current.createPriceLine({
+            price: resistance,
+            color: '#06b6d4',  // Cyan for resistance
+            lineWidth: 1,
+            lineStyle: 3,  // Dotted
+            axisLabelVisible: true,
+            title: 'R',
+          })
+          priceLineRefsRef.current.push(line)
+        })
+      }
+      
       // Update label positions after adding lines
       setTimeout(() => updateLabelPositionsRef.current(), 100)
     } catch (error) {
@@ -291,10 +430,11 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
     })
     
     // Connect enhanced chart control to indicator system
-    enhancedChartControl.initialize(chart, indicatorDispatch)
+    enhancedChartControl.initialize(chart, candlestickSeries, indicatorDispatch)
     
     // Expose to window for agent access
     ;(window as any).enhancedChartControl = enhancedChartControl
+    ;(window as any).enhancedChartControlReady = true
     
     // Notify parent that chart is ready
     if (onChartReady && !isChartDisposedRef.current) {
@@ -307,6 +447,9 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       isChartDisposedRef.current = true
       setIsChartReady(false)
       
+      // Clean up window references
+      ;(window as any).enhancedChartControlReady = false
+      
       // Cancel any pending requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
@@ -317,12 +460,14 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       
       // Clear price lines
       priceLineRefsRef.current = []
-      
+
       // Clear chart control service reference
       if (chartControlService) {
         chartControlService.setChartRef(null)
       }
-      
+
+      clearAllOverlays()
+
       // Dispose the chart
       try {
         chart.remove()
@@ -398,7 +543,11 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
     
     // Update Moving Averages
     const { movingAverages } = indicatorState.indicators;
-    if (movingAverages.ma20.enabled && indicators.movingAverages?.ma20) {
+    const showMovingAverages = overlayVisibility.movingAverages && (
+      movingAverages.ma20.enabled || movingAverages.ma50.enabled || movingAverages.ma200.enabled
+    );
+
+    if (showMovingAverages && indicators.movingAverages?.ma20) {
       mainChartSeries.addOrUpdateSeries('ma20', indicators.movingAverages.ma20, {
         type: 'line',
         color: movingAverages.ma20.color,
@@ -408,7 +557,7 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       mainChartSeries.removeSeries('ma20');
     }
     
-    if (movingAverages.ma50.enabled && indicators.movingAverages?.ma50) {
+    if (showMovingAverages && indicators.movingAverages?.ma50) {
       mainChartSeries.addOrUpdateSeries('ma50', indicators.movingAverages.ma50, {
         type: 'line',
         color: movingAverages.ma50.color,
@@ -418,7 +567,7 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       mainChartSeries.removeSeries('ma50');
     }
     
-    if (movingAverages.ma200.enabled && indicators.movingAverages?.ma200) {
+    if (showMovingAverages && indicators.movingAverages?.ma200) {
       mainChartSeries.addOrUpdateSeries('ma200', indicators.movingAverages.ma200, {
         type: 'line',
         color: movingAverages.ma200.color,
@@ -429,7 +578,8 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
     }
     
     // Update Bollinger Bands
-    if (indicatorState.indicators.bollingerBands.enabled && indicators.bollingerBands) {
+    const showBollinger = overlayVisibility.bollinger && indicatorState.indicators.bollingerBands.enabled;
+    if (showBollinger && indicators.bollingerBands) {
       mainChartSeries.addOrUpdateSeries('bb-upper', indicators.bollingerBands.upper, {
         type: 'line',
         color: indicatorState.indicators.bollingerBands.color,
@@ -450,11 +600,13 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       mainChartSeries.removeSeries('bb-middle');
       mainChartSeries.removeSeries('bb-lower');
     }
-  }, [indicatorState.data, indicatorState.indicators, mainChartSeries]);
+  }, [indicatorState.data, indicatorState.indicators, mainChartSeries, overlayVisibility]);
   
   // Create/destroy oscillator chart based on RSI/MACD
   useEffect(() => {
-    const needsOscillator = indicatorState.indicators.rsi.enabled || indicatorState.indicators.macd.enabled;
+    const showRSI = overlayVisibility.rsi && indicatorState.indicators.rsi.enabled
+    const showMACD = overlayVisibility.macd && indicatorState.indicators.macd.enabled
+    const needsOscillator = showRSI || showMACD
     
     if (needsOscillator && !oscillatorChartRef.current && oscillatorContainerRef.current) {
       // Create oscillator chart
@@ -493,17 +645,23 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       oscillatorChartRef.current.remove();
       oscillatorChartRef.current = null;
     }
-  }, [indicatorState.indicators.rsi.enabled, indicatorState.indicators.macd.enabled]);
-  
+  }, [indicatorState.indicators.rsi.enabled, indicatorState.indicators.macd.enabled, overlayVisibility]);
+
   // Update oscillator indicators
   useEffect(() => {
-    if (!oscillatorChartRef.current || !indicatorState.data) return;
+    if (!oscillatorChartRef.current || !indicatorState.data) {
+      oscillatorSeries.removeSeries('rsi');
+      oscillatorSeries.removeSeries('macd-line');
+      oscillatorSeries.removeSeries('macd-signal');
+      oscillatorSeries.removeSeries('macd-histogram');
+      return;
+    }
     
     const { indicators } = indicatorState.data;
     if (!indicators) return;
     
     // Update RSI
-    if (indicatorState.indicators.rsi.enabled && indicators.rsi) {
+    if (overlayVisibility.rsi && indicatorState.indicators.rsi.enabled && indicators.rsi) {
       oscillatorSeries.addOrUpdateSeries('rsi', indicators.rsi.values, {
         type: 'line',
         color: indicatorState.indicators.rsi.color,
@@ -535,7 +693,7 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
     }
     
     // Update MACD
-    if (indicatorState.indicators.macd.enabled && indicators.macd) {
+    if (overlayVisibility.macd && indicatorState.indicators.macd.enabled && indicators.macd) {
       oscillatorSeries.addOrUpdateSeries('macd-line', indicators.macd.macdLine, {
         type: 'line',
         color: '#2962FF',
@@ -555,7 +713,7 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       oscillatorSeries.removeSeries('macd-signal');
       oscillatorSeries.removeSeries('macd-histogram');
     }
-  }, [indicatorState.data, indicatorState.indicators, oscillatorSeries]);
+  }, [indicatorState.data, indicatorState.indicators, overlayVisibility, oscillatorSeries]);
   
   return (
     <div className="trading-chart-container">
@@ -599,17 +757,24 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
         </div>
       )}
       
+      {patternHighlight && !isLoading && !error && (
+        <div className="pattern-highlight-banner">
+          <strong>{patternHighlight.title}</strong>
+          {patternHighlight.description && <span>{patternHighlight.description}</span>}
+        </div>
+      )}
+
       <div 
         ref={chartContainerRef} 
         className="main-chart" 
         style={{ 
           opacity: (isLoading || error) ? 0.3 : 1,
-          height: (indicatorState.indicators.rsi.enabled || indicatorState.indicators.macd.enabled) ? 'calc(100% - 160px)' : '100%'
+          height: showOscillatorPane ? 'calc(100% - 160px)' : '100%'
         }} 
       />
       
       {/* Oscillator Chart (RSI/MACD) */}
-      {(indicatorState.indicators.rsi.enabled || indicatorState.indicators.macd.enabled) && (
+      {showOscillatorPane && (
         <div className="oscillator-chart" ref={oscillatorContainerRef} />
       )}
       

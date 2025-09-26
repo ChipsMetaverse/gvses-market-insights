@@ -21,6 +21,7 @@ class MCPManager:
     def __init__(self):
         """Initialize the MCP manager."""
         self.servers = {}
+        self.server_status: Dict[str, Dict[str, Any]] = {}
         self.initialized = False
         
     async def initialize(self):
@@ -40,24 +41,67 @@ class MCPManager:
         market_server_path = project_root / "market-mcp-server" / "index.js"
         if market_server_path.exists():
             self.servers['market'] = NodeMCPClient(str(market_server_path))
+            self.server_status['market'] = {
+                "configured": True,
+                "running": False,
+                "pid": None,
+                "error": None,
+            }
             logger.info("Configured market-mcp-server")
         else:
+            self.server_status['market'] = {
+                "configured": False,
+                "running": False,
+                "pid": None,
+                "error": f"Not found at {market_server_path}",
+            }
             logger.warning(f"market-mcp-server not found at {market_server_path}")
         
         # Configure alpaca-mcp-server (Python)
         alpaca_server_path = project_root / "alpaca-mcp-server" / "server.py"
         if alpaca_server_path.exists():
             self.servers['alpaca'] = PythonMCPClient(str(alpaca_server_path))
+            self.server_status['alpaca'] = {
+                "configured": True,
+                "running": False,
+                "pid": None,
+                "error": None,
+            }
             logger.info("Configured alpaca-mcp-server")
         else:
+            self.server_status['alpaca'] = {
+                "configured": False,
+                "running": False,
+                "pid": None,
+                "error": f"Not found at {alpaca_server_path}",
+            }
             logger.warning(f"alpaca-mcp-server not found at {alpaca_server_path}")
         
         # Start all servers
         for name, server in self.servers.items():
             try:
+                self.server_status.setdefault(name, {})
+                self.server_status[name].update({
+                    "configured": True,
+                    "running": False,
+                    "pid": None,
+                    "error": None,
+                })
                 await server.start()
-                logger.info(f"Started {name} MCP server")
+                running = bool(getattr(server, "process", None) and getattr(server.process, "returncode", None) is None)
+                pid = getattr(getattr(server, "process", None), "pid", None)
+                self.server_status[name].update({
+                    "running": running,
+                    "pid": pid,
+                    "error": None,
+                })
+                logger.info(f"Started {name} MCP server (pid={pid})")
             except Exception as e:
+                self.server_status[name].update({
+                    "running": False,
+                    "pid": None,
+                    "error": str(e),
+                })
                 logger.error(f"Failed to start {name} MCP server: {e}")
         
         self.initialized = True
@@ -70,8 +114,29 @@ class MCPManager:
                 logger.info(f"Stopped {name} MCP server")
             except Exception as e:
                 logger.error(f"Error stopping {name} MCP server: {e}")
+            finally:
+                if name in self.server_status:
+                    self.server_status[name].update({
+                        "running": False,
+                        "pid": None,
+                    })
         
         self.initialized = False
+
+    def get_status_snapshot(self) -> Dict[str, Any]:
+        """Return a snapshot of sidecar process states for health reporting."""
+        snapshot: Dict[str, Any] = {}
+        for name, base_status in self.server_status.items():
+            status = dict(base_status)  # shallow copy
+            server = self.servers.get(name)
+            process = getattr(server, "process", None) if server else None
+            if process is not None:
+                running = process.returncode is None
+                status["running"] = running
+                status["pid"] = process.pid
+            snapshot[name] = status
+        snapshot["initialized"] = self.initialized
+        return snapshot
     
     async def call_tool(self, server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """

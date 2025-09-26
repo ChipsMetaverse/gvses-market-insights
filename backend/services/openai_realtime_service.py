@@ -35,7 +35,7 @@ class OpenAIRealtimeService:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
         
         self.openai_url = "wss://api.openai.com/v1/realtime"
-        self.model = "gpt-4o-realtime-preview-2024-12-17"
+        self.model = "gpt-realtime-2025-08-28"
         self.tool_mapper = None
         self.active_tool_calls = {}  # Track ongoing tool calls
         

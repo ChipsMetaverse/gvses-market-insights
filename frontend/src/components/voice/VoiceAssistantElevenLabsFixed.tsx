@@ -3,6 +3,7 @@ import { useElevenLabsConversation } from '../../hooks/useElevenLabsConversation
 import { AudioVisualizer } from '../ui/AudioVisualizer';
 import { ChatHistory } from '../ui/ChatHistory';
 import '../../styles/VoiceAssistant.css';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -33,7 +34,7 @@ export const VoiceAssistantElevenLabsFixed: React.FC<VoiceAssistantElevenLabsPro
   const streamRef = useRef<MediaStream | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const apiUrl = getApiUrl();
 
   // Save message to backend
   const saveMessage = async (role: string, content: string) => {

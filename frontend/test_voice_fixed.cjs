@@ -123,7 +123,7 @@ async function testVoiceConnectionFixed() {
         const wsTest = await page.evaluate(async () => {
             return new Promise((resolve) => {
                 try {
-                    const testWs = new WebSocket('ws://localhost:8000/openai/realtime/ws?model=gpt-4o-realtime-preview-2024-10-01');
+                    const testWs = new WebSocket('ws://localhost:8000/openai/realtime/ws?model=gpt-realtime-2025-08-28');
                     
                     const timeout = setTimeout(() => {
                         testWs.close();

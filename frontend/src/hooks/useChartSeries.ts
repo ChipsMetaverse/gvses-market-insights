@@ -16,7 +16,8 @@ export interface SeriesConfig {
   type: 'line' | 'histogram' | 'area';
   color?: string;
   lineWidth?: number;
-  priceScaleId?: 'left' | 'right';
+  priceScaleId?: string;
+  paneId?: string;
   visible?: boolean;
   title?: string;
 }
@@ -43,6 +44,7 @@ export function useChartSeries(chart: IChartApi | null) {
         lineWidth: config.lineWidth || 2,
         crosshairMarkerVisible: true,
         priceScaleId: config.priceScaleId || 'right',
+        paneId: config.paneId,
         visible: config.visible !== false,
         title: config.title || id
       };

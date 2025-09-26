@@ -4,6 +4,7 @@
  */
 
 import { ProviderConfig } from './types';
+import { getApiUrl } from '../utils/apiConfig';
 
 export interface ProviderEnvironmentConfig {
   development: ProviderConfig;
@@ -68,7 +69,7 @@ export class ProviderConfigManager {
             type: 'elevenlabs',
             name: 'ElevenLabs Voice AI (Dev)',
             agentId: import.meta.env.VITE_ELEVENLABS_AGENT_ID || 'agent_4901k2tkkq54f4mvgpndm3pgzm7g',
-            apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+            apiUrl: getApiUrl(),
             capabilities: {
               voiceConversation: true,
               textChat: true,
@@ -150,7 +151,7 @@ export class ProviderConfigManager {
             type: 'openai-realtime',
             name: 'OpenAI Realtime Voice (Dev)',
             apiUrl: import.meta.env.VITE_WEBSOCKET_RELAY_URL || 'ws://localhost:3004',
-            model: 'gpt-4o-realtime-preview',
+            model: 'gpt-realtime-2025-08-28',
             voice: 'alloy',
             capabilities: {
               voiceConversation: true,
@@ -171,7 +172,7 @@ export class ProviderConfigManager {
             type: 'openai-realtime',
             name: 'OpenAI Realtime Voice',
             apiUrl: import.meta.env.VITE_WEBSOCKET_RELAY_URL || 'wss://g-vses.fly.dev/stream',
-            model: 'gpt-4o-realtime-preview',
+            model: 'gpt-realtime-2025-08-28',
             voice: 'alloy',
             capabilities: {
               voiceConversation: true,

@@ -1,0 +1,15 @@
+{
+  "scenario": "Response Time Check",
+  "timestamp": "2025-09-24T14:51:16.852734",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "message",
+      "content": "Scenario 'Response Time Check' would be executed with Computer Use",
+      "timestamp": "2025-09-24T14:51:16.852785"
+    }
+  ],
+  "screenshots": [],
+  "issues": [],
+  "fixes": []
+}

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { TradingChart } from './TradingChart';
-import { IndicatorControls } from './IndicatorControls';
 import { marketDataService, SymbolSearchResult } from '../services/marketDataService';
 import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import { useOpenAIRealtimeConversation } from '../hooks/useOpenAIRealtimeConversation';
@@ -31,6 +30,7 @@ interface Message {
   content: string;
   timestamp: string;
   provider?: 'agent' | 'elevenlabs' | 'openai';  // Track message source
+  data?: Record<string, any>;
 }
 
 // Panel Divider Component for resizable panels
@@ -95,6 +95,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [selectedSymbol, setSelectedSymbol] = useState('TSLA');
   const [stockNews, setStockNews] = useState<any[]>([]);
   const [technicalLevels, setTechnicalLevels] = useState<any>({});
+  const [detectedPatterns, setDetectedPatterns] = useState<any[]>([]);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -411,7 +412,8 @@ export const TradingDashboardSimple: React.FC = () => {
         role: message.role,
         content: message.content,
         timestamp: new Date(message.timestamp).toLocaleTimeString(),
-        provider: 'agent' as const  // Add provider tracking
+        provider: 'agent' as const,  // Add provider tracking
+        data: message.data
       };
       setMessages(prev => [...prev, msg]);
       
@@ -419,6 +421,15 @@ export const TradingDashboardSimple: React.FC = () => {
       if (message.role === 'assistant' && message.toolsUsed && message.toolsUsed.length > 0) {
         setToastCommand({ command: `🔧 Tools: ${message.toolsUsed.join(', ')}`, type: 'info' });
         setTimeout(() => setToastCommand(null), 3000);
+      }
+
+      if (message.role === 'assistant') {
+        const chartCommands = message.data?.chart_commands as string[] | undefined;
+        if (Array.isArray(chartCommands) && chartCommands.length > 0) {
+          enhancedChartControl.processEnhancedResponse(chartCommands.join(' ')).catch(err => {
+            console.error('Failed to execute chart commands from message data:', err);
+          });
+        }
       }
     },
     onConnectionChange: handleConnectionChange,
@@ -743,24 +754,34 @@ export const TradingDashboardSimple: React.FC = () => {
         stopVoiceRecording();
       }
       
+      const trimmedQuery = inputText.trim();
+
       // Generate unique ID with provider prefix
       const messageId = `${voiceProvider}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
+
+      const dispatchTimestamp = new Date().toISOString();
+      console.info(`[agent] query_dispatch`, JSON.stringify({
+        timestamp: dispatchTimestamp,
+        provider: voiceProvider,
+        messageId,
+        query: trimmedQuery
+      }));
+
       // Add user message to chat thread immediately (regardless of connection status)
       const userMessage: Message = {
         id: `user-${messageId}`,
         role: 'user' as const,
-        content: inputText.trim(),
-        timestamp: new Date().toISOString(),
+        content: trimmedQuery,
+        timestamp: dispatchTimestamp,
         provider: voiceProvider as 'agent' | 'elevenlabs' | 'openai'
       };
-      
+
       // Add to local messages for immediate UI feedback
       setMessages(prev => [...prev, userMessage]);
       console.log('💬 Added user message to chat thread');
-      
+
       // Clear input immediately for better UX
-      const messageText = inputText;
+      const messageText = trimmedQuery;
       setInputText('');
       
       // Route ONLY to the active provider
@@ -774,6 +795,14 @@ export const TradingDashboardSimple: React.FC = () => {
           })
           .then(res => res.json())
           .then(data => {
+            const responseTimestamp = new Date().toISOString();
+            console.info('[agent] query_response', JSON.stringify({
+              timestamp: responseTimestamp,
+              provider: 'agent',
+              messageId,
+              toolsUsed: data?.tools_used,
+              chartCommands: data?.chart_commands
+            }));
             if (data.text) {
               const agentMessage: Message = {
                 id: `assistant-agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -784,9 +813,61 @@ export const TradingDashboardSimple: React.FC = () => {
               };
               setMessages(prev => [...prev, agentMessage]);
               console.log('✅ Added backend agent response to chat');
+
+              if (Array.isArray(data.chart_commands) && data.chart_commands.length > 0) {
+                console.info('[agent] executing_chart_commands', JSON.stringify({
+                  timestamp: responseTimestamp,
+                  messageId,
+                  chartCommands: data.chart_commands
+                }));
+                enhancedChartControl.processEnhancedResponse(data.chart_commands.join(' ')).catch(err => {
+                  console.error('Failed to execute chart commands from agent response:', err);
+                });
+              }
+
+              // Extract and apply swing trade levels if present in response
+              try {
+                // Look for JSON structure in the response
+                const jsonMatch = data.text.match(/```json\s*({[\s\S]*?})\s*```/);
+                if (jsonMatch && jsonMatch[1]) {
+                  const parsedData = JSON.parse(jsonMatch[1]);
+                  if (parsedData.swing_trade) {
+                    const swingData = parsedData.swing_trade;
+                    console.log('🎯 Found swing trade data:', swingData);
+                    
+                    // Update technical levels with swing trade data
+                    setTechnicalLevels((prev: any) => ({
+                      ...prev,
+                      entry_points: swingData.entry_points,
+                      stop_loss: swingData.stop_loss,
+                      targets: swingData.targets,
+                      risk_reward: swingData.risk_reward,
+                      support_levels: swingData.support_levels,
+                      resistance_levels: swingData.resistance_levels
+                    }));
+                    
+                    // Show toast notification
+                    setToastCommand({
+                      command: `Swing trade levels updated for ${selectedSymbol}`,
+                      type: 'success'
+                    });
+                  }
+                }
+              } catch (error) {
+                console.log('No swing trade JSON found in response:', error);
+              }
             }
           })
-          .catch(err => console.error('Backend agent error:', err));
+          .catch(err => {
+            const errorTimestamp = new Date().toISOString();
+            console.error('[agent] query_error', JSON.stringify({
+              timestamp: errorTimestamp,
+              provider: 'agent',
+              messageId,
+              error: err?.message || err
+            }));
+            console.error('Backend agent error:', err);
+          });
           break;
 
         case 'elevenlabs':
@@ -907,10 +988,33 @@ export const TradingDashboardSimple: React.FC = () => {
       const comprehensive = await marketDataService.getComprehensiveData(symbol);
       if (comprehensive.technical_levels) {
         setTechnicalLevels(comprehensive.technical_levels);
+      } else {
+        setTechnicalLevels({});
+      }
+
+      const patterns = comprehensive.patterns?.detected || [];
+      if (patterns.length > 0) {
+        // Sort by confidence descending and take top 3
+        const sortedPatterns = [...patterns].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0));
+        setDetectedPatterns(sortedPatterns.slice(0, 3));
+
+        const primary = sortedPatterns[0];
+        enhancedChartControl.clearDrawings();
+        enhancedChartControl.revealPattern(primary?.type || 'Pattern', {
+          title: primary?.description || primary?.type,
+          description: primary?.agent_explanation || primary?.summary,
+          indicator: primary?.related_indicator,
+        });
+      } else {
+        setDetectedPatterns([]);
+        enhancedChartControl.clearDrawings();
       }
     } catch (error) {
       console.error('Error fetching comprehensive data:', error);
       // Technical levels will just remain undefined/empty if this fails
+      setTechnicalLevels({});
+      setDetectedPatterns([]);
+      enhancedChartControl.clearDrawings();
     }
     
     setIsLoadingNews(false);
@@ -1023,6 +1127,12 @@ export const TradingDashboardSimple: React.FC = () => {
         setToastCommand({ command: `Style: ${styleNames[style]}`, type: 'success' });
         setTimeout(() => setToastCommand(null), 3000);
         // Future: Add chart style state
+      },
+      onPatternHighlight: (pattern: string, info?: { description?: string }) => {
+        console.log('Voice command: highlight pattern', pattern);
+        const message = enhancedChartControl.revealPattern(pattern, info);
+        setToastCommand({ command: message, type: 'info' });
+        setTimeout(() => setToastCommand(null), 3000);
       },
       onCommandExecuted: (command, success, message) => {
         // Show toast notification for command execution
@@ -1211,14 +1321,21 @@ export const TradingDashboardSimple: React.FC = () => {
 
                 <div className="pattern-section">
                   <h4>PATTERN DETECTION</h4>
-                  <div className="pattern-box">
-                    <div className="pattern-name">
-                      {stocksData.find(s => s.symbol === selectedSymbol)?.changePercent > 0 ? 'Bullish Flag' : 'Consolidation'}
-                    </div>
-                    <div className="pattern-conf">
-                      Confidence: {Math.floor(65 + Math.random() * 25)}%
-                    </div>
-                  </div>
+                  {detectedPatterns.length === 0 ? (
+                    <div className="pattern-empty">No high-confidence patterns detected right now.</div>
+                  ) : (
+                    detectedPatterns.map((pattern, index) => (
+                      <div key={`${pattern.type}-${index}`} className="pattern-box">
+                        <div className="pattern-name">{pattern.description || pattern.type}</div>
+                        <div className="pattern-conf">
+                          Confidence: {pattern.confidence ? `${Math.round(pattern.confidence)}%` : 'N/A'}
+                        </div>
+                        {pattern.agent_explanation && (
+                          <div className="pattern-desc">{pattern.agent_explanation}</div>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               </>
             )}
@@ -1232,9 +1349,6 @@ export const TradingDashboardSimple: React.FC = () => {
         <main className="main-content">
           {/* Chart Section - Always Visible */}
           <div className="chart-section">
-            {/* Indicator Controls */}
-            <IndicatorControls />
-            
             <div className="chart-wrapper">
               <TradingChart 
                 symbol={selectedSymbol} 

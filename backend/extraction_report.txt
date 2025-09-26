@@ -1,0 +1,81 @@
+================================================================================
+KNOWLEDGE EXTRACTION COVERAGE REPORT
+================================================================================
+Generated: 2025-09-18T18:00:17.707893
+
+
+📄 the candlestick trading bible.pdf
+----------------------------------------
+  Pages: 168/168 (100.0%)
+  Text chunks: 167
+  Tables extracted: 0
+  Images processed: 113
+  Formulas parsed: 0
+  OCR pages: 3
+
+📄 CBC TA - 1.6.pdf
+----------------------------------------
+  Pages: 54/54 (100.0%)
+  Text chunks: 54
+  Tables extracted: 0
+  Images processed: 270
+  Formulas parsed: 48
+  OCR pages: 40
+
+📄 cBc_Trading_Group_Technical_Analysis.pdf
+----------------------------------------
+  Pages: 33/33 (100.0%)
+  Text chunks: 36
+  Tables extracted: 0
+  Images processed: 88
+  Formulas parsed: 12
+  OCR pages: 31
+
+📄 Crypto_Revolution_Technical_Analysis.pdf
+----------------------------------------
+  Pages: 58/58 (100.0%)
+  Text chunks: 64
+  Tables extracted: 0
+  Images processed: 282
+  Formulas parsed: 50
+  OCR pages: 41
+
+📄 Price-Action-Patterns.pdf
+----------------------------------------
+  Pages: 17/17 (100.0%)
+  Text chunks: 17
+  Tables extracted: 0
+  Images processed: 272
+  Formulas parsed: 0
+  OCR pages: 0
+
+📄 Encyclopedia of Chart Patterns.pdf
+----------------------------------------
+  Pages: 1035/1035 (100.0%)
+  Text chunks: 1038
+  Tables extracted: 0
+  Images processed: 328
+  Formulas parsed: 172
+  OCR pages: 13
+
+📄 technical_analysis_for_dummies_2nd_edition.pdf
+----------------------------------------
+  Pages: 349/349 (100.0%)
+  Text chunks: 395
+  Tables extracted: 0
+  Images processed: 254
+  Formulas parsed: 398
+  OCR pages: 255
+
+================================================================================
+OVERALL STATISTICS
+================================================================================
+📊 Total coverage: 100.0%
+📄 Pages processed: 1714/1714
+📦 Total chunks: 1771
+🔍 Unique chunks: 2105
+
+🛠️  Feature Status:
+  OCR: ✅ Enabled
+  Tables: ❌ Disabled (install camelot-py)
+  Math: ✅ Enabled

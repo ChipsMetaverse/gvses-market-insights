@@ -42,7 +42,7 @@
                 addLog(`Session created: ${data.session_id}`, 'success');
                 
                 // Build WebSocket URL
-                const wsUrl = `ws://localhost:8000/realtime-relay/${data.session_id}?model=gpt-4o-realtime-preview-2024-10-01`;
+                const wsUrl = `ws://localhost:8000/realtime-relay/${data.session_id}?model=gpt-realtime-2025-08-28`;
                 addLog(`Connecting to: ${wsUrl}`, 'info');
                 
                 // Connect with realtime subprotocol

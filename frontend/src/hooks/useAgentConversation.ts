@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useVoiceStream } from 'voice-stream';
+import { getApiUrl } from '../utils/apiConfig';
 
 type BaseEvent = { type: string };
 
@@ -137,7 +138,7 @@ export const useAgentConversation = (): UseAgentConversationResult => {
   const startConversation = useCallback(async () => {
     if (isConnected) return;
     // Get signed URL from backend
-    const apiUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+    const apiUrl = getApiUrl();
     const resp = await fetch(`${apiUrl}/elevenlabs/signed-url`);
     if (!resp.ok) throw new Error('Failed to obtain ElevenLabs signed URL');
     const { signed_url, signedUrl } = await resp.json();

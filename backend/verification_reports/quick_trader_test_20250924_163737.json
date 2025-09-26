@@ -1,0 +1,141 @@
+{
+  "scenario": "Quick Trader Test",
+  "timestamp": "2025-09-24T16:35:58.977179",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "action",
+      "action": {
+        "type": "wait"
+      },
+      "timestamp": "2025-09-24T16:36:15.469724"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 253,
+        "y": 58
+      },
+      "timestamp": "2025-09-24T16:36:21.793850"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 385,
+        "y": 411
+      },
+      "timestamp": "2025-09-24T16:36:31.994458"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "screenshot"
+      },
+      "timestamp": "2025-09-24T16:36:38.160350"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 123,
+        "y": 588
+      },
+      "timestamp": "2025-09-24T16:36:44.870206"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "screenshot"
+      },
+      "timestamp": "2025-09-24T16:36:50.720712"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "wait"
+      },
+      "timestamp": "2025-09-24T16:37:01.349845"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 123,
+        "y": 588
+      },
+      "timestamp": "2025-09-24T16:37:09.072961"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "wait"
+      },
+      "timestamp": "2025-09-24T16:37:20.296827"
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "click",
+        "x": 323,
+        "y": 242
+      },
+      "timestamp": "2025-09-24T16:37:31.929425"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "163615_0.png",
+      "timestamp": "2025-09-24T16:36:15.554373",
+      "file": "embedded"
+    },
+    {
+      "name": "163621_1.png",
+      "timestamp": "2025-09-24T16:36:21.885145",
+      "file": "embedded"
+    },
+    {
+      "name": "163632_2.png",
+      "timestamp": "2025-09-24T16:36:32.358349",
+      "file": "embedded"
+    },
+    {
+      "name": "163638_3.png",
+      "timestamp": "2025-09-24T16:36:38.263852",
+      "file": "embedded"
+    },
+    {
+      "name": "163644_4.png",
+      "timestamp": "2025-09-24T16:36:44.998243",
+      "file": "embedded"
+    },
+    {
+      "name": "163651_5.png",
+      "timestamp": "2025-09-24T16:36:51.202876",
+      "file": "embedded"
+    },
+    {
+      "name": "163701_6.png",
+      "timestamp": "2025-09-24T16:37:01.510534",
+      "file": "embedded"
+    },
+    {
+      "name": "163709_7.png",
+      "timestamp": "2025-09-24T16:37:09.180426",
+      "file": "embedded"
+    },
+    {
+      "name": "163720_8.png",
+      "timestamp": "2025-09-24T16:37:20.815932",
+      "file": "embedded"
+    },
+    {
+      "name": "163732_9.png",
+      "timestamp": "2025-09-24T16:37:32.761035",
+      "file": "embedded"
+    }
+  ],
+  "issues": [],
+  "fixes": []
+}

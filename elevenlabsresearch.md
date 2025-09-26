@@ -2135,7 +2135,7 @@ const getStockPrice = tool({
 export async function startVoiceAgent(container: HTMLElement) {
   const agent = new RealtimeAgent({
     instructions: `You are G’sves. Always call tools for fresh data. Speak clearly for voice. Include price + timestamp.`,
-    model: "gpt-4o-realtime-preview", // or latest realtime-capable model in your account/region
+    model: "gpt-realtime-2025-08-28", // or latest realtime-capable model in your account/region
     tools: [getStockPrice],
     audio: { input: true, output: true } // mic + speaker
   });

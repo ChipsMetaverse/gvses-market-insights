@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
 import logging
+from datetime import datetime
 from services.agent_orchestrator import get_orchestrator
 from services.openai_relay_server import openai_relay_server
 
@@ -34,12 +35,20 @@ class AgentResponse(BaseModel):
     model: str
     cached: bool = False
     session_id: Optional[str] = None
+    # Ensure chart command array is preserved and delivered to frontend
+    chart_commands: Optional[List[str]] = None
 
 class ToolSchema(BaseModel):
     """Model for tool schema information."""
     name: str
     description: str
     parameters: Dict[str, Any]
+
+
+class ChartImageRequest(BaseModel):
+    """Request model for chart image analysis."""
+    image_base64: str
+    context: Optional[str] = None
 
 @router.post("/orchestrate", response_model=AgentResponse)
 async def orchestrate_query(request: AgentQuery):
@@ -54,18 +63,39 @@ async def orchestrate_query(request: AgentQuery):
     """
     try:
         orchestrator = get_orchestrator()
-        
+
+        logger.info(
+            "agent_query_received",
+            extra={
+                "timestamp": datetime.utcnow().isoformat(),
+                "query": request.query,
+                "session_id": request.session_id,
+                "stream": request.stream,
+            },
+        )
+
         # Process the query
         result = await orchestrator.process_query(
             query=request.query,
             conversation_history=request.conversation_history,
             stream=False  # Streaming handled separately
         )
-        
+
         # Add session ID if provided
         if request.session_id:
             result["session_id"] = request.session_id
-        
+
+        logger.info(
+            "agent_query_completed",
+            extra={
+                "timestamp": datetime.utcnow().isoformat(),
+                "session_id": result.get("session_id"),
+                "model": result.get("model"),
+                "tools_used": result.get("tools_used", []),
+                "chart_commands": result.get("chart_commands"),
+            },
+        )
+
         return AgentResponse(**result)
         
     except Exception as e:
@@ -194,6 +224,27 @@ async def agent_health():
             "error": str(e)
         }
 
+
+@router.post("/analyze-chart")
+async def analyze_chart(request: ChartImageRequest):
+    """Analyze a chart image using the vision model-based analyzer."""
+    orchestrator = get_orchestrator()
+    analyzer = getattr(orchestrator, "chart_image_analyzer", None)
+    if not analyzer:
+        logger.error("Chart image analyzer unavailable")
+        raise HTTPException(status_code=503, detail="Chart analysis is currently unavailable")
+
+    try:
+        result = await analyzer.analyze_chart(
+            image_base64=request.image_base64,
+            user_context=request.context,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error analyzing chart image: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/voice-query")
 async def process_voice_query(request: AgentQuery):
     """
@@ -239,7 +290,8 @@ async def process_voice_query(request: AgentQuery):
             timestamp=result["timestamp"],
             model=result.get("model", "unknown"),
             cached=result.get("cached", False),
-            session_id=request.session_id
+            session_id=request.session_id,
+            chart_commands=result.get("chart_commands")
         )
         
     except Exception as e:

@@ -13,7 +13,7 @@ async def test_direct_connection():
         print("❌ OPENAI_API_KEY not found in environment")
         return
     
-    url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17"
+    url = "wss://api.openai.com/v1/realtime?model=gpt-realtime-2025-08-28"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "OpenAI-Beta": "realtime=v1"

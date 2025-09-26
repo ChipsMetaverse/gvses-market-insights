@@ -44,7 +44,7 @@ class AudioVerificationTest:
         
         # Step 2: Connect WebSocket
         self.log("\n2️⃣ Connecting to WebSocket...", "INFO")
-        ws_url = f"ws://localhost:8000/realtime-relay/{session_id}?model=gpt-4o-realtime-preview-2024-12-17"
+        ws_url = f"ws://localhost:8000/realtime-relay/{session_id}?model=gpt-realtime-2025-08-28"
         
         async with websockets.connect(ws_url, subprotocols=["realtime"]) as websocket:
             self.log(f"Connected with subprotocol: {websocket.subprotocol}", "SUCCESS")

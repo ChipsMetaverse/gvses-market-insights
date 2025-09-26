@@ -1,0 +1,27 @@
+{
+  "scenario": "Quick Chart Sync Check",
+  "timestamp": "2025-09-24T14:50:53.530115",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "message",
+      "content": "Scenario 'Quick Chart Sync Check' would be executed with Computer Use",
+      "timestamp": "2025-09-24T14:50:53.530121"
+    }
+  ],
+  "screenshots": [],
+  "issues": [
+    {
+      "description": "Chart does not synchronize when discussing different symbols",
+      "priority": "Critical"
+    }
+  ],
+  "fixes": [
+    {
+      "file": "backend/services/agent_orchestrator.py",
+      "line": "865-1055",
+      "description": "Ensure LOAD command is generated for symbol changes",
+      "code": "Always generate chart_commands when symbol is detected"
+    }
+  ]
+}

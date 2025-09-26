@@ -6,15 +6,15 @@ Successfully implemented semantic search using OpenAI embeddings for the trading
 ## What Was Done
 
 ### 1. Diagnosed Embeddings API Access
-- **Problem**: `text-embedding-3-small` returns 403 error
-- **Solution**: Use `text-embedding-ada-002` (1536 dimensions) as primary
-- **Fallback**: `text-embedding-3-large` (3072 dimensions) if ada-002 fails
+- **Problem**: Legacy `text-embedding-ada-002` lacked fidelity for larger knowledge base
+- **Solution**: Use `text-embedding-3-large` (3072 dimensions) as primary
+- **Fallback**: `text-embedding-3-small` for lower-cost scenarios
 
 ### 2. Fixed Knowledge Embedder Service
 ```python
 # services/knowledge_embedder.py
-self.primary_model = "text-embedding-ada-002"  # Works!
-self.fallback_model = "text-embedding-3-large"  # Also works!
+self.primary_model = "text-embedding-3-large"  # High quality!
+self.fallback_model = "text-embedding-3-small"  # Cost-effective fallback
 ```
 - Added automatic fallback mechanism
 - Successfully generated embeddings for all 1295 knowledge chunks

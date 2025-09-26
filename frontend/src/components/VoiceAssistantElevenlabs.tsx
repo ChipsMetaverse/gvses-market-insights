@@ -3,6 +3,7 @@ import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import { AudioVisualizer } from './AudioVisualizer';
 import { ChatHistory } from './ChatHistory';
 import './VoiceAssistant.css';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -18,7 +19,7 @@ export const VoiceAssistantElevenlabs: React.FC = () => {
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const [mode, setMode] = useState<'voice' | 'text'>('voice');
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const apiUrl = getApiUrl();
 
   // Save message to backend
   const saveMessage = async (role: string, content: string) => {

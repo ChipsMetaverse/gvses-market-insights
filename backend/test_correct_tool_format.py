@@ -77,7 +77,7 @@ async def test_correct_tool_format():
         "OpenAI-Beta": "realtime=v1"
     }
     
-    url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17"
+    url = "wss://api.openai.com/v1/realtime?model=gpt-realtime-2025-08-28"
     
     for format_name, tool in tools_to_test:
         print(f"\nTesting: {format_name}")

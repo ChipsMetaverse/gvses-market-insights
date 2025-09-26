@@ -19,9 +19,8 @@ print("=" * 60)
 
 # Test different LLM options
 llm_options = [
-    "gpt-4o",           # GPT-4 Optimized
-    "gpt-4o-mini",      # Current
-    "gpt-3.5-turbo",    # GPT-3.5
+    "gpt-5",            # GPT-5 general model
+    "gpt-5-mini",       # GPT-5 Mini (default)
     "claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet
     "claude-3-5-haiku-20241022",   # Claude 3.5 Haiku
 ]

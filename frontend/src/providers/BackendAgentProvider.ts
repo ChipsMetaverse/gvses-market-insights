@@ -295,9 +295,8 @@ export class BackendAgentProvider extends AbstractBaseProvider implements ChatPr
 
   async getAvailableModels(): Promise<{ id: string; name: string }[]> {
     return [
-      { id: 'gpt-4o', name: 'GPT-4 Optimized' },
-      { id: 'gpt-4', name: 'GPT-4' },
-      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+      { id: 'gpt-5-mini', name: 'GPT-5 Mini' },
+      { id: 'gpt-5', name: 'GPT-5' },
     ];
   }
 

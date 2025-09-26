@@ -24,7 +24,7 @@ async def test_openai_realtime_direct():
     
     try:
         # Connection parameters
-        url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17"
+        url = "wss://api.openai.com/v1/realtime?model=gpt-realtime-2025-08-28"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "OpenAI-Beta": "realtime=v1"

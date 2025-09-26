@@ -1,0 +1,15 @@
+{
+  "scenario": "Quick Company Info Check",
+  "timestamp": "2025-09-24T15:29:58.754377",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "message",
+      "content": "The website https://blue-jobs-relax.loca.lt requires a tunnel password to access it. Could you please provide the password so I can proceed?",
+      "timestamp": "2025-09-24T15:30:16.471317"
+    }
+  ],
+  "screenshots": [],
+  "issues": [],
+  "fixes": []
+}

@@ -221,9 +221,8 @@ export class OpenAIProvider extends AbstractBaseProvider implements ChatProvider
 
   async getAvailableModels(): Promise<Array<{ id: string; name: string; }>> {
     return [
-      { id: 'gpt-4', name: 'GPT-4' },
-      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
-      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+      { id: 'gpt-5', name: 'GPT-5' },
+      { id: 'gpt-5-mini', name: 'GPT-5 Mini' },
     ];
   }
 

@@ -23,16 +23,16 @@ logger = logging.getLogger(__name__)
 class KnowledgeEmbedder:
     """
     Service to generate embeddings for knowledge base chunks.
-    Uses OpenAI's text-embedding-ada-002 model which is widely available.
-    Falls back to text-embedding-3-large if ada-002 fails.
+    Uses OpenAI's text-embedding-3-large model for highest fidelity.
+    Falls back to text-embedding-3-small if the large model is unavailable.
     """
     
     def __init__(self):
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        # Primary model - ada-002 is cheaper and widely available (1536 dimensions)
-        self.primary_model = "text-embedding-ada-002"
-        # Fallback model - 3-large is more powerful (3072 dimensions)
-        self.fallback_model = "text-embedding-3-large"
+        # Primary model - 3-large provides highest quality (3072 dimensions)
+        self.primary_model = "text-embedding-3-large"
+        # Fallback model - 3-small offers lower cost when large model is unavailable
+        self.fallback_model = "text-embedding-3-small"
         self.embedding_model = self.primary_model  # Start with primary
         self.batch_size = 20  # Smaller batches to avoid rate limits
         

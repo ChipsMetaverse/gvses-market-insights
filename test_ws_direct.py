@@ -14,7 +14,7 @@ async def test_connection():
         print(f"✅ Session created: {session_id}")
     
     # Connect to WebSocket
-    ws_url = f"ws://localhost:8000/realtime-relay/{session_id}?model=gpt-4o-realtime-preview-2024-10-01"
+    ws_url = f"ws://localhost:8000/realtime-relay/{session_id}?model=gpt-realtime-2025-08-28"
     print(f"🔗 Connecting to: {ws_url}")
     
     try:

@@ -1,0 +1,125 @@
+# Trading pattern entries used to generate backend/training/patterns.json
+# Add more entries over time; builder can fill placeholders with --allow-placeholders.
+
+patterns:
+  - pattern_id: head_and_shoulders
+    display_name: Head and Shoulders
+    category: chart_pattern
+    aliases: ["H&S", "head-and-shoulders"]
+    sources:
+      - doc: Price-Action-Patterns.pdf
+        start_marker: "The Head And Shoulders Pattern"
+        end_marker: "Price Action Continuation Patterns"
+        page_hint: 4
+    overrides:
+      description: |
+        Classic reversal setup made of three swing highs: a peak, a higher head, and a lower right shoulder that stalls near the height of the left shoulder. A neckline connecting the swing lows acts as the confirmation level—once broken, momentum is expected to rotate lower as trapped buyers exit.
+      recognition_rules:
+        candle_structure: |
+          Left shoulder advances then pulls back, head prints a higher high, and the right shoulder tops out below the head while volume fades.
+        trend_context: |
+          Works best after a sustained uptrend or parabolic push where distribution forms along a horizontal neckline.
+        volume_confirmation: |
+          Look for declining volume across the right shoulder and an expansion on the neckline breakdown.
+        invalidations:
+          - Close back above the right-shoulder swing high after the neckline break
+          - Neckline slopes sharply higher without consolidation
+      trading_playbook:
+        signal: bearish
+        entry: |
+          Trigger on a decisive close below the neckline or on a throwback rejection when price retests the neckline from beneath.
+        stop_loss: |
+          Defensive stop above the right-shoulder swing high; conservative traders can park above the head.
+        targets:
+          - Measure the vertical distance from head to neckline and project downward from the breakout point
+          - Trail into prior demand zones or round-number magnets
+        risk_notes: |
+          Choppy ranges dull the edge—prefer clean symmetry between shoulders and a neckline with multiple touches.
+        timeframe_bias: swing
+      statistics:
+        typical_duration: "Several weeks on daily charts; shorter on intraday timeframes"
+      visual_examples:
+        - source: Cup_and_Handle.gif
+          page: null
+
+  - pattern_id: cup_and_handle
+    display_name: Cup and Handle
+    category: chart_pattern
+    aliases: ["cup & handle"]
+    sources:
+      - doc: Encyclopedia of Chart Patterns.pdf
+        start_marker: "Cup and Handle"
+        end_marker: "V-Bottom"
+        page_hint: 120
+    overrides:
+      description: |
+        Bullish continuation pattern where price rounds out a U-shaped basing phase (the cup) followed by a shallow pullback or consolidation (the handle). A break above handle resistance implies trend resumption with trapped shorts forced to cover.
+      recognition_rules:
+        candle_structure: |
+          Cup forms with a smooth rounded bottom; handle drifts lower or sideways no more than one-third of the cup depth.
+        trend_context: |
+          Preferably emerges after a strong uptrend that pauses for reaccumulation before the next leg higher.
+        volume_confirmation: |
+          Volume dries up near the cup bottom and handle, then expands on the breakout thrust.
+        invalidations:
+          - Handle retraces more than 50% of the cup advance
+          - Breakdown below the cup lows before the breakout
+      trading_playbook:
+        signal: bullish
+        entry: |
+          Buy the breakout through handle resistance or on a secondary retest that holds above former resistance.
+        stop_loss: |
+          Place beneath handle lows or, for longer-term structures, under the midpoint of the cup.
+        targets:
+          - Project the cup depth from the breakout level
+          - Use measured moves into prior swing highs or Fibonacci extensions
+        risk_notes: |
+          Avoid when the handle is extremely steep or volume spikes ahead of the breakout (signs of distribution).
+        timeframe_bias: medium-term
+      statistics:
+        typical_duration: "1–6 months on daily charts"
+      visual_examples:
+        - source: Cup_and_Handle.gif
+          page: null
+
+  - pattern_id: bullish_engulfing
+    display_name: Bullish Engulfing
+    category: candlestick
+    aliases: ["bullish engulfing candle"]
+    sources:
+      - doc: technical_analysis_for_dummies_2nd_edition.pdf
+        start_marker: "Bullish Engulfing"
+        end_marker: "Bearish Engulfing"
+        page_hint: 210
+    overrides:
+      description: |
+        Two-candle reversal where a wide real body completely engulfs the prior down candle, signaling an aggressive shift from sellers to buyers. Often marks exhaustion lows or the first step of a swing reversal.
+      recognition_rules:
+        candle_structure: |
+          First candle closes lower with a relatively small real body; second candle opens below (or near) the prior close and pushes above the prior open, engulfing the full body.
+        trend_context: |
+          Most reliable after a down swing into support or near the tail end of a bearish impulse.
+        volume_confirmation: |
+          Rising volume or increased tick activity on the engulfing bar strengthens the signal.
+        invalidations:
+          - Close back below the engulfing bar’s midpoint within the next one to two candles
+          - Pattern forms inside congested chop without downward momentum
+      trading_playbook:
+        signal: bullish
+        entry: |
+          Enter on the close of the engulfing bar or on a modest retracement into its midpoint.
+        stop_loss: |
+          Place below the engulfing candle’s low to respect the invalidation threshold.
+        targets:
+          - Target nearby supply zones or the next pivot high
+          - Trail behind higher swing lows if momentum builds
+        risk_notes: |
+          Lower reliability when the engulfing candle emerges at resistance or within strong macro downtrends.
+        timeframe_bias: short-term
+      statistics:
+        typical_duration: "1–5 bars for initial follow-through"
+      visual_examples:
+        - source: IMAGE 2023-12-09 12:53:20.jpg
+          page: null
+
+

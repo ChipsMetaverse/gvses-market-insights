@@ -3,6 +3,7 @@ import { useElevenLabsConversation } from '../../hooks/useElevenLabsConversation
 import { AudioVisualizer } from '../ui/AudioVisualizer';
 import { ChatHistory } from '../ui/ChatHistory';
 import '../../styles/VoiceAssistant.css';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -18,7 +19,7 @@ export const VoiceAssistantFixed: React.FC = () => {
   const [mode, setMode] = useState<'voice' | 'text'>('voice');
   const [isListening, setIsListening] = useState(false);
   
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const apiUrl = getApiUrl();
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);

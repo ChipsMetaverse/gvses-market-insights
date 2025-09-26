@@ -153,7 +153,7 @@ export class ProviderFactory implements IProviderFactory {
       type: 'openai-realtime',
       name: 'OpenAI Realtime Voice',
       apiUrl: apiUrl || window.location.origin,
-      model: model || 'gpt-4o-realtime-preview',
+      model: model || 'gpt-realtime-2025-08-28',
       voice: voice || 'alloy',
       capabilities: OpenAIRealtimeProvider.getDefaultCapabilities(),
       settings: {

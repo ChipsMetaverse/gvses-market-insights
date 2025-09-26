@@ -515,10 +515,51 @@ Return as JSON.`;
       'all': 'ALL',
       'all time': 'ALL',
       'max': 'ALL',
-      'maximum': 'ALL'
+      'maximum': 'ALL',
+      // Intraday hours
+      '1h': 'H1',
+      'one hour': 'H1',
+      'hour': 'H1',
+      '2h': 'H2',
+      'two hours': 'H2',
+      '3h': 'H3',
+      'three hours': 'H3',
+      '4h': 'H4',
+      'four hours': 'H4',
+      '6h': 'H6',
+      'six hours': 'H6',
+      '8h': 'H8',
+      'eight hours': 'H8',
+      // Intraday minutes
+      '30m': 'M30',
+      '30 min': 'M30',
+      '30 minutes': 'M30',
+      '15m': 'M15',
+      '15 min': 'M15',
+      '15 minutes': 'M15',
+      '5m': 'M5',
+      '5 min': 'M5',
+      '5 minutes': 'M5',
+      '1m': 'M1',
+      '1 min': 'M1',
+      'one minute': 'M1',
+      // Seconds
+      '10s': 'S10',
+      '10 sec': 'S10',
+      '10 seconds': 'S10'
     };
     
-    const normalized = tfMap[timeframe.toLowerCase()];
+    const key = timeframe.trim().toLowerCase();
+    const normalized = tfMap[key];
+    // If looks like raw patterns (e.g., 4h/15m etc.), map programmatically
+    if (!normalized) {
+      const hMatch = key.match(/^(\d+)\s*h$/);
+      const mMatch = key.match(/^(\d+)\s*m(in|inute|inutes)?$/);
+      const sMatch = key.match(/^(\d+)\s*s(ec|econd|econds)?$/);
+      if (hMatch) return `H${hMatch[1]}`;
+      if (mMatch) return `M${mMatch[1]}`;
+      if (sMatch) return `S${sMatch[1]}`;
+    }
     return normalized || timeframe.toUpperCase();
   }
 

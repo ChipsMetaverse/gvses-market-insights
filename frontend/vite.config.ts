@@ -29,6 +29,14 @@ export default defineConfig({
   server: {
     port: 5174,
     host: true,
+    allowedHosts: [
+      'localhost',
+      '127.0.0.1',
+      'host.docker.internal', // Allow Docker container access
+      '.loca.lt',  // Allow all LocalTunnel domains
+      '.ngrok.io', // Allow ngrok domains
+      '.trycloudflare.com', // Allow Cloudflare tunnels
+    ],
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

@@ -27,7 +27,7 @@ async def test_openai_agents_basic():
         test_agent = Agent(
             name='Test Agent',
             instructions='You are a test agent. Respond with "Hello, I am working!"',
-            model='gpt-3.5-turbo'
+            model='gpt-4.1'
         )
         
         print("✅ Agent creation successful")
@@ -62,7 +62,7 @@ async def test_function_tools():
         tool_agent = Agent(
             name='Tool Test Agent',
             instructions='Use the get_greeting tool to greet users.',
-            model='gpt-3.5-turbo',
+            model='gpt-4.1',
             tools=[get_greeting]
         )
         

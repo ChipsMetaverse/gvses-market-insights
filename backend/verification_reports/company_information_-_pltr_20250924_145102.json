@@ -1,0 +1,27 @@
+{
+  "scenario": "Company Information - PLTR",
+  "timestamp": "2025-09-24T14:51:02.808758",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "message",
+      "content": "Scenario 'Company Information - PLTR' would be executed with Computer Use",
+      "timestamp": "2025-09-24T14:51:02.808768"
+    }
+  ],
+  "screenshots": [],
+  "issues": [
+    {
+      "description": "Query 'What is PLTR?' returns trading data instead of company information",
+      "priority": "Critical"
+    }
+  ],
+  "fixes": [
+    {
+      "file": "backend/services/agent_orchestrator.py",
+      "line": "3286",
+      "description": "Add company-info intent before price-only check",
+      "code": "if 'what is' in ql and self._extract_symbol(query): return 'company-info'"
+    }
+  ]
+}

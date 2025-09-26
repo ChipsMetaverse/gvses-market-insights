@@ -62,7 +62,7 @@ async def test_full_flow():
     
     # Test 3: WebSocket connection
     log("\n📋 Test 3: WebSocket Connection", Colors.YELLOW)
-    ws_url = f"ws://localhost:8000/realtime-relay/{session_id}?model=gpt-4o-realtime-preview-2024-12-17"
+    ws_url = f"ws://localhost:8000/realtime-relay/{session_id}?model=gpt-realtime-2025-08-28"
     
     try:
         async with websockets.connect(
