@@ -50,6 +50,31 @@ class ChartImageRequest(BaseModel):
     image_base64: str
     context: Optional[str] = None
 
+
+class ChartSnapshotIngestRequest(BaseModel):
+    """Payload for ingesting chart snapshots from headless service."""
+
+    symbol: str
+    timeframe: str
+    image_base64: str
+    chart_commands: Optional[List[str]] = None
+    metadata: Optional[Dict[str, Any]] = None
+    vision_model: Optional[str] = None
+    auto_analyze: Optional[bool] = None
+
+
+class ChartSnapshotResponse(BaseModel):
+    """Response model for chart snapshot operations."""
+
+    symbol: str
+    timeframe: str
+    captured_at: datetime
+    chart_commands: List[str]
+    metadata: Dict[str, Any]
+    vision_model: Optional[str] = None
+    analysis: Optional[Dict[str, Any]] = None
+    analysis_error: Optional[str] = None
+
 @router.post("/orchestrate", response_model=AgentResponse)
 async def orchestrate_query(request: AgentQuery):
     """
@@ -243,6 +268,48 @@ async def analyze_chart(request: ChartImageRequest):
     except Exception as e:
         logger.error(f"Error analyzing chart image: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chart-snapshot", response_model=ChartSnapshotResponse)
+async def ingest_chart_snapshot(request: ChartSnapshotIngestRequest):
+    """Ingest a chart snapshot and optionally trigger automated analysis."""
+
+    orchestrator = get_orchestrator()
+    try:
+        result = await orchestrator.ingest_chart_snapshot(
+            symbol=request.symbol,
+            timeframe=request.timeframe,
+            image_base64=request.image_base64,
+            chart_commands=request.chart_commands,
+            metadata=request.metadata,
+            vision_model=request.vision_model,
+            auto_analyze=request.auto_analyze,
+        )
+        return ChartSnapshotResponse(**result)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # pragma: no cover
+        logger.error(f"Chart snapshot ingestion failed: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to ingest chart snapshot")
+
+
+@router.get("/chart-snapshot/{symbol}", response_model=Optional[ChartSnapshotResponse])
+async def get_latest_chart_snapshot(symbol: str, timeframe: Optional[str] = None, include_image: bool = False):
+    """Return the latest chart snapshot for a symbol/timeframe."""
+
+    orchestrator = get_orchestrator()
+    snapshot = await orchestrator.get_chart_state(
+        symbol=symbol,
+        timeframe=timeframe,
+        include_image=include_image,
+    )
+    if not snapshot:
+        return None
+
+    if not include_image:
+        snapshot.pop("image_base64", None)
+
+    return ChartSnapshotResponse(**snapshot)
 
 
 @router.post("/voice-query")

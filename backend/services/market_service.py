@@ -8,6 +8,10 @@ import random
 import time
 import asyncio
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables before any other imports that might need them
+load_dotenv()
 
 # Add parent directory to path for imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

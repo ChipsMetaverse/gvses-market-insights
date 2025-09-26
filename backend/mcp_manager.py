@@ -9,6 +9,10 @@ import logging
 from typing import Any, Dict, Optional, List
 from pathlib import Path
 import os
+from dotenv import load_dotenv
+
+# Load environment variables before creating any instances
+load_dotenv()
 
 from mcp_client import MCPClient
 

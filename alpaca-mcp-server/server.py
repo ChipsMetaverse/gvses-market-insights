@@ -12,10 +12,18 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+# Load environment variables from .env file
+# Try loading from backend directory first, then current directory
+from pathlib import Path
+backend_env = Path(__file__).parent.parent / 'backend' / '.env'
+if backend_env.exists():
+    load_dotenv(backend_env)
+else:
+    load_dotenv()
+
+from fastmcp import FastMCP
 
 from alpaca.trading.client import TradingClient
 from alpaca.data.historical.stock import StockHistoricalDataClient
@@ -29,7 +37,6 @@ from alpaca.data.requests import (
 from alpaca.data.timeframe import TimeFrame
 from alpaca.trading.requests import (
     GetOrdersRequest,
-    GetPositionsRequest,
     MarketOrderRequest,
     LimitOrderRequest
 )
@@ -50,7 +57,7 @@ class AlpacaMCPServer:
     
     def __init__(self):
         """Initialize the MCP server and Alpaca clients."""
-        self.server = Server("alpaca-mcp-server")
+        self.mcp = FastMCP("alpaca-mcp-server")
         
         # Load API credentials from environment
         self.api_key = os.getenv('ALPACA_API_KEY')
@@ -84,7 +91,7 @@ class AlpacaMCPServer:
         """Register all available tools with the MCP server."""
         
         # Account & Trading Tools
-        @self.server.tool()
+        @self.mcp.tool()
         async def get_account() -> str:
             """Get Alpaca account information including buying power and portfolio value."""
             try:
@@ -104,7 +111,7 @@ class AlpacaMCPServer:
                 logger.error(f"Error fetching account: {e}")
                 return json.dumps({"error": str(e)})
         
-        @self.server.tool()
+        @self.mcp.tool()
         async def get_positions() -> str:
             """Get all open positions in the account."""
             try:
@@ -127,7 +134,7 @@ class AlpacaMCPServer:
                 logger.error(f"Error fetching positions: {e}")
                 return json.dumps({"error": str(e)})
         
-        @self.server.tool()
+        @self.mcp.tool()
         async def get_orders(status: str = "open") -> str:
             """Get orders with specified status (open, closed, all)."""
             try:
@@ -163,7 +170,7 @@ class AlpacaMCPServer:
                 return json.dumps({"error": str(e)})
         
         # Market Data Tools
-        @self.server.tool()
+        @self.mcp.tool()
         async def get_stock_quote(symbol: str) -> str:
             """Get the latest quote for a stock symbol."""
             try:
@@ -185,7 +192,7 @@ class AlpacaMCPServer:
                 logger.error(f"Error fetching quote for {symbol}: {e}")
                 return json.dumps({"error": str(e)})
         
-        @self.server.tool()
+        @self.mcp.tool()
         async def get_stock_bars(
             symbol: str,
             timeframe: str = "1Day",
@@ -250,7 +257,7 @@ class AlpacaMCPServer:
                 logger.error(f"Error fetching bars for {symbol}: {e}")
                 return json.dumps({"error": str(e)})
         
-        @self.server.tool()
+        @self.mcp.tool()
         async def get_stock_snapshot(symbol: str) -> str:
             """Get a comprehensive snapshot of a stock including quote, bar, and trades."""
             try:
@@ -321,7 +328,7 @@ class AlpacaMCPServer:
                 logger.error(f"Error fetching snapshot for {symbol}: {e}")
                 return json.dumps({"error": str(e)})
         
-        @self.server.tool()
+        @self.mcp.tool()
         async def get_latest_bar(symbol: str) -> str:
             """Get the latest bar for a stock symbol."""
             try:
@@ -346,7 +353,7 @@ class AlpacaMCPServer:
                 logger.error(f"Error fetching latest bar for {symbol}: {e}")
                 return json.dumps({"error": str(e)})
         
-        @self.server.tool()
+        @self.mcp.tool()
         async def place_market_order(
             symbol: str,
             qty: float,
@@ -391,7 +398,7 @@ class AlpacaMCPServer:
                 logger.error(f"Error placing order: {e}")
                 return json.dumps({"error": str(e)})
         
-        @self.server.tool()
+        @self.mcp.tool()
         async def place_limit_order(
             symbol: str,
             qty: float,
@@ -440,7 +447,7 @@ class AlpacaMCPServer:
                 logger.error(f"Error placing order: {e}")
                 return json.dumps({"error": str(e)})
         
-        @self.server.tool()
+        @self.mcp.tool()
         async def cancel_order(order_id: str) -> str:
             """Cancel an open order by ID."""
             try:
@@ -453,7 +460,7 @@ class AlpacaMCPServer:
                 logger.error(f"Error cancelling order: {e}")
                 return json.dumps({"error": str(e)})
         
-        @self.server.tool()
+        @self.mcp.tool()
         async def get_market_status() -> str:
             """Get current market status (open/closed)."""
             try:
@@ -470,12 +477,7 @@ class AlpacaMCPServer:
     
     async def run(self):
         """Run the MCP server."""
-        async with stdio_server() as (read_stream, write_stream):
-            await self.server.run(
-                read_stream,
-                write_stream,
-                self.server.create_initialization_options()
-            )
+        await self.mcp.run_stdio_async()
 
 
 async def main():

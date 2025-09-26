@@ -23,6 +23,7 @@ from response_formatter import MarketResponseFormatter
 from services.knowledge_metrics import KnowledgeMetrics
 from services.vector_retriever import VectorRetriever
 from services.chart_image_analyzer import ChartImageAnalyzer
+from services.chart_snapshot_store import ChartSnapshotStore
 
 # Structured response schema for market analysis outputs
 MARKET_ANALYSIS_SCHEMA = {
@@ -87,6 +88,14 @@ class AgentOrchestrator:
         except Exception as exc:  # pragma: no cover
             logger.warning(f"Chart image analyzer unavailable: {exc}")
             self.chart_image_analyzer = None
+
+        snapshot_ttl = int(os.getenv("CHART_SNAPSHOT_TTL", "900"))
+        max_snapshots = int(os.getenv("CHART_SNAPSHOT_MAX_PER_SYMBOL", "10"))
+        self.chart_snapshot_store = ChartSnapshotStore(
+            ttl_seconds=snapshot_ttl,
+            max_snapshots_per_symbol=max_snapshots,
+        )
+        self.auto_analyze_snapshots = (os.getenv("CHART_SNAPSHOT_AUTO_ANALYZE", "true").lower() != "false")
         
         # Responses API support detection and schema configuration
         responses_client = getattr(self.client, "responses", None)
@@ -148,6 +157,81 @@ class AgentOrchestrator:
 
         # Pre-computed fast-path responses for common educational queries
         self._static_response_templates = self._build_static_response_templates()
+
+    async def ingest_chart_snapshot(
+        self,
+        *,
+        symbol: str,
+        timeframe: str,
+        image_base64: str,
+        chart_commands: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        vision_model: Optional[str] = None,
+        auto_analyze: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Store a chart snapshot and optionally analyze it with the vision model."""
+
+        if not symbol:
+            raise ValueError("symbol is required for chart snapshot ingestion")
+        if not timeframe:
+            raise ValueError("timeframe is required for chart snapshot ingestion")
+        if not image_base64:
+            raise ValueError("image_base64 is required for chart snapshot ingestion")
+
+        record = await self.chart_snapshot_store.store_snapshot(
+            symbol=symbol,
+            timeframe=timeframe,
+            image_base64=image_base64,
+            chart_commands=chart_commands,
+            metadata=metadata,
+            vision_model=vision_model,
+        )
+
+        should_analyze = auto_analyze if auto_analyze is not None else self.auto_analyze_snapshots
+        analysis: Optional[Dict[str, Any]] = None
+        analysis_error: Optional[str] = None
+        if should_analyze and self.chart_image_analyzer:
+            try:
+                analysis = await self.chart_image_analyzer.analyze_chart(
+                    image_base64=image_base64,
+                    model_name=vision_model,
+                    user_context=(metadata or {}).get("user_context"),
+                )
+                # Update stored record with analysis results
+                await self.chart_snapshot_store.store_snapshot(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    image_base64=image_base64,
+                    chart_commands=chart_commands,
+                    metadata=metadata,
+                    vision_model=vision_model,
+                    analysis=analysis,
+                )
+            except Exception as exc:  # pragma: no cover - resilient to vision errors
+                logger.warning(f"Chart snapshot analysis failed for {symbol}: {exc}")
+                analysis_error = str(exc)
+
+        result = record.to_public_dict(include_image=False)
+        result.update({
+            "analysis": analysis,
+            "analysis_error": analysis_error,
+        })
+        return result
+
+    async def get_chart_state(
+        self,
+        symbol: str,
+        timeframe: Optional[str] = None,
+        include_image: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the latest stored chart snapshot and analysis for a symbol."""
+
+        snapshot = await self.chart_snapshot_store.get_latest(
+            symbol=symbol,
+            timeframe=timeframe,
+            include_image=include_image,
+        )
+        return snapshot
     
     def _normalize_query(self, query: str) -> str:
         """Normalize query for better cache hit rates.

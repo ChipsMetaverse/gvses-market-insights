@@ -8,6 +8,10 @@ import logging
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
+from dotenv import load_dotenv
+
+# Load environment variables before accessing them
+load_dotenv()
 from alpaca.trading.client import TradingClient
 from alpaca.data.historical.stock import StockHistoricalDataClient
 from alpaca.data.requests import (
