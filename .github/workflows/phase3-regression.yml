@@ -73,6 +73,11 @@ jobs:
           cd backend/headless_chart_service
           npm ci
       
+      - name: Build Headless Chart Service
+        run: |
+          cd backend/headless_chart_service
+          npm run build
+      
       - name: Install Playwright browsers
         run: |
           cd backend/headless_chart_service
