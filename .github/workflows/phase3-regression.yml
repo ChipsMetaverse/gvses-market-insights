@@ -102,6 +102,7 @@ jobs:
           curl -f http://localhost:8000/health || exit 1
       
       - name: Start Headless Chart Service
+        if: ${{ secrets.SUPABASE_URL != '' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -112,6 +113,14 @@ jobs:
           npm start &
           sleep 5
           curl -f http://localhost:3100/health || exit 1
+      
+      - name: Skip Headless Chart Service (No Supabase Secrets)
+        if: ${{ secrets.SUPABASE_URL == '' }}
+        run: |
+          echo "⚠️ Skipping headless chart service - SUPABASE_URL secret not configured"
+          echo "To enable headless chart service tests, add these secrets to GitHub:"
+          echo "  - SUPABASE_URL"
+          echo "  - SUPABASE_SERVICE_ROLE_KEY"
       
       - name: Run Phase 3 Regression Tests
         run: |
