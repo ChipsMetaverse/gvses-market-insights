@@ -110,7 +110,7 @@ jobs:
       
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: regression-test-results
           path: |
@@ -125,21 +125,5 @@ jobs:
           text: 'Phase 3 Regression Tests Failed! Check the logs.'
           webhook_url: ${{ secrets.SLACK_WEBHOOK }}
         
-      - name: Create Issue on Failure
-        if: failure()
-        uses: actions/create-issue@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          title: 'Phase 3 Regression Test Failure'
-          body: |
-            ## Regression Test Failed
-            
-            The Phase 3 regression tests have failed in workflow run ${{ github.run_number }}.
-            
-            **Branch:** ${{ github.ref }}
-            **Commit:** ${{ github.sha }}
-            **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            
-            Please investigate and fix the regression.
-          labels: 'bug,regression,phase3'
+      # Issue creation removed - requires custom action or GitHub App
+      # You can manually create issues or use a different notification method
