@@ -87,14 +87,14 @@ jobs:
       - name: Start Backend Service
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://test.supabase.co' }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'test-key' }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'test-key' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'test-key' }}
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY || 'test-key' }}
-          ELEVENLABS_AGENT_ID: ${{ secrets.ELEVENLABS_AGENT_ID || 'test-agent' }}
-          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY || 'test-key' }}
-          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY || 'test-key' }}
+          SUPABASE_URL: https://cwnzgvrylvxfhwhsqelc.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3bnpndnJ5bHZ4Zmh3aHNxZWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkxNDA2ODMsImV4cCI6MjA1NDcxNjY4M30.16guu151voGKraTKi0A2EBs9nDSaqBaGp3QF5IT8h_M
+          ANTHROPIC_API_KEY: test-key-for-ci
+          OPENAI_API_KEY: test-key-for-ci  
+          ELEVENLABS_API_KEY: test-key-for-ci
+          ELEVENLABS_AGENT_ID: test-agent
+          ALPACA_API_KEY: test-key-for-ci
+          ALPACA_SECRET_KEY: test-key-for-ci
         run: |
           cd backend
           uvicorn mcp_server:app --host 0.0.0.0 --port 8000 &
@@ -102,10 +102,9 @@ jobs:
           curl -f http://localhost:8000/health || exit 1
       
       - name: Start Headless Chart Service
-        if: ${{ secrets.SUPABASE_URL != '' }}
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: https://cwnzgvrylvxfhwhsqelc.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3bnpndnJ5bHZ4Zmh3aHNxZWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkxNDA2ODMsImV4cCI6MjA1NDcxNjY4M30.16guu151voGKraTKi0A2EBs9nDSaqBaGp3QF5IT8h_M
           FRONTEND_URL: http://localhost:5174
           BACKEND_URL: http://localhost:8000
         run: |
@@ -113,14 +112,6 @@ jobs:
           npm start &
           sleep 5
           curl -f http://localhost:3100/health || exit 1
-      
-      - name: Skip Headless Chart Service (No Supabase Secrets)
-        if: ${{ secrets.SUPABASE_URL == '' }}
-        run: |
-          echo "⚠️ Skipping headless chart service - SUPABASE_URL secret not configured"
-          echo "To enable headless chart service tests, add these secrets to GitHub:"
-          echo "  - SUPABASE_URL"
-          echo "  - SUPABASE_SERVICE_ROLE_KEY"
       
       - name: Run Phase 3 Regression Tests
         run: |
