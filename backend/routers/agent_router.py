@@ -364,3 +364,155 @@ async def process_voice_query(request: AgentQuery):
     except Exception as e:
         logger.error(f"Error processing voice query: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Phase 3: Pattern Verdict Endpoints
+
+class PatternVerdict(BaseModel):
+    """Request model for pattern verdict submission."""
+    pattern_id: str
+    verdict: str  # 'accepted', 'rejected', 'deferred'
+    operator_id: Optional[str] = None
+    notes: Optional[str] = None
+    symbol: Optional[str] = None
+    timeframe: Optional[str] = None
+    
+
+class PatternVerdictResponse(BaseModel):
+    """Response model for pattern verdict operations."""
+    pattern_id: str
+    verdict: str
+    submitted_at: datetime
+    operator_id: Optional[str]
+    notes: Optional[str]
+    symbol: Optional[str]
+    timeframe: Optional[str]
+
+
+class PatternHistoryEntry(BaseModel):
+    """Model for pattern verdict history entry."""
+    pattern_id: str
+    verdict: str
+    submitted_at: datetime
+    operator_id: Optional[str]
+    notes: Optional[str]
+    symbol: str
+    timeframe: str
+    pattern_type: Optional[str]
+    confidence: Optional[float]
+
+
+@router.post("/pattern-verdict", response_model=PatternVerdictResponse)
+async def submit_pattern_verdict(verdict: PatternVerdict, background_tasks: BackgroundTasks):
+    """
+    Submit analyst verdict for a pattern.
+    
+    This endpoint:
+    1. Records the analyst's decision (accept/reject/defer)
+    2. Updates pattern state in the system
+    3. Triggers pattern overlay updates via WebSocket
+    4. Creates audit trail for compliance
+    """
+    try:
+        orchestrator = get_orchestrator()
+        
+        # Store verdict in snapshot store
+        snapshot_store = getattr(orchestrator, "chart_snapshot_store", None)
+        if not snapshot_store:
+            raise HTTPException(status_code=503, detail="Chart snapshot store unavailable")
+        
+        # Record the verdict
+        symbol = verdict.symbol.upper() if verdict.symbol else None
+        timeframe = verdict.timeframe.upper() if verdict.timeframe else None
+
+        verdict_data = {
+            "pattern_id": verdict.pattern_id,
+            "verdict": verdict.verdict,
+            "submitted_at": datetime.utcnow(),
+            "operator_id": verdict.operator_id or "anonymous",
+            "notes": verdict.notes,
+            "symbol": symbol,
+            "timeframe": timeframe,
+        }
+        
+        # Store verdict (implementation will be in chart_snapshot_store)
+        await snapshot_store.store_pattern_verdict(verdict_data)
+        
+        # Trigger background update to pattern lifecycle
+        background_tasks.add_task(
+            orchestrator.update_pattern_lifecycle,
+            pattern_id=verdict.pattern_id,
+            verdict=verdict.verdict,
+            operator_id=verdict.operator_id or "anonymous",
+            notes=verdict.notes,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        
+        logger.info(
+            "pattern_verdict_submitted",
+            extra={
+                "pattern_id": verdict.pattern_id,
+                "verdict": verdict.verdict,
+                "operator": verdict.operator_id,
+                "symbol": verdict.symbol
+            }
+        )
+        
+        return PatternVerdictResponse(**verdict_data)
+        
+    except Exception as e:
+        logger.error(f"Error submitting pattern verdict: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pattern-history", response_model=List[PatternHistoryEntry])
+async def get_pattern_history(
+    symbol: Optional[str] = None,
+    timeframe: Optional[str] = None,
+    operator_id: Optional[str] = None,
+    limit: int = 100
+):
+    """
+    Retrieve pattern verdict history with optional filtering.
+    
+    This endpoint provides audit trail and analytics for:
+    - Pattern validation accuracy over time
+    - Operator performance metrics
+    - Pattern success rates by type
+    """
+    try:
+        orchestrator = get_orchestrator()
+        snapshot_store = getattr(orchestrator, "chart_snapshot_store", None)
+        
+        if not snapshot_store:
+            raise HTTPException(status_code=503, detail="Chart snapshot store unavailable")
+        
+        # Retrieve verdict history
+        history = await snapshot_store.get_pattern_history(
+            symbol=symbol,
+            timeframe=timeframe,
+            operator_id=operator_id,
+            limit=limit
+        )
+        
+        # Convert to response models
+        entries = []
+        for record in history:
+            entries.append(PatternHistoryEntry(
+                pattern_id=record["pattern_id"],
+                verdict=record["verdict"],
+                submitted_at=record["submitted_at"],
+                operator_id=record.get("operator_id"),
+                notes=record.get("notes"),
+                symbol=record["symbol"],
+                timeframe=record["timeframe"],
+                pattern_type=record.get("pattern_type"),
+                confidence=record.get("confidence")
+            ))
+        
+        return entries
+        
+    except Exception as e:
+        logger.error(f"Error retrieving pattern history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

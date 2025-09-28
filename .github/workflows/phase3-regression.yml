@@ -1,0 +1,145 @@
+name: Phase 3 Regression Tests
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - 'backend/**'
+      - 'backend/headless_chart_service/**'
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Run nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    # Allow manual trigger
+
+jobs:
+  regression-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+      
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Cache Node dependencies
+        uses: actions/cache@v3
+        with:
+          path: backend/headless_chart_service/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('backend/headless_chart_service/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      
+      - name: Install Python dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Install Node dependencies
+        run: |
+          cd backend/headless_chart_service
+          npm ci
+      
+      - name: Install Playwright browsers
+        run: |
+          cd backend/headless_chart_service
+          npx playwright install chromium
+          npx playwright install-deps
+      
+      - name: Start Backend Service
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd backend
+          uvicorn mcp_server:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl -f http://localhost:8000/health || exit 1
+      
+      - name: Start Headless Chart Service
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FRONTEND_URL: http://localhost:5174
+          BACKEND_URL: http://localhost:8000
+        run: |
+          cd backend/headless_chart_service
+          npm start &
+          sleep 5
+          curl -f http://localhost:3100/health || exit 1
+      
+      - name: Run Phase 3 Regression Tests
+        run: |
+          cd backend
+          python test_phase3_regression.py
+      
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: regression-test-results
+          path: |
+            backend/phase3_regression_results.json
+            backend/*.log
+      
+      - name: Post Results to Slack (Optional)
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Phase 3 Regression Tests Failed! Check the logs.'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        
+      - name: Create Issue on Failure
+        if: failure()
+        uses: actions/create-issue@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          title: 'Phase 3 Regression Test Failure'
+          body: |
+            ## Regression Test Failed
+            
+            The Phase 3 regression tests have failed in workflow run ${{ github.run_number }}.
+            
+            **Branch:** ${{ github.ref }}
+            **Commit:** ${{ github.sha }}
+            **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            Please investigate and fix the regression.
+          labels: 'bug,regression,phase3'

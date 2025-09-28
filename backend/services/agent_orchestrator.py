@@ -24,6 +24,13 @@ from services.knowledge_metrics import KnowledgeMetrics
 from services.vector_retriever import VectorRetriever
 from services.chart_image_analyzer import ChartImageAnalyzer
 from services.chart_snapshot_store import ChartSnapshotStore
+from services.pattern_lifecycle import PatternLifecycleManager
+
+try:
+    # Lazy import to avoid circular dependencies when headless service is absent
+    from headless_chart_service.src.websocketService import wsService  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    wsService = None
 
 # Structured response schema for market analysis outputs
 MARKET_ANALYSIS_SCHEMA = {
@@ -96,6 +103,12 @@ class AgentOrchestrator:
             max_snapshots_per_symbol=max_snapshots,
         )
         self.auto_analyze_snapshots = (os.getenv("CHART_SNAPSHOT_AUTO_ANALYZE", "true").lower() != "false")
+        lifecycle_confirm = float(os.getenv("PATTERN_CONFIRM_THRESHOLD", "75"))
+        lifecycle_max_misses = int(os.getenv("PATTERN_MAX_MISSES", "2"))
+        self.pattern_lifecycle = PatternLifecycleManager(
+            confirm_threshold=lifecycle_confirm,
+            max_misses=lifecycle_max_misses,
+        )
         
         # Responses API support detection and schema configuration
         responses_client = getattr(self.client, "responses", None)
@@ -197,24 +210,54 @@ class AgentOrchestrator:
                     model_name=vision_model,
                     user_context=(metadata or {}).get("user_context"),
                 )
-                # Update stored record with analysis results
-                await self.chart_snapshot_store.store_snapshot(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    image_base64=image_base64,
-                    chart_commands=chart_commands,
-                    metadata=metadata,
-                    vision_model=vision_model,
-                    analysis=analysis,
-                )
             except Exception as exc:  # pragma: no cover - resilient to vision errors
                 logger.warning(f"Chart snapshot analysis failed for {symbol}: {exc}")
                 analysis_error = str(exc)
+            else:
+                logger.info(
+                    "Chart snapshot analyzed",
+                    extra={
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "vision_model": vision_model or self.chart_image_analyzer.current_model_key,
+                        "patterns": len(analysis.get("patterns", [])) if isinstance(analysis, dict) else None,
+                    },
+                )
+
+        lifecycle_result = self.pattern_lifecycle.update(
+            symbol=symbol,
+            timeframe=timeframe,
+            analysis=analysis,
+        )
+
+        combined_commands: List[str] = []
+        if chart_commands:
+            combined_commands.extend(chart_commands)
+        combined_commands.extend(lifecycle_result.get("chart_commands", []))
+
+        # Update stored record with lifecycle metadata and commands
+        record.chart_commands = combined_commands
+        record.metadata.setdefault("lifecycle_states", lifecycle_result.get("states", []))
+        record.metadata.setdefault("chart_history", []).append(
+            {
+                "timestamp": datetime.utcnow().isoformat(),
+                "commands": combined_commands,
+            }
+        )
+
+        await self.chart_snapshot_store.attach_analysis(
+            record,
+            analysis=analysis,
+            analysis_error=analysis_error,
+            vision_model=vision_model or getattr(self.chart_image_analyzer, "current_model_key", None),
+        )
 
         result = record.to_public_dict(include_image=False)
         result.update({
             "analysis": analysis,
             "analysis_error": analysis_error,
+            "chart_commands": combined_commands,
+            "lifecycle_states": lifecycle_result.get("states", []),
         })
         return result
 
@@ -232,6 +275,119 @@ class AgentOrchestrator:
             include_image=include_image,
         )
         return snapshot
+    
+    async def update_pattern_lifecycle(
+        self,
+        pattern_id: str,
+        verdict: str,
+        *,
+        operator_id: Optional[str] = None,
+        notes: Optional[str] = None,
+        symbol: Optional[str] = None,
+        timeframe: Optional[str] = None,
+    ) -> None:
+        """Update pattern lifecycle based on analyst verdict.
+        
+        Phase 3 implementation: Handles pattern state transitions
+        and broadcasts updates to connected clients via WebSocket.
+        """
+        logger.info(
+            "Updating pattern lifecycle",
+            extra={
+                "pattern_id": pattern_id,
+                "verdict": verdict,
+                "operator": operator_id,
+                "symbol": symbol,
+                "timeframe": timeframe,
+            },
+        )
+
+        lifecycle_state = {
+            "accepted": "confirmed",
+            "rejected": "invalidated",
+            "deferred": "pending_review",
+        }.get(verdict, "pending_review")
+
+        overlay_metadata = {
+            "verdict": verdict,
+            "operator_id": operator_id,
+            "notes": notes,
+        }
+
+        updated_overlay = await self.chart_snapshot_store.update_pattern_state(
+            pattern_id,
+            status=lifecycle_state,
+            symbol=symbol,
+            timeframe=timeframe,
+            metadata=overlay_metadata,
+        )
+
+        resolved_symbol = updated_overlay.get("symbol") if updated_overlay else symbol
+        resolved_timeframe = updated_overlay.get("timeframe") if updated_overlay else timeframe
+
+        if not resolved_symbol or not resolved_timeframe:
+            logger.warning(
+                "Pattern verdict missing symbol/timeframe context",
+                extra={"pattern_id": pattern_id},
+            )
+            return
+
+        # Determine chart command set based on verdict
+        if verdict == "accepted":
+            chart_commands = [
+                f"ANNOTATE:PATTERN:{pattern_id}:CONFIRMED",
+                f"DRAW:TARGET:{pattern_id}:AUTO",
+            ]
+        elif verdict == "rejected":
+            chart_commands = [
+                f"CLEAR:PATTERN:{pattern_id}",
+                f"ANNOTATE:PATTERN:{pattern_id}:INVALIDATED",
+            ]
+        else:
+            chart_commands = [f"ANNOTATE:PATTERN:{pattern_id}:PENDING"]
+
+        overlay_payload = {
+            "pattern_id": pattern_id,
+            "status": lifecycle_state,
+            "symbol": resolved_symbol,
+            "timeframe": resolved_timeframe,
+            "metadata": overlay_metadata,
+            "commands": chart_commands,
+        }
+
+        if wsService:
+            broadcasted = wsService.broadcastPatternOverlay(
+                pattern_id,
+                {
+                    "confirmed": "validated",
+                    "invalidated": "invalidated",
+                    "pending_review": "updated",
+                }.get(lifecycle_state, "updated"),
+                overlay_payload,
+            )
+            logger.info(
+                "Pattern overlay broadcasted",
+                extra={"pattern_id": pattern_id, "broadcast_to": broadcasted},
+            )
+        else:
+            logger.info("wsService unavailable; skipping broadcast")
+
+        # Persist chart commands to ensure future renders maintain state
+        merged_commands = await self.chart_snapshot_store.append_chart_commands(
+            symbol=resolved_symbol,
+            timeframe=resolved_timeframe,
+            commands=chart_commands,
+        )
+        if merged_commands:
+            logger.debug(
+                "Pattern chart commands updated",
+                extra={
+                    "pattern_id": pattern_id,
+                    "commands": chart_commands,
+                    "symbol": resolved_symbol,
+                    "timeframe": resolved_timeframe,
+                },
+            )
     
     def _normalize_query(self, query: str) -> str:
         """Normalize query for better cache hit rates.
