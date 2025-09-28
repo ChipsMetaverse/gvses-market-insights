@@ -1,0 +1,41 @@
+# Pattern Rules Configuration for Phase 4
+# This file defines rule-based evaluation criteria for pattern lifecycle management
+
+patterns:
+  head_and_shoulders:
+    target_hit_threshold: 0.95    # 95% of target price to consider complete
+    confidence_decay_rate: 0.02   # 2% confidence reduction per hour
+    max_duration_hours: 72        # Maximum pattern lifetime (3 days)
+    invalidation_breach: 1.05     # 5% above resistance invalidates pattern
+    min_confidence: 0.3           # Minimum confidence to maintain pattern
+
+  double_top:
+    target_hit_threshold: 0.90    # 90% of target
+    confidence_decay_rate: 0.03   # 3% per hour
+    max_duration_hours: 48        # 2 days
+    invalidation_breach: 1.02     # 2% above resistance
+    min_confidence: 0.35
+
+  triangle:
+    target_hit_threshold: 0.85    # 85% of target
+    confidence_decay_rate: 0.01   # 1% per hour  
+    max_duration_hours: 96        # 4 days
+    invalidation_breach: 1.10     # 10% beyond apex
+    min_confidence: 0.25
+
+  channel:
+    target_hit_threshold: 0.80    # 80% of channel width
+    confidence_decay_rate: 0.015  # 1.5% per hour
+    max_duration_hours: 96        # 4 days
+    invalidation_breach: 1.15     # 15% beyond channel
+    min_confidence: 0.20
+
+  flag:
+    target_hit_threshold: 0.90    # 90% of target
+    confidence_decay_rate: 0.04   # 4% per hour (short-term pattern)
+    max_duration_hours: 24        # 1 day
+    invalidation_breach: 1.02     # 2% breach
+    min_confidence: 0.40
+
+# Additional pattern types can be added here following the same structure
+# Each pattern must define all five required parameters

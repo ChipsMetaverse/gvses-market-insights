@@ -108,7 +108,19 @@ class AgentOrchestrator:
         self.pattern_lifecycle = PatternLifecycleManager(
             confirm_threshold=lifecycle_confirm,
             max_misses=lifecycle_max_misses,
+            enable_phase4_rules=os.getenv("ENABLE_PHASE4_RULES", "true").lower() == "true"
         )
+        
+        # Phase 4: Background pattern lifecycle sweeper
+        self.enable_pattern_sweep = os.getenv("ENABLE_PATTERN_SWEEP", "true").lower() == "true"
+        self.pattern_sweep_interval = int(os.getenv("PATTERN_SWEEP_INTERVAL", "300"))  # 5 minutes default
+        self.pattern_max_age_hours = int(os.getenv("PATTERN_MAX_AGE_HOURS", "72"))  # 3 days default
+        self._sweep_task = None
+        
+        if self.enable_pattern_sweep:
+            logger.info(f"Pattern sweep enabled - will run every {self.pattern_sweep_interval}s")
+            # Start background sweeper (will be started when event loop is available)
+            asyncio.create_task(self._start_pattern_sweeper())
         
         # Responses API support detection and schema configuration
         responses_client = getattr(self.client, "responses", None)
@@ -4355,6 +4367,106 @@ Remember to cite sources when using this knowledge and maintain educational tone
         except json.JSONDecodeError:
             return None
         return None
+    
+    # Phase 4: Pattern lifecycle sweeper methods
+    async def _start_pattern_sweeper(self):
+        """Start the background pattern lifecycle sweeper task"""
+        try:
+            # Wait a bit for startup to complete
+            await asyncio.sleep(10)
+            
+            while self.enable_pattern_sweep:
+                try:
+                    # Run the sweep
+                    logger.info("Running pattern lifecycle sweep...")
+                    sweep_result = await self.pattern_lifecycle.sweep_patterns(self.pattern_max_age_hours)
+                    
+                    if sweep_result.get("error"):
+                        logger.warning(f"Pattern sweep error: {sweep_result['error']}")
+                    else:
+                        logger.info(
+                            f"Pattern sweep completed - evaluated: {sweep_result.get('patterns_evaluated', 0)}, "
+                            f"updated: {sweep_result.get('patterns_updated', 0)}, "
+                            f"expired: {sweep_result.get('patterns_expired', 0)}"
+                        )
+                    
+                    # Trigger webhook notifications if patterns changed
+                    if sweep_result.get("patterns_expired", 0) > 0:
+                        await self._notify_pattern_expirations(sweep_result)
+                    
+                except Exception as e:
+                    logger.error(f"Error in pattern sweep: {str(e)}")
+                
+                # Wait for next sweep interval
+                await asyncio.sleep(self.pattern_sweep_interval)
+                
+        except asyncio.CancelledError:
+            logger.info("Pattern sweeper task cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Fatal error in pattern sweeper: {str(e)}")
+    
+    async def _notify_pattern_expirations(self, sweep_result: Dict[str, Any]):
+        """Send webhook notifications for expired patterns"""
+        try:
+            # If webhook service is available, send notifications
+            # This is a placeholder - integrate with actual webhook service
+            logger.info(f"Would notify about {sweep_result.get('patterns_expired', 0)} expired patterns")
+        except Exception as e:
+            logger.error(f"Error sending expiration notifications: {str(e)}")
+    
+    async def run_pattern_sweep_manual(self) -> Dict[str, Any]:
+        """Manually trigger a pattern lifecycle sweep"""
+        if not self.enable_pattern_sweep:
+            return {"error": "Pattern sweep is disabled"}
+        
+        try:
+            logger.info("Running manual pattern lifecycle sweep...")
+            result = await self.pattern_lifecycle.sweep_patterns(self.pattern_max_age_hours)
+            return result
+        except Exception as e:
+            logger.error(f"Error in manual pattern sweep: {str(e)}")
+            return {"error": str(e)}
+    
+    async def evaluate_pattern_with_rules(self, 
+                                         symbol: str,
+                                         timeframe: str,
+                                         current_price: float) -> Dict[str, Any]:
+        """
+        Evaluate patterns for a symbol using Phase 4 rules
+        
+        Args:
+            symbol: Stock symbol
+            timeframe: Timeframe
+            current_price: Current market price
+            
+        Returns:
+            Evaluation results
+        """
+        try:
+            if not hasattr(self.pattern_lifecycle, 'evaluate_with_rules'):
+                # Fallback for old version
+                return {"error": "Phase 4 not available"}
+            
+            result = await self.pattern_lifecycle.evaluate_with_rules(
+                symbol, 
+                timeframe, 
+                current_price
+            )
+            
+            # Store any generated commands
+            if result.get("chart_commands"):
+                await self.chart_snapshot_store.append_chart_commands(
+                    symbol, 
+                    timeframe, 
+                    result["chart_commands"]
+                )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error evaluating patterns with rules: {str(e)}")
+            return {"error": str(e)}
 
 
 # Singleton instance
