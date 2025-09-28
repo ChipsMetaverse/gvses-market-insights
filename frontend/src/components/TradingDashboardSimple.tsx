@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { TradingChart } from './TradingChart';
-import { marketDataService, SymbolSearchResult } from '../services/marketDataService';
+import { marketDataService } from '../services/marketDataService';
+import { agentOrchestratorService, ChartSnapshot } from '../services/agentOrchestratorService';
 import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import { useOpenAIRealtimeConversation } from '../hooks/useOpenAIRealtimeConversation';
 import { useAgentVoiceConversation } from '../hooks/useAgentVoiceConversation';
-import { useSymbolSearch } from '../hooks/useSymbolSearch';
 // import { ProviderSelector } from './ProviderSelector'; // Removed - conflicts with useElevenLabsConversation
 import { chartControlService } from '../services/chartControlService';
 import { enhancedChartControl } from '../services/enhancedChartControl';
@@ -31,6 +31,19 @@ interface Message {
   timestamp: string;
   provider?: 'agent' | 'elevenlabs' | 'openai';  // Track message source
   data?: Record<string, any>;
+}
+
+type ConversationProviderKey = 'agent' | 'elevenlabs' | 'openai';
+
+interface ConversationProviderState {
+  provider: ConversationProviderKey;
+  isConnected: boolean;
+  isLoading: boolean;
+  messages: Message[];
+  startConversation: () => Promise<void>;
+  stopConversation: () => void;
+  sendTextMessage: (text: string) => Promise<void> | void;
+  sendAudioChunk: (audioBase64: string) => void;
 }
 
 // Panel Divider Component for resizable panels
@@ -96,23 +109,20 @@ export const TradingDashboardSimple: React.FC = () => {
   const [stockNews, setStockNews] = useState<any[]>([]);
   const [technicalLevels, setTechnicalLevels] = useState<any>({});
   const [detectedPatterns, setDetectedPatterns] = useState<any[]>([]);
+  const [backendPatterns, setBackendPatterns] = useState<any[]>([]);
+  const [patternValidations, setPatternValidations] = useState<Record<string, 'accepted' | 'rejected'>>({});
+  const [currentSnapshot, setCurrentSnapshot] = useState<ChartSnapshot | null>(null);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const [chartStyle, setChartStyle] = useState<'candles' | 'line' | 'area'>('candles');
   const [chartTimeframe, setChartTimeframe] = useState('1D');
-  const [assetType, setAssetType] = useState<'stock' | 'crypto'>('stock');
-  const [voiceProvider, setVoiceProvider] = useState<'elevenlabs' | 'agent'>('agent');
+  const [voiceProvider, setVoiceProvider] = useState<ConversationProviderKey>('agent');
   
   // Dynamic watchlist with localStorage persistence
   const [watchlist, setWatchlist] = useState<string[]>(() => {
     const saved = localStorage.getItem('marketWatchlist');
     return saved ? JSON.parse(saved) : ['TSLA', 'AAPL', 'NVDA', 'SPY', 'PLTR'];
   });
-  const [searchSymbol, setSearchSymbol] = useState('');
-  const [isAddingSymbol, setIsAddingSymbol] = useState(false);
-  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
-
   // Panel widths state for resizable panels
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
     const saved = localStorage.getItem('leftPanelWidth');
@@ -190,40 +200,10 @@ export const TradingDashboardSimple: React.FC = () => {
       }
     }
   }, [messages]);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // Use the symbol search hook with debouncing
-  const { searchResults, isSearching, searchError } = useSymbolSearch(searchSymbol, 300);
-
   // Save watchlist to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('marketWatchlist', JSON.stringify(watchlist));
   }, [watchlist]);
-
-  // Show/hide search dropdown based on input focus and results
-  useEffect(() => {
-    const shouldShow = searchSymbol.length >= 1 && (searchResults.length > 0 || isSearching);
-    setShowSearchDropdown(shouldShow);
-  }, [searchSymbol, searchResults, isSearching]);
-
-  // Handle clicking outside to close dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchInputRef.current && !searchInputRef.current.contains(event.target as Node)) {
-        setShowSearchDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Handle selecting a symbol from search results
-  const handleSelectSymbol = (result: SymbolSearchResult) => {
-    setSearchSymbol('');
-    setShowSearchDropdown(false);
-    addToWatchlist(result.symbol);
-  };
 
   // Add symbol to watchlist
   const addToWatchlist = async (symbol: string) => {
@@ -253,8 +233,6 @@ export const TradingDashboardSimple: React.FC = () => {
       return;
     }
     
-    setIsAddingSymbol(true);
-    
     try {
       // Verify symbol exists by fetching its data and checking quality
       const data = await marketDataService.getStockPrice(upperSymbol);
@@ -267,7 +245,6 @@ export const TradingDashboardSimple: React.FC = () => {
       // Add to watchlist
       const newWatchlist = [...watchlist, upperSymbol];
       setWatchlist(newWatchlist);
-      setSearchSymbol('');
       setToastCommand({ command: `✅ Added ${upperSymbol} to watchlist`, type: 'success' });
       setTimeout(() => setToastCommand(null), 3000);
       
@@ -282,7 +259,6 @@ export const TradingDashboardSimple: React.FC = () => {
       setToastCommand({ command: message, type: 'error' });
       setTimeout(() => setToastCommand(null), 3000);
     } finally {
-      setIsAddingSymbol(false);
     }
   };
 
@@ -366,16 +342,109 @@ export const TradingDashboardSimple: React.FC = () => {
     }
   }, []);
 
+  const stopVoiceRecording = useCallback(() => {
+    if (audioWorkletRef.current) {
+      audioWorkletRef.current.disconnect();
+      audioWorkletRef.current.port.close();
+      audioWorkletRef.current = null;
+    }
+
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    setIsRecording(false);
+    setIsListening(false);
+    setRecordingTime('00:00');
+    setAudioLevel(0);
+  }, []);
+
   const handleConnectionChange = useCallback((connected: boolean) => {
     if (!connected) {
       setIsRecording(false);
       setIsListening(false);
       stopVoiceRecording();
     }
-  }, []);
+  }, [stopVoiceRecording]);
 
   // Track previous provider for cleanup
-  const previousProviderRef = useRef<string>(voiceProvider);
+  const previousProviderRef = useRef<ConversationProviderKey>(voiceProvider);
+
+  // Function to fetch and apply chart snapshot
+  const fetchAndApplySnapshot = useCallback(async (symbol: string) => {
+    try {
+      const snapshot = await agentOrchestratorService.getChartSnapshot(symbol, chartTimeframe);
+      
+      if (snapshot && snapshot.analysis) {
+        setCurrentSnapshot(snapshot);
+        
+        // Extract and apply backend patterns
+        if (snapshot.analysis?.patterns) {
+          const patternsWithIds = snapshot.analysis.patterns.map((pattern, index) => ({
+            ...pattern,
+            id: `backend-${symbol}-${index}-${Date.now()}`,
+            source: 'backend',
+            timestamp: snapshot.captured_at
+          }));
+          setBackendPatterns(patternsWithIds);
+          
+          // Show summary in toast
+          if (snapshot.analysis.summary) {
+            setToastCommand({ 
+              command: `📊 Analysis: ${snapshot.analysis.summary}`, 
+              type: 'info' 
+            });
+            setTimeout(() => setToastCommand(null), 5000);
+          }
+        }
+        const patterns = snapshot.analysis?.patterns ?? [];
+        if (snapshot.analysis?.summary || patterns.length > 0) {
+          const analysisMessage: Message = {
+            id: `snapshot-${Date.now()}`,
+            role: 'assistant',
+            content: `📈 Chart Analysis:\n${snapshot.analysis?.summary || ''}\n\nDetected ${patterns.length} patterns with ${snapshot.vision_model || 'vision model'}`,
+            timestamp: new Date().toLocaleTimeString(),
+            provider: 'agent',
+            data: { snapshot: snapshot.analysis }
+          };
+          setMessages(prev => [...prev, analysisMessage]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch chart snapshot:', error);
+    }
+  }, [chartTimeframe]);
+
+  // Function to validate a pattern
+  const validatePattern = useCallback((patternId: string, validation: 'accepted' | 'rejected') => {
+    setPatternValidations(prev => ({
+      ...prev,
+      [patternId]: validation
+    }));
+    
+    // Show feedback
+    setToastCommand({ 
+      command: `Pattern ${validation === 'accepted' ? '✅ Accepted' : '❌ Rejected'}`, 
+      type: validation === 'accepted' ? 'success' : 'info' 
+    });
+    setTimeout(() => setToastCommand(null), 2000);
+  }, []);
   
   // Cleanup on provider switch
   useEffect(() => {
@@ -404,31 +473,41 @@ export const TradingDashboardSimple: React.FC = () => {
   }, [voiceProvider]);
 
   // Conditional hook mounting - only mount the active provider
-  const agentVoiceHook = voiceProvider === 'agent' ? useAgentVoiceConversation({
+  const agentVoice = useAgentVoiceConversation({
     apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
     onMessage: (message) => {
-      const msg: Message = {
+      const formattedMessage: Message = {
         id: message.id,
         role: message.role,
         content: message.content,
         timestamp: new Date(message.timestamp).toLocaleTimeString(),
-        provider: 'agent' as const,  // Add provider tracking
-        data: message.data
+        provider: 'agent',
+        data: message.data,
       };
-      setMessages(prev => [...prev, msg]);
-      
-      // Show tools used in toast for assistant messages
-      if (message.role === 'assistant' && message.toolsUsed && message.toolsUsed.length > 0) {
+      setMessages(prev => [...prev, formattedMessage]);
+
+      if (message.role === 'assistant' && message.toolsUsed?.length) {
         setToastCommand({ command: `🔧 Tools: ${message.toolsUsed.join(', ')}`, type: 'info' });
         setTimeout(() => setToastCommand(null), 3000);
       }
 
       if (message.role === 'assistant') {
-        const chartCommands = message.data?.chart_commands as string[] | undefined;
-        if (Array.isArray(chartCommands) && chartCommands.length > 0) {
+        const rawCommands = message.data?.chart_commands;
+        const chartCommands = Array.isArray(rawCommands) ? rawCommands : [];
+        if (chartCommands.length > 0) {
           enhancedChartControl.processEnhancedResponse(chartCommands.join(' ')).catch(err => {
             console.error('Failed to execute chart commands from message data:', err);
           });
+
+          const loadCommand = chartCommands.find(cmd => cmd.startsWith('LOAD:'));
+          if (loadCommand) {
+            const symbol = loadCommand.split(':')[1];
+            if (symbol) {
+              setTimeout(() => {
+                fetchAndApplySnapshot(symbol);
+              }, 1000);
+            }
+          }
         }
       }
     },
@@ -438,106 +517,76 @@ export const TradingDashboardSimple: React.FC = () => {
       setTimeout(() => setToastCommand(null), 4000);
     },
     onThinking: (thinking) => {
-      // Show thinking indicator in UI if needed
       console.log('Agent thinking:', thinking);
     }
-  }) : null;
+  });
 
-  // ElevenLabs conversation hook - only mount when active
-  const elevenLabsHook = voiceProvider === 'elevenlabs' ? useElevenLabsConversation({
-    apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
-    onUserTranscript: handleUserTranscript,
-    onAgentResponse: handleAgentResponse,
-    onConnectionChange: handleConnectionChange
-  }) : null;
-
-  // OpenAI Realtime conversation hook - only mount when active
-  const openAIHook = voiceProvider === 'openai' ? useOpenAIRealtimeConversation({
+  const elevenLabs = useElevenLabsConversation({
     apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
     onUserTranscript: handleUserTranscript,
     onAgentResponse: handleAgentResponse,
     onConnectionChange: handleConnectionChange,
-    onToolCall: (toolName: string, args: any) => {
+  });
+
+  const openAIRealtime = useOpenAIRealtimeConversation({
+    apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
+    onUserTranscript: handleUserTranscript,
+    onAgentResponse: handleAgentResponse,
+    onConnectionChange: handleConnectionChange,
+    onToolCall: (toolName: string, args: Record<string, unknown>) => {
       console.log('OpenAI tool call:', toolName, args);
       setToastCommand({ command: `🔧 Tool: ${toolName}`, type: 'info' });
       setTimeout(() => setToastCommand(null), 2000);
     },
-    onToolResult: (toolName: string, result: any) => {
+    onToolResult: (toolName: string, result: unknown) => {
       console.log('OpenAI tool result:', toolName, result);
       setToastCommand({ command: `✅ Tool completed: ${toolName}`, type: 'success' });
       setTimeout(() => setToastCommand(null), 2000);
     }
-  }) : null;
+  });
 
-  // Use the appropriate provider hook (with fallback to avoid null errors)
-  const currentHook = agentVoiceHook || elevenLabsHook || openAIHook || {
-    isConnected: false,
-    isLoading: false,
-    sendTextMessage: () => {},
-    messages: [],
-    connect: () => {},
-    disconnect: () => {},
-    startConversation: () => {},
-    stopConversation: () => {},
-    sendAudioChunk: () => {}
-  };
-  
-  // Handle different function names from different hooks
-  const {
-    isConnected,
-    isLoading: isConnecting,
-    sendTextMessage,
-    messages: hookMessages
-  } = currentHook;
-  
-  // Map function names (agent hook uses connect/disconnect, others use startConversation/stopConversation)
-  const startConversation = voiceProvider === 'agent' ? 
-    (currentHook as any).connect : 
-    (currentHook as any).startConversation;
-  
-  const stopConversation = voiceProvider === 'agent' ? 
-    (currentHook as any).disconnect : 
-    (currentHook as any).stopConversation;
-  
-  const sendAudioChunk = (currentHook as any).sendAudioChunk;
+  const conversationProviders: Record<ConversationProviderKey, ConversationProviderState> = useMemo(() => ({
+    agent: {
+      provider: 'agent',
+      isConnected: agentVoice.isConnected,
+      isLoading: agentVoice.isLoading,
+      messages: messages.filter(message => message.provider === 'agent'),
+      startConversation: async () => {
+        await agentVoice.connect();
+      },
+      stopConversation: agentVoice.disconnect,
+      sendTextMessage: agentVoice.sendTextMessage,
+      sendAudioChunk: () => {},
+    },
+    elevenlabs: {
+      provider: 'elevenlabs',
+      isConnected: elevenLabs.isConnected,
+      isLoading: elevenLabs.isLoading,
+      messages: messages.filter(message => message.provider === 'elevenlabs'),
+      startConversation: () => elevenLabs.startConversation(),
+      stopConversation: elevenLabs.stopConversation,
+      sendTextMessage: elevenLabs.sendTextMessage,
+      sendAudioChunk: elevenLabs.sendAudioChunk,
+    },
+    openai: {
+      provider: 'openai',
+      isConnected: openAIRealtime.isConnected,
+      isLoading: openAIRealtime.isLoading,
+      messages: messages.filter(message => message.provider === 'openai'),
+      startConversation: () => openAIRealtime.startConversation(),
+      stopConversation: openAIRealtime.stopConversation,
+      sendTextMessage: openAIRealtime.sendTextMessage,
+      sendAudioChunk: openAIRealtime.sendAudioChunk,
+    },
+  }), [agentVoice.connect, agentVoice.disconnect, agentVoice.isConnected, agentVoice.isLoading, agentVoice.sendTextMessage, messages, elevenLabs.isConnected, elevenLabs.isLoading, elevenLabs.sendAudioChunk, elevenLabs.sendTextMessage, elevenLabs.startConversation, elevenLabs.stopConversation, openAIRealtime.isConnected, openAIRealtime.isLoading, openAIRealtime.sendAudioChunk, openAIRealtime.sendTextMessage, openAIRealtime.startConversation, openAIRealtime.stopConversation]);
 
-  // Create unified message thread with provider-aware deduplication
+  const currentConversation = conversationProviders[voiceProvider];
+  const isConversationConnected = currentConversation.isConnected;
+  const isConversationConnecting = currentConversation.isLoading && !currentConversation.isConnected;
+
   const unifiedMessages = useMemo(() => {
-    if (voiceProvider === 'agent') {
-      // Agent voice hook manages its own unified messages
-      return messages;
-    } else {
-      // Legacy providers: combine local text messages and voice transcripts
-      const allMessages = [...messages, ...hookMessages];
-      
-      // Provider-aware deduplication: only dedupe same provider + exact content within 2 seconds
-      const deduplicatedMessages = allMessages.filter((message, index, array) => {
-        const isDuplicate = array.findIndex((other, otherIndex) => {
-          if (otherIndex >= index) return false; // Only check earlier messages
-          
-          const messageTime = new Date(message.timestamp).getTime();
-          const otherTime = new Date(other.timestamp).getTime();
-          const timeDiff = Math.abs(messageTime - otherTime);
-          
-          // Only dedupe if same provider (or both missing provider) AND same content
-          const sameProvider = message.provider === other.provider || 
-                              (!message.provider && !other.provider);
-          
-          return sameProvider &&
-                 message.role === other.role && 
-                 message.content === other.content && 
-                 timeDiff < 2000; // Within 2 seconds
-        });
-        
-        return isDuplicate === -1; // Keep if no duplicate found
-      });
-    
-      // Sort by timestamp for chronological order
-      return deduplicatedMessages.sort((a, b) => 
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
-    }
-  }, [messages, hookMessages, voiceProvider]);
+    return [...messages].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  }, [messages]);
 
   // Track previous provider to only disconnect on actual provider changes
   const prevProviderRef = useRef(voiceProvider);
@@ -546,140 +595,26 @@ export const TradingDashboardSimple: React.FC = () => {
   useEffect(() => {
     const prevProvider = prevProviderRef.current;
     const currentProvider = voiceProvider;
-    
+
     console.log(`Voice provider switched from ${prevProvider} to: ${currentProvider}`);
-    
-    // Only disconnect if provider actually changed AND we're connected
-    if (prevProvider !== currentProvider && isConnected) {
+
+    if (prevProvider !== currentProvider && conversationProviders[prevProvider].isConnected) {
       console.log('Disconnecting from previous provider due to provider switch');
-      stopConversation();
+      conversationProviders[prevProvider].stopConversation();
     }
-    
-    // Update ref for next comparison
+
     prevProviderRef.current = currentProvider;
-    
-    // Clear any lingering UI states only on actual provider change
+
     if (prevProvider !== currentProvider) {
       setIsRecording(false);
       setIsListening(false);
       setInputText('');
     }
-  }, [voiceProvider, stopConversation, isConnected]);
+  }, [voiceProvider, conversationProviders]);
 
-  // Convert Float32 PCM to Int16 PCM (required by ElevenLabs)
-  const convertFloat32ToInt16 = (float32Array: Float32Array): Int16Array => {
-    const int16Array = new Int16Array(float32Array.length);
-    for (let i = 0; i < float32Array.length; i++) {
-      const s = Math.max(-1, Math.min(1, float32Array[i]));
-      int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    return int16Array;
-  };
-
-  // Start voice recording
-  const startVoiceRecording = useCallback(async () => {
-    if (!isConnected) {
-      console.log('Cannot start recording - not connected to ElevenLabs');
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      
-      audioContextRef.current = new AudioContext({ sampleRate: 16000 });
-      
-      // Load the AudioWorklet module
-      await audioContextRef.current.audioWorklet.addModule('/audio-processor.js');
-      
-      // Create AudioWorklet node
-      audioWorkletRef.current = new AudioWorkletNode(audioContextRef.current, 'audio-processor');
-      
-      // Set up message handling from the audio processor
-      audioWorkletRef.current.port.onmessage = (event) => {
-        if (event.data.type === 'audio') {
-          // Process audio buffer
-          const inputData = event.data.buffer;
-          
-          // Only send audio if there's actual sound (not silence)
-          const sum = inputData.reduce((acc, val) => acc + Math.abs(val), 0);
-          const level = sum / inputData.length;
-          
-          if (level > 0.001) {
-            // Convert and send audio
-            const pcm16 = convertFloat32ToInt16(inputData);
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
-            sendAudioChunk(base64);
-          }
-        } else if (event.data.type === 'volume') {
-          // Update audio level visualization
-          setAudioLevel(event.data.level);
-        }
-      };
-      
-      // Connect audio nodes
-      sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
-      sourceRef.current.connect(audioWorkletRef.current);
-      audioWorkletRef.current.connect(audioContextRef.current.destination);
-      
-      setIsRecording(true);
-      setIsListening(true);
-      
-      // Start recording timer
-      let seconds = 0;
-      recordingTimerRef.current = setInterval(() => {
-        seconds++;
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        setRecordingTime(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
-      }, 1000);
-    } catch (error) {
-      console.error('Failed to start recording:', error);
-      alert('Failed to access microphone. Please check your permissions.');
-    }
-  }, [isConnected, startConversation, sendAudioChunk]);
-
-  // Stop voice recording
-  const stopVoiceRecording = useCallback(() => {
-    // Clean up audio nodes
-    if (audioWorkletRef.current) {
-      audioWorkletRef.current.disconnect();
-      audioWorkletRef.current.port.close();
-      audioWorkletRef.current = null;
-    }
-    
-    if (sourceRef.current) {
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
-    }
-    
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    
-    // Stop media stream
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    
-    // Clear timer
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
-    
-    setIsRecording(false);
-    setIsListening(false);
-    setRecordingTime('00:00');
-    setAudioLevel(0);
-  }, []);
-
-  
   // Single connect/disconnect handler with debounce
   const handleConnectToggle = async () => {
-    console.log('🎯 handleConnectToggle called, voiceProvider:', voiceProvider, 'isConnected:', isConnected);
+    console.log('🎯 handleConnectToggle called, voiceProvider:', voiceProvider, 'isConnected:', currentConversation.isConnected);
     
     const now = Date.now();
     
@@ -691,11 +626,11 @@ export const TradingDashboardSimple: React.FC = () => {
     
     connectionAttemptTimeRef.current = now;
     
-    if (isConnected) {
+    if (currentConversation.isConnected) {
       console.log('Disconnecting...');
       // Disconnect everything
       stopVoiceRecording();
-      stopConversation();
+      currentConversation.stopConversation();
       hasStartedRecordingRef.current = false;
     } else {
       const providerName = voiceProvider === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI Realtime';
@@ -704,7 +639,7 @@ export const TradingDashboardSimple: React.FC = () => {
       
       // Connect (voice recording will auto-start via useEffect when connected)
       try {
-        await startConversation();
+        await currentConversation.startConversation();
         console.log('✅ startConversation() completed');
       } catch (error) {
         console.error('❌ Failed to connect:', error);
@@ -732,7 +667,7 @@ export const TradingDashboardSimple: React.FC = () => {
     setTimeout(async () => {
       console.log('Connecting directly to OpenAI Realtime...');
       try {
-        await startConversation();
+        await currentConversation.startConversation();
       } catch (error) {
         console.error('Failed to connect to OpenAI:', error);
         alert('Failed to connect to OpenAI Realtime. Please check your connection and try again.');
@@ -744,7 +679,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const handleSendTextMessage = () => {
     console.log('🎯 handleSendTextMessage called');
     console.log('📝 Input text:', inputText);
-    console.log('🔌 Is connected:', isConnected);
+    console.log('🔌 Is connected:', currentConversation.isConnected);
     console.log('🎤 Voice provider:', voiceProvider);
     
     if (inputText.trim()) {
@@ -873,8 +808,8 @@ export const TradingDashboardSimple: React.FC = () => {
         case 'elevenlabs':
         case 'openai':
           // Voice providers require a live connection
-          if (isConnected) {
-            sendTextMessage(messageText);
+          if (currentConversation.isConnected) {
+            currentConversation.sendTextMessage(messageText);
           } else {
             setTimeout(() => {
               const offlineMessage = {
@@ -882,8 +817,8 @@ export const TradingDashboardSimple: React.FC = () => {
                 role: 'assistant' as const,
                 content: 'Please connect the voice assistant (mic) to use voice providers.',
                 timestamp: new Date().toISOString(),
-                provider: voiceProvider
-              } as any;
+                provider: voiceProvider,
+              };
               setMessages(prev => [...prev, offlineMessage]);
             }, 300);
           }
@@ -1046,8 +981,9 @@ export const TradingDashboardSimple: React.FC = () => {
       console.log('IndicatorContext not available - agent indicator control disabled');
     }
     
-    // Register with enhanced service
-    enhancedChartControl.registerCallbacks({
+    // Register with enhanced service (TODO: Implement registerCallbacks method)
+    if (typeof (enhancedChartControl as any).registerCallbacks === 'function') {
+    (enhancedChartControl as any).registerCallbacks({
       onSymbolChange: (symbol: string, metadata?: { assetType?: 'stock' | 'crypto' }) => {
         console.log('Voice command: Changing symbol to', symbol, 'Type:', metadata?.assetType);
         
@@ -1074,9 +1010,6 @@ export const TradingDashboardSimple: React.FC = () => {
           addToWatchlist(upperSymbol.replace('-USD', '')).then(() => {
             // If successfully added, then select it
             setSelectedSymbol(upperSymbol);
-            if (metadata?.assetType) {
-              setAssetType(metadata.assetType);
-            }
             fetchStockAnalysis(upperSymbol);
           }).catch(() => {
             // If failed to add, show error
@@ -1088,9 +1021,6 @@ export const TradingDashboardSimple: React.FC = () => {
         
         // Valid symbol, proceed with update
         setSelectedSymbol(upperSymbol);
-        if (metadata?.assetType) {
-          setAssetType(metadata.assetType);
-        }
         fetchStockAnalysis(upperSymbol);
         const icon = metadata?.assetType === 'crypto' ? '₿' : '📈';
         setToastCommand({ command: `${icon} Symbol: ${upperSymbol}`, type: 'success' });
@@ -1118,7 +1048,6 @@ export const TradingDashboardSimple: React.FC = () => {
       },
       onStyleChange: (style: 'candles' | 'line' | 'area') => {
         console.log('Voice command: Chart style changed to', style);
-        setChartStyle(style);
         const styleNames = {
           'candles': 'Candlestick',
           'line': 'Line Chart',
@@ -1149,6 +1078,7 @@ export const TradingDashboardSimple: React.FC = () => {
         });
       }
     });
+    }
   }, []);
 
   // Track if we've already started recording to prevent duplicates
@@ -1156,35 +1086,33 @@ export const TradingDashboardSimple: React.FC = () => {
   const connectionAttemptTimeRef = useRef<number>(0);
   const isMountedRef = useRef(true);
   
+  // Process backend chart commands when snapshot is updated
+  useEffect(() => {
+    if (currentSnapshot?.chart_commands?.length > 0) {
+      console.log('Executing backend chart commands:', currentSnapshot.chart_commands);
+      enhancedChartControl.processEnhancedResponse(
+        currentSnapshot.chart_commands.join(' ')
+      ).catch(err => {
+        console.error('Failed to execute backend chart commands:', err);
+      });
+    }
+  }, [currentSnapshot]);
+  
   // Auto-start voice recording when connected - DISABLED to prevent text/audio conflicts
   // Users should manually start voice recording when needed
   useEffect(() => {
-    let isMounted = true;
-    let timer: NodeJS.Timeout;
-    
-    // DISABLED: Auto-start causes conflicts when user wants to type text
-    // if (isConnected && !isRecording && !hasStartedRecordingRef.current) {
-    //   console.log('Connection established, starting voice recording...');
-    //   hasStartedRecordingRef.current = true;
-    //   
-    //   // Small delay to ensure everything is ready
-    //   timer = setTimeout(() => {
-    //     if (isMounted && isConnected && !isRecording) {
-    //       startVoiceRecording();
-    //     }
-    //   }, 500);
-    // }
-    
-    // Reset flag when disconnected
-    if (!isConnected) {
+    let timer: NodeJS.Timeout | null = null;
+
+    if (!currentConversation.isConnected) {
       hasStartedRecordingRef.current = false;
     }
-    
+
     return () => {
-      isMounted = false;
-      if (timer) clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
-  }, [isConnected, isRecording, startVoiceRecording]); // Include all dependencies
+  }, [currentConversation.isConnected]);
 
   // Note: No cleanup on unmount for WebSocket connection
   // The ConnectionManager is a singleton that persists across component re-renders
@@ -1238,7 +1166,7 @@ export const TradingDashboardSimple: React.FC = () => {
         
         <div className="header-controls">
           <span className="status-indicator">
-            {isConnected ? '🟢' : '⚪'}
+            {isConversationConnected ? '🟢' : '⚪'}
           </span>
         </div>
       </header>
@@ -1321,20 +1249,74 @@ export const TradingDashboardSimple: React.FC = () => {
 
                 <div className="pattern-section">
                   <h4>PATTERN DETECTION</h4>
-                  {detectedPatterns.length === 0 ? (
-                    <div className="pattern-empty">No high-confidence patterns detected right now.</div>
-                  ) : (
-                    detectedPatterns.map((pattern, index) => (
-                      <div key={`${pattern.type}-${index}`} className="pattern-box">
-                        <div className="pattern-name">{pattern.description || pattern.type}</div>
-                        <div className="pattern-conf">
-                          Confidence: {pattern.confidence ? `${Math.round(pattern.confidence)}%` : 'N/A'}
+                  
+                  {/* Local Patterns */}
+                  {detectedPatterns.length > 0 && (
+                    <>
+                      <div className="pattern-source-label">Local Analysis</div>
+                      {detectedPatterns.map((pattern, index) => (
+                        <div key={`local-${pattern.type}-${index}`} className="pattern-box">
+                          <div className="pattern-name">{pattern.description || pattern.type}</div>
+                          <div className="pattern-conf">
+                            Confidence: {pattern.confidence ? `${Math.round(pattern.confidence)}%` : 'N/A'}
+                          </div>
+                          {pattern.agent_explanation && (
+                            <div className="pattern-desc">{pattern.agent_explanation}</div>
+                          )}
                         </div>
-                        {pattern.agent_explanation && (
-                          <div className="pattern-desc">{pattern.agent_explanation}</div>
-                        )}
-                      </div>
-                    ))
+                      ))}
+                    </>
+                  )}
+                  
+                  {/* Backend Patterns with Validation */}
+                  {backendPatterns.length > 0 && (
+                    <>
+                      <div className="pattern-source-label">Server Analysis</div>
+                      {backendPatterns.map((pattern) => {
+                        const validation = patternValidations[pattern.id];
+                        return (
+                          <div 
+                            key={pattern.id} 
+                            className={`pattern-box backend-pattern ${validation ? `pattern-${validation}` : ''}`}
+                          >
+                            <div className="pattern-header">
+                              <div className="pattern-name">{pattern.type}</div>
+                              <div className="pattern-validation-controls">
+                                <button 
+                                  className={`pattern-btn accept ${validation === 'accepted' ? 'active' : ''}`}
+                                  onClick={() => validatePattern(pattern.id, 'accepted')}
+                                  title="Accept pattern"
+                                >
+                                  ✓
+                                </button>
+                                <button 
+                                  className={`pattern-btn reject ${validation === 'rejected' ? 'active' : ''}`}
+                                  onClick={() => validatePattern(pattern.id, 'rejected')}
+                                  title="Reject pattern"
+                                >
+                                  ✗
+                                </button>
+                              </div>
+                            </div>
+                            <div className="pattern-conf">
+                              Confidence: {pattern.confidence ? `${Math.round(pattern.confidence * 100)}%` : 'N/A'}
+                            </div>
+                            {pattern.description && (
+                              <div className="pattern-desc">{pattern.description}</div>
+                            )}
+                            {pattern.targets && pattern.targets.length > 0 && (
+                              <div className="pattern-targets">
+                                Targets: {pattern.targets.map((t: number) => `$${t.toFixed(2)}`).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                  
+                  {detectedPatterns.length === 0 && backendPatterns.length === 0 && (
+                    <div className="pattern-empty">No patterns detected. Try asking for chart analysis.</div>
                   )}
                 </div>
               </>
@@ -1364,7 +1346,7 @@ export const TradingDashboardSimple: React.FC = () => {
           </div>
 
           {/* Voice Status Bar - Minimal */}
-          {isConnected && (
+          {isConversationConnected && (
             <div className="voice-status-bar" data-testid="voice-interface">
               <div className="audio-level-mini">
                 <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
@@ -1387,7 +1369,7 @@ export const TradingDashboardSimple: React.FC = () => {
             <div className="conversation-messages-compact">
               {unifiedMessages.length === 0 ? (
                 <div className="no-messages-state">
-                  <p>🎤 {isConnected ? 'Listening...' : 'Click mic to start'}</p>
+                  <p>🎤 {isConversationConnected ? 'Listening...' : 'Click mic to start'}</p>
                 </div>
                 ) : (
                   unifiedMessages.map((msg) => (
@@ -1420,7 +1402,7 @@ export const TradingDashboardSimple: React.FC = () => {
               <input
                 type="text"
                 className="voice-text-input"
-                placeholder={isConnected ? "Type a message..." : "Connect to send messages"}
+                placeholder={isConversationConnected ? "Type a message..." : "Connect to send messages"}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyPress={(e) => {
@@ -1449,17 +1431,17 @@ export const TradingDashboardSimple: React.FC = () => {
       
       {/* Floating Voice Action Button */}
       <button 
-        className={`voice-fab ${isConnected ? 'active' : ''} ${isConnecting ? 'connecting' : ''}`}
+        className={`voice-fab ${isConversationConnected ? 'active' : ''} ${isConversationConnecting ? 'connecting' : ''}`}
         onClick={handleConnectToggle}
-        title={isConnected ? 'Disconnect Voice' : 'Connect Voice'}
+        title={isConversationConnected ? 'Disconnect Voice' : 'Connect Voice'}
         data-testid="voice-fab"
       >
-        {isConnecting ? '⌛' : isConnected ? '🎤' : '🎙️'}
+        {isConversationConnecting ? '⌛' : isConversationConnected ? '🎤' : '🎙️'}
       </button>
       
       {/* Voice Command Helper - Shows command history and suggestions */}
       <VoiceCommandHelper 
-        isVisible={isConnected}
+        isVisible={isConversationConnected}
         position="right"
         maxHeight={400}
       />

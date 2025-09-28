@@ -7,23 +7,27 @@
 import { IChartApi, ISeriesApi, SeriesType, LineSeries } from 'lightweight-charts';
 import { chartControlService } from './chartControlService';
 
-interface IndicatorCommand {
-  action: 'enable' | 'disable' | 'configure' | 'preset' | 'explain';
-  indicator?: string;
-  parameters?: any;
-  preset?: 'basic' | 'advanced' | 'momentum' | 'trend' | 'volatility';
-}
-
-interface DrawingCommand {
-  action: 'trendline' | 'horizontal' | 'support' | 'resistance' | 'annotation' | 'clear';
-  points?: Array<{ time: number; price: number }>;
-  text?: string;
-  style?: {
-    color?: string;
-    lineWidth?: number;
-    lineStyle?: number;
-  };
-}
+type ParsedDrawingCommand =
+  | { action: 'pattern_level'; patternId: string; levelType: string; price: number }
+  | { action: 'pattern_target'; patternId: string; price: number }
+  | {
+      action: 'pattern_trendline';
+      patternId: string;
+      startTime: number;
+      startPrice: number;
+      endTime: number;
+      endPrice: number;
+    }
+  | { action: 'pattern_annotation'; patternId: string; status: string }
+  | { action: 'clear_pattern'; patternId: string }
+  | { action: 'clear_all' }
+  | { action: 'support'; price: number }
+  | { action: 'resistance'; price: number }
+  | { action: 'trendline'; startPrice: number; startTime: number; endPrice: number; endTime: number }
+  | { action: 'fibonacci'; high: number; low: number }
+  | { action: 'entry'; price: number }
+  | { action: 'target'; price: number }
+  | { action: 'stoploss'; price: number };
 
 class EnhancedChartControl {
   private chartRef: IChartApi | null = null;
@@ -564,73 +568,214 @@ class EnhancedChartControl {
   /**
    * Parse drawing commands from agent response
    */
-  private parseDrawingCommands(response: string): any[] {
-    const commands = [];
-    const lines = response.split(/\s+/);
-    
-    for (const line of lines) {
-      if (line.startsWith('SUPPORT:')) {
-        const price = parseFloat(line.substring(8));
-        if (!isNaN(price)) {
-          commands.push({ action: 'support', price });
+  private parseDrawingCommands(response: string): ParsedDrawingCommand[] {
+    const commands: ParsedDrawingCommand[] = [];
+    const tokens = response.split(/\s+/).filter(Boolean);
+
+    for (const token of tokens) {
+      if (token.startsWith('DRAW:')) {
+        const parts = token.split(':');
+        if (parts.length < 2) continue;
+
+        const subType = parts[1];
+        switch (subType) {
+          case 'LEVEL': {
+            if (parts.length >= 5) {
+              const [, , patternId, levelType, priceRaw] = parts;
+              const price = parseFloat(priceRaw);
+              if (patternId && levelType && !Number.isNaN(price)) {
+                commands.push({ action: 'pattern_level', patternId, levelType, price });
+              }
+            }
+            break;
+          }
+          case 'TARGET': {
+            if (parts.length >= 4) {
+              const [, , patternId, priceRaw] = parts;
+              const price = parseFloat(priceRaw);
+              if (patternId && !Number.isNaN(price)) {
+                commands.push({ action: 'pattern_target', patternId, price });
+              }
+            }
+            break;
+          }
+          case 'TRENDLINE': {
+            if (parts.length >= 7) {
+              const [, , patternId, startTimeRaw, startPriceRaw, endTimeRaw, endPriceRaw] = parts;
+              const startTime = parseInt(startTimeRaw, 10);
+              const startPrice = parseFloat(startPriceRaw);
+              const endTime = parseInt(endTimeRaw, 10);
+              const endPrice = parseFloat(endPriceRaw);
+              if (
+                patternId &&
+                !Number.isNaN(startTime) &&
+                !Number.isNaN(startPrice) &&
+                !Number.isNaN(endTime) &&
+                !Number.isNaN(endPrice)
+              ) {
+                commands.push({
+                  action: 'pattern_trendline',
+                  patternId,
+                  startTime,
+                  startPrice,
+                  endTime,
+                  endPrice,
+                });
+              }
+            }
+            break;
+          }
+          default:
+            break;
         }
-      } else if (line.startsWith('RESISTANCE:')) {
-        const price = parseFloat(line.substring(11));
-        if (!isNaN(price)) {
-          commands.push({ action: 'resistance', price });
-        }
-      } else if (line.startsWith('FIBONACCI:')) {
-        const parts = line.substring(10).split(':');
-        if (parts.length === 2) {
-          const high = parseFloat(parts[0]);
-          const low = parseFloat(parts[1]);
-          if (!isNaN(high) && !isNaN(low)) {
-            commands.push({ action: 'fibonacci', high, low });
+        continue;
+      }
+
+      if (token.startsWith('ANNOTATE:PATTERN:')) {
+        const parts = token.split(':');
+        if (parts.length >= 4) {
+          const patternId = parts[2];
+          const status = parts[3];
+          if (patternId && status) {
+            commands.push({ action: 'pattern_annotation', patternId, status });
           }
         }
-      } else if (line.startsWith('TRENDLINE:')) {
-        const parts = line.substring(10).split(':');
-        if (parts.length >= 4) {
-          commands.push({
-            action: 'trendline',
-            startPrice: parseFloat(parts[0]),
-            startTime: parseInt(parts[1]),
-            endPrice: parseFloat(parts[2]),
-            endTime: parseInt(parts[3])
-          });
+        continue;
+      }
+
+      if (token.startsWith('CLEAR:PATTERN:')) {
+        const parts = token.split(':');
+        if (parts.length >= 3) {
+          const patternId = parts[2];
+          if (patternId) {
+            commands.push({ action: 'clear_pattern', patternId });
+          }
         }
+        continue;
+      }
+
+      if (token === 'CLEAR:ALL') {
+        commands.push({ action: 'clear_all' });
+        continue;
+      }
+
+      if (token.startsWith('SUPPORT:')) {
+        const price = parseFloat(token.substring(8));
+        if (!Number.isNaN(price)) {
+          commands.push({ action: 'support', price });
+        }
+        continue;
+      }
+
+      if (token.startsWith('RESISTANCE:')) {
+        const price = parseFloat(token.substring(11));
+        if (!Number.isNaN(price)) {
+          commands.push({ action: 'resistance', price });
+        }
+        continue;
+      }
+
+      if (token.startsWith('FIBONACCI:')) {
+        const [highRaw, lowRaw] = token.substring(10).split(':');
+        const high = parseFloat(highRaw);
+        const low = parseFloat(lowRaw);
+        if (!Number.isNaN(high) && !Number.isNaN(low)) {
+          commands.push({ action: 'fibonacci', high, low });
+        }
+        continue;
+      }
+
+      if (token.startsWith('TRENDLINE:')) {
+        const parts = token.substring(10).split(':');
+        if (parts.length >= 4) {
+          const [startPriceRaw, startTimeRaw, endPriceRaw, endTimeRaw] = parts;
+          const startPrice = parseFloat(startPriceRaw);
+          const startTime = parseInt(startTimeRaw, 10);
+          const endPrice = parseFloat(endPriceRaw);
+          const endTime = parseInt(endTimeRaw, 10);
+          if (
+            !Number.isNaN(startPrice) &&
+            !Number.isNaN(startTime) &&
+            !Number.isNaN(endPrice) &&
+            !Number.isNaN(endTime)
+          ) {
+            commands.push({ action: 'trendline', startPrice, startTime, endPrice, endTime });
+          }
+        }
+        continue;
+      }
+
+      if (token.startsWith('ENTRY:')) {
+        const price = parseFloat(token.substring(6));
+        if (!Number.isNaN(price)) {
+          commands.push({ action: 'entry', price });
+        }
+        continue;
+      }
+
+      if (token.startsWith('TARGET:')) {
+        const price = parseFloat(token.substring(7));
+        if (!Number.isNaN(price)) {
+          commands.push({ action: 'target', price });
+        }
+        continue;
+      }
+
+      if (token.startsWith('STOPLOSS:')) {
+        const price = parseFloat(token.substring(9));
+        if (!Number.isNaN(price)) {
+          commands.push({ action: 'stoploss', price });
+        }
+        continue;
       }
     }
-    
+
     return commands;
   }
-  
+
   /**
    * Execute a drawing command
    */
-  private executeDrawingCommand(drawing: any): string | null {
+  private executeDrawingCommand(drawing: ParsedDrawingCommand): string | null {
     try {
-      switch(drawing.action) {
-        case 'support':
-          this.highlightLevel(drawing.price, 'support');
-          return `Support level at ${drawing.price}`;
-          
-        case 'resistance':
-          this.highlightLevel(drawing.price, 'resistance');
-          return `Resistance level at ${drawing.price}`;
-        
-        case 'entry':
-          this.highlightLevel(drawing.price, 'pivot', 'Entry');
-          return `Entry level at ${drawing.price}`;
-        
-        case 'target':
-          this.highlightLevel(drawing.price, 'pivot', 'Target');
-          return `Target level at ${drawing.price}`;
-        
-        case 'stoploss':
-          this.highlightLevel(drawing.price, 'pivot', 'Stop');
-          return `Stop loss at ${drawing.price}`;
-          
+      switch (drawing.action) {
+        case 'pattern_level': {
+          const levelType = drawing.levelType ? drawing.levelType.toLowerCase() : 'pivot';
+          const mappedType: 'support' | 'resistance' | 'pivot' =
+            levelType === 'support' ? 'support' : levelType === 'resistance' ? 'resistance' : 'pivot';
+          const label = `${drawing.patternId} ${levelType}`.trim();
+          return this.highlightLevel(drawing.price, mappedType, label);
+        }
+
+        case 'pattern_target': {
+          const label = drawing.patternId ? `${drawing.patternId} target` : 'Target';
+          return this.highlightLevel(drawing.price, 'pivot', label);
+        }
+
+        case 'pattern_trendline':
+          return this.drawTrendLine(
+            drawing.startTime,
+            drawing.startPrice,
+            drawing.endTime,
+            drawing.endPrice,
+            `${drawing.patternId} trend`
+          );
+
+        case 'pattern_annotation':
+          this.overlayControls.highlightPattern?.(drawing.patternId, {
+            title: `${drawing.patternId} ${drawing.status}`,
+            description: `Pattern status updated to ${drawing.status}`,
+          });
+          return `Annotated ${drawing.patternId} as ${drawing.status}`;
+
+        case 'clear_pattern':
+          this.clearDrawings();
+          return `Cleared drawings for ${drawing.patternId}`;
+
+        case 'clear_all':
+          this.clearDrawings();
+          return 'Cleared all pattern drawings';
+
         case 'fibonacci':
           // Calculate and draw Fibonacci levels
           const fibLevels = [
@@ -659,7 +804,27 @@ class EnhancedChartControl {
             drawing.endTime,
             drawing.endPrice
           );
-          return `Trend line drawn`;
+          return 'Trend line drawn';
+
+        case 'support':
+          this.highlightLevel(drawing.price, 'support');
+          return `Support level at ${drawing.price}`;
+
+        case 'resistance':
+          this.highlightLevel(drawing.price, 'resistance');
+          return `Resistance level at ${drawing.price}`;
+
+        case 'entry':
+          this.highlightLevel(drawing.price, 'pivot', 'Entry');
+          return `Entry level at ${drawing.price}`;
+
+        case 'target':
+          this.highlightLevel(drawing.price, 'pivot', 'Target');
+          return `Target level at ${drawing.price}`;
+
+        case 'stoploss':
+          this.highlightLevel(drawing.price, 'pivot', 'Stop');
+          return `Stop loss at ${drawing.price}`;
           
         default:
           return null;

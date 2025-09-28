@@ -50,6 +50,27 @@ interface AgentHealth {
   error?: string;
 }
 
+interface ChartSnapshot {
+  symbol: string;
+  timeframe: string;
+  captured_at: string;
+  chart_commands?: string[];
+  metadata?: Record<string, any>;
+  vision_model?: string;
+  analysis?: {
+    patterns?: Array<{
+      type: string;
+      confidence: number;
+      coordinates?: any;
+      description?: string;
+      targets?: number[];
+    }>;
+    summary?: string;
+    indicators?: Record<string, any>;
+  };
+  analysis_error?: string;
+}
+
 class AgentOrchestratorService {
   private baseUrl: string;
   private sessionId: string;
@@ -131,6 +152,43 @@ class AgentOrchestratorService {
     }
 
     return await response.json();
+  }
+
+  /**
+   * Get the latest chart snapshot for a symbol
+   * @param symbol The stock symbol (e.g., "AAPL")
+   * @param timeframe Optional timeframe filter (e.g., "1D", "1H")
+   * @param includeImage Whether to include the base64 image in response
+   */
+  async getChartSnapshot(
+    symbol: string,
+    timeframe?: string,
+    includeImage: boolean = false
+  ): Promise<ChartSnapshot | null> {
+    const params = new URLSearchParams();
+    if (timeframe) params.append('timeframe', timeframe);
+    if (includeImage) params.append('include_image', 'true');
+    
+    const url = `${this.baseUrl}/api/agent/chart-snapshot/${symbol.toUpperCase()}${params.toString() ? '?' + params.toString() : ''}`;
+    
+    try {
+      const response = await fetch(url);
+      
+      if (response.status === 404) {
+        // No snapshot available for this symbol
+        return null;
+      }
+      
+      if (!response.ok) {
+        console.error(`Chart snapshot fetch failed: ${response.status} ${response.statusText}`);
+        return null;
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching chart snapshot:', error);
+      return null;
+    }
   }
 
   /**
@@ -278,4 +336,4 @@ interface StreamChunk {
 
 // Export singleton instance
 export const agentOrchestratorService = new AgentOrchestratorService();
-export type { AgentResponse, AgentQuery, AgentHealth, StructuredMarketAnalysis, StreamChunk };
+export type { AgentResponse, AgentQuery, AgentHealth, StructuredMarketAnalysis, StreamChunk, ChartSnapshot };

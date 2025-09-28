@@ -109,12 +109,15 @@ class ChartImageAnalyzer:
         config = self.models[model_key]
 
         cleaned_image = image_base64.strip()
+        mime_type = "image/png"
         if cleaned_image.startswith("data:image"):
-            # Strip data URL prefix
+            # Preserve MIME type and strip data URL prefix
             try:
-                cleaned_image = cleaned_image.split(',', 1)[1]
-            except IndexError:
-                cleaned_image = image_base64
+                header, cleaned_image = cleaned_image.split(',', 1)
+                mime_type = header.split(';', 1)[0].split(':', 1)[1] or mime_type
+            except (IndexError, ValueError):
+                cleaned_image = cleaned_image.split(',', 1)[-1]
+        image_data_url = f"data:{mime_type};base64,{cleaned_image}"
 
         prompt = user_context.strip() if user_context else DEFAULT_USER_PROMPT
 
@@ -144,7 +147,7 @@ class ChartImageAnalyzer:
                                 {"type": "input_text", "text": prompt},
                                 {
                                     "type": "input_image",
-                                    "image_base64": cleaned_image,
+                                    "image_url": image_data_url,
                                     "detail": config.detail,
                                 },
                             ],
@@ -228,6 +231,8 @@ class ChartImageAnalyzer:
                     "evidence": item.get("evidence") or item.get("notes"),
                     "recommended_action": item.get("recommended_action"),
                     "key_levels": item.get("key_levels", {}),
+                    "targets": item.get("targets") or [],
+                    "trendline_points": item.get("trendline_points") or item.get("trendline") or item.get("anchors"),
                 }
             )
 

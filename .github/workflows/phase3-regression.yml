@@ -82,9 +82,14 @@ jobs:
       - name: Start Backend Service
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://test.supabase.co' }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'test-key' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'test-key' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'test-key' }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY || 'test-key' }}
+          ELEVENLABS_AGENT_ID: ${{ secrets.ELEVENLABS_AGENT_ID || 'test-agent' }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY || 'test-key' }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY || 'test-key' }}
         run: |
           cd backend
           uvicorn mcp_server:app --host 0.0.0.0 --port 8000 &
@@ -117,13 +122,11 @@ jobs:
             backend/phase3_regression_results.json
             backend/*.log
       
-      - name: Post Results to Slack (Optional)
-        if: failure()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          text: 'Phase 3 Regression Tests Failed! Check the logs.'
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-        
-      # Issue creation removed - requires custom action or GitHub App
-      # You can manually create issues or use a different notification method
+      # Slack notification removed - configure SLACK_WEBHOOK secret to enable
+      # - name: Post Results to Slack (Optional)
+      #   if: failure() && secrets.SLACK_WEBHOOK
+      #   uses: 8398a7/action-slack@v3
+      #   with:
+      #     status: ${{ job.status }}
+      #     text: 'Phase 3 Regression Tests Failed! Check the logs.'
+      #     webhook_url: ${{ secrets.SLACK_WEBHOOK }}

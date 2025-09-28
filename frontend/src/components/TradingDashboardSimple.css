@@ -2526,3 +2526,98 @@
 .voice-status-text {
   font-weight: 500;
 }
+
+/* Pattern Validation Controls */
+.pattern-source-label {
+  font-size: 10px;
+  color: #888;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  margin-top: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #333;
+}
+
+.backend-pattern {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.pattern-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.pattern-validation-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.pattern-btn {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #444;
+  background: transparent;
+  color: #888;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.pattern-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pattern-btn.accept {
+  color: #4ade80;
+  border-color: #4ade80;
+}
+
+.pattern-btn.accept:hover {
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.pattern-btn.accept.active {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+  font-weight: bold;
+}
+
+.pattern-btn.reject {
+  color: #f87171;
+  border-color: #f87171;
+}
+
+.pattern-btn.reject:hover {
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.pattern-btn.reject.active {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+  font-weight: bold;
+}
+
+.pattern-box.pattern-accepted {
+  border-color: #4ade80;
+  background: rgba(74, 222, 128, 0.05);
+}
+
+.pattern-box.pattern-rejected {
+  border-color: #f87171;
+  background: rgba(248, 113, 113, 0.05);
+  opacity: 0.6;
+}
+
+.pattern-targets {
+  font-size: 11px;
+  color: #fbbf24;
+  margin-top: 6px;
+  font-weight: 500;
+}

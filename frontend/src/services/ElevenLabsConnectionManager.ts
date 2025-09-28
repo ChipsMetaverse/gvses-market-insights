@@ -149,55 +149,58 @@ export class ElevenLabsConnectionManager {
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         console.log('[ConnectionManager] Message type:', data.type);
-        
+
+        const userTranscript = data.user_transcription_event?.user_transcript;
+        const agentResponse = data.agent_response_event?.agent_response;
+        const correctedResponse = data.agent_response_correction_event?.corrected_agent_response;
+        const audioBase64 = data.audio_event?.audio_base_64;
+        const pingEvent = data.ping_event;
+        const interruptionReason = data.interruption_event?.reason;
+
         switch (data.type) {
           case 'user_transcript':
-            const userTranscript = data.user_transcription_event?.user_transcript;
             if (userTranscript) {
               this.listeners.forEach(listener => {
                 listener.onUserTranscript?.(userTranscript);
               });
             }
             break;
-            
+
           case 'agent_response':
-            const agentResponse = data.agent_response_event?.agent_response;
             if (agentResponse) {
               this.listeners.forEach(listener => {
                 listener.onAgentResponse?.(agentResponse);
               });
             }
             break;
-            
+
           case 'agent_response_correction':
-            const correctedResponse = data.agent_response_correction_event?.corrected_agent_response;
             if (correctedResponse) {
               this.listeners.forEach(listener => {
                 listener.onAgentResponse?.(correctedResponse);
               });
             }
             break;
-            
+
           case 'audio':
-            const audioBase64 = data.audio_event?.audio_base_64;
             if (audioBase64) {
               this.listeners.forEach(listener => {
                 listener.onAudioChunk?.(audioBase64);
               });
             }
             break;
-            
-          case 'ping':
+
+          case 'ping': {
             // Respond to ping to keep connection alive
-            const eventId = data.ping_event?.event_id;
-            const pingMs = data.ping_event?.ping_ms || 0;
+            const eventId = pingEvent?.event_id;
+            const pingMs = pingEvent?.ping_ms ?? 0;
             console.log(`[ConnectionManager] Ping received - event_id: ${eventId}, delay: ${pingMs}ms`);
-            
+
             setTimeout(() => {
               if (ws.readyState === WebSocket.OPEN) {
                 const pongMessage = {
                   type: 'pong',
-                  event_id: eventId
+                  event_id: eventId,
                 };
                 console.log(`[ConnectionManager] Sending pong for event ${eventId}`);
                 ws.send(JSON.stringify(pongMessage));
@@ -206,9 +209,14 @@ export class ElevenLabsConnectionManager {
               }
             }, pingMs);
             break;
-            
+          }
+
           case 'interruption':
-            console.log('[ConnectionManager] Conversation interrupted:', data.interruption_event?.reason);
+            if (interruptionReason) {
+              console.log('[ConnectionManager] Conversation interrupted:', interruptionReason);
+            } else {
+              console.log('[ConnectionManager] Conversation interrupted with no reason provided');
+            }
             break;
         }
       };
