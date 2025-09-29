@@ -21,6 +21,8 @@ graph TD
         MarketAPI[/api/stock-*, /api/enhanced/*,\n/api/alpaca/*, /api/v1/dashboard*]
         SnapshotAPI[/api/agent/chart-snapshot]
         WSQuotes[WS /ws/quotes\n(market data stream)]
+        PatternConfidenceSvc[PatternConfidenceService\n(Phase 5 ML inference)]
+        CommandExtractor[ChartCommandExtractor\n(NLP → Chart Commands)]
     end
 
     subgraph Headless Layer
@@ -74,25 +76,35 @@ graph TD
     MetricsBuffer -->|hydrate dashboard| HeadlessWS
 
     %% Agent ↔ Market
+    AgentAPI --> PatternConfidenceSvc
+    AgentAPI --> CommandExtractor
     AgentAPI -->|tools| Factory
     Factory --> DirectSvc --> Yahoo
     Factory --> MarketMCP --> Yahoo
     MarketMCP --> CNBC
     Factory --> AlpacaMCP --> AlpacaAPI
+    
+    %% Chart Command Flow
+    CommandExtractor -->|extract commands| AgentAPI
+    AgentAPI -->|chart_commands| AgentSvc
+    AgentSvc -->|execute| ChartControl
 
     %% Optional persistence (legacy /ws path)
     FastAPI -. ConversationManager .-> Supabase
 ```
 
-### What Changed (Latest Updates - Sep 28, 2025)
-- **Phase 3 Complete**: Pattern streaming, analyst interaction, and worker observability fully implemented.
-- **Enhanced Distributed Stats**: `DistributedQueue.getDistributedStats()` now provides worker health metrics including CPU/memory usage.
-- **Pattern Verdict API**: Full context integration with symbol/timeframe tracking, eliminating missing context warnings.
-- **Worker Health Monitoring**: Real-time CPU and memory usage tracking with lease management statistics.
-- **Webhook Alert Service**: Extended with worker health notifications for offline, overloaded, and orphaned job scenarios.
-- **Frontend Components**: PatternReviewPanel and WorkerHealthCard components ready for analyst interaction and operations monitoring.
-- Hybrid market layer: MarketServiceFactory now combines Direct Yahoo calls with MCP sidecars (Alpaca + Yahoo/CNBC) and picks the best source per request.
-- Voice relay refactor: `/openai/realtime/session` issues a session and WebSocket URL to `/realtime-relay/{session_id}`. The relay is voice-only; all tool execution happens in the agent orchestrator.
+### What Changed (Latest Updates – Sep 29, 2025)
+- **Chart Command Extraction Complete ✅**: Voice Assistant now generates visual chart commands from natural language responses. `ChartCommandExtractor` service parses text for support/resistance, Fibonacci, indicators, and trade setups (deployed Sep 29, 2025).
+- **Technical Analysis Pipeline Fixed**: Full pipeline working: Voice → Agent → Commands → Visual Chart. Users can say "Show support at 440" and see lines drawn on chart.
+- **Phase 5 ML Production Deployment Complete**: ML-driven pattern confidence now live in production (deployed Sep 28, 2025 - 19:57 UTC) with champion model `v1.0.0_20250928_131457`.
+- **Agent Query Processing Enhanced**: Symbol extraction stopwords prevent "DOWN", "UP", "TODAY" from being treated as tickers.
+- **Command Extraction Integration**: Added to 3 processing paths in `AgentOrchestrator`: OpenAI, single-pass, and Responses API.
+- **Pattern Confidence Service Live**: Auto-loads champion artifacts, blends ML/rule confidence (60%/40%), logs to `ml_predictions`.
+- **Chart Command Builders**: `TrendlineCommandBuilder` and `IndicatorCommandBuilder` standardize annotations.
+- **Background Lifecycle Sweeper**: Runs configurable sweeps (default 5 minutes) to expire stale patterns.
+- **CI/CD Pipeline Operational**: Phase 3, 4, and 5 regression suites ready; GitHub Actions baseline ~8 minutes.
+- Hybrid market layer: `MarketServiceFactory` blends Direct Yahoo with MCP sidecars, prefers Alpaca-first routing.
+- Voice relay refactor: `/openai/realtime/session` issues session and WebSocket URL to `/realtime-relay/{session_id}`.
 - Streaming text: `/api/agent/stream` provides SSE chunks (content, tool_start, tool_result, structured_data, done). Regular text uses `/api/agent/orchestrate`.
 - Unified voice providers: `TradingDashboardSimple` now normalizes `agent`, `elevenlabs`, and `openai` hooks behind a single conversation provider map so UI actions (connect, disconnect, send text/audio) no longer depend on conditional hooks.
 - Chart sync safety: Snapshot ingestion and chart command execution guard against missing analysis data, and every backend response emits commands at the top level for the frontend chart controller.
@@ -721,6 +733,88 @@ graph TD
 - 📋 Multi-region worker deployment
 - 📋 Redis cache for distributed coordination
 
+### Voice Assistant Testing Framework (Sep 29, 2025)
+
+#### Testing Architecture with Chart Command Extraction
+
+```mermaid
+graph TD
+    subgraph Test Frameworks
+        Playwright[Playwright Test\nDirect UI Automation]
+        OpenOperator[Open Operator\nNatural Language Testing]
+        Stagehand[Stagehand SDK\nBrowser Control]
+    end
+    
+    subgraph Test Scripts
+        DirectTest[test_voice_openai_realtime.py\n9 scenarios]
+        NaturalTest[test_voice_with_open_operator.js\n9 scenarios]
+        TATest[test_tech_quick.py\n6 TA scenarios]
+        CommandTest[test_manual_chart_commands.py\nDirect command testing]
+        ExtractTest[test_extraction_quick.py\nCommand extraction]
+    end
+    
+    subgraph Trading App
+        UI[TradingDashboardSimple\nPort 5174]
+        VoiceAssistant[Voice Assistant UI]
+        WebSocket[OpenAI Realtime WS]
+        ChartUI[TradingChart\nwith enhancedChartControl]
+    end
+    
+    subgraph Command Pipeline
+        VoiceInput[Voice Input]
+        AgentOrch[Agent Orchestrator]
+        CmdExtractor[ChartCommandExtractor]
+        ChartCommands[Chart Commands\nSUPPORT:440\nRESISTANCE:460]
+        VisualExecution[Visual Chart Updates]
+    end
+    
+    Playwright --> TATest
+    Playwright --> CommandTest
+    
+    VoiceInput --> AgentOrch
+    AgentOrch --> CmdExtractor
+    CmdExtractor -->|extract| ChartCommands
+    ChartCommands --> ChartUI
+    ChartUI --> VisualExecution
+    
+    TATest --> VoiceAssistant
+    CommandTest --> ChartUI
+    ExtractTest --> AgentOrch
+```
+
+#### Test Scenarios Coverage
+
+| Category | Test Questions | Expected Keywords | Chart Commands | Status |
+|----------|---------------|-------------------|----------------|--------|
+| Price | "What is TSLA price?" | TSLA, price, $ | LOAD:TSLA | ✅ Working |
+| Technical | "Show support and resistance" | support, resistance | SUPPORT:440 RESISTANCE:460 | ✅ Working |
+| Fibonacci | "Draw Fibonacci on TSLA" | fibonacci, retracement | FIBONACCI:430:470 | ✅ Working |
+| Indicators | "Add RSI and MACD" | RSI, MACD | INDICATOR:RSI:ON INDICATOR:MACD:ON | ✅ Working |
+| Trade Setup | "Mark entry at 445" | entry, stop, target | ENTRY:445 STOP:435 TARGET:465 | ✅ Working |
+| Patterns | "Find patterns in TSLA" | pattern, TSLA | PATTERN:* | ✅ Working |
+| News | "Latest Tesla news" | Tesla, TSLA, news | - | ✅ Working |
+
+#### Test Results Summary (Sep 29, 2025)
+
+**Chart Command Extraction Fixed**:
+- ✅ Created `ChartCommandExtractor` service for NLP → Commands
+- ✅ Integrated into `AgentOrchestrator` at 3 processing paths
+- ✅ Commands extracted from natural language responses
+- ✅ Visual chart updates now working from voice commands
+- ✅ Full pipeline: Voice → Agent → Commands → Visual Chart
+
+**Testing Infrastructure Enhanced**:
+- `test_manual_chart_commands.py`: Direct command execution testing
+- `test_extraction_quick.py`: API endpoint validation
+- `test_tech_quick.py`: Technical analysis scenarios
+- `test_voice_ta_complete.py`: End-to-end Voice Assistant testing
+
+**Command Examples Generated**:
+```
+Query: "Show support at 440 and resistance at 460 on TSLA"
+Commands: LOAD:TSLA, SUPPORT:440.0, RESISTANCE:460.0, ANALYZE:TECHNICAL
+```
+
 ### Notes & Caching
 - MarketServiceFactory maps crypto tickers (e.g., BTC → BTC-USD) and caches short-lived results.
 - Agent orchestrator maintains LRU caches for knowledge, tool results, and full responses; optional vector retrieval for knowledge.
@@ -730,3 +824,4 @@ graph TD
 - Headless service uses Playwright for browser automation with automatic resource cleanup.
 - DistributedQueue manages job leases with 5-minute timeouts and automatic 2-minute renewals.
 - Worker health monitoring includes CPU/memory usage tracking and lease management statistics.
+- Voice Assistant testing uses both Playwright (direct) and Open Operator (natural language) approaches.

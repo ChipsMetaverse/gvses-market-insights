@@ -25,6 +25,7 @@ from services.vector_retriever import VectorRetriever
 from services.chart_image_analyzer import ChartImageAnalyzer
 from services.chart_snapshot_store import ChartSnapshotStore
 from services.pattern_lifecycle import PatternLifecycleManager
+from services.chart_command_extractor import ChartCommandExtractor
 
 try:
     # Lazy import to avoid circular dependencies when headless service is absent
@@ -103,13 +104,34 @@ class AgentOrchestrator:
             max_snapshots_per_symbol=max_snapshots,
         )
         self.auto_analyze_snapshots = (os.getenv("CHART_SNAPSHOT_AUTO_ANALYZE", "true").lower() != "false")
+        
+        # Initialize chart command extractor for parsing Voice Assistant responses
+        self.chart_command_extractor = ChartCommandExtractor()
+        logger.info("Chart command extractor initialized for Voice Assistant response parsing")
         lifecycle_confirm = float(os.getenv("PATTERN_CONFIRM_THRESHOLD", "75"))
         lifecycle_max_misses = int(os.getenv("PATTERN_MAX_MISSES", "2"))
+        enable_phase5_ml = os.getenv("ENABLE_PHASE5_ML", "false").lower() == "true"
+        ml_threshold = float(os.getenv("ML_CONFIDENCE_THRESHOLD", "0.55"))
+        ml_weight = float(os.getenv("ML_CONFIDENCE_WEIGHT", "0.6"))
+        rule_weight = float(os.getenv("RULE_CONFIDENCE_WEIGHT", "0.4"))
         self.pattern_lifecycle = PatternLifecycleManager(
             confirm_threshold=lifecycle_confirm,
             max_misses=lifecycle_max_misses,
-            enable_phase4_rules=os.getenv("ENABLE_PHASE4_RULES", "true").lower() == "true"
+            enable_phase4_rules=os.getenv("ENABLE_PHASE4_RULES", "true").lower() == "true",
+            enable_phase5_ml=enable_phase5_ml,
+            ml_confidence_threshold=ml_threshold,
+            ml_weight=ml_weight,
+            rule_weight=rule_weight,
         )
+        if enable_phase5_ml:
+            logger.info(
+                "Phase 5 ML confidence enabled",
+                extra={
+                    "ml_confidence_threshold": ml_threshold,
+                    "ml_weight": ml_weight,
+                    "rule_weight": rule_weight,
+                },
+            )
         
         # Phase 4: Background pattern lifecycle sweeper
         self.enable_pattern_sweep = os.getenv("ENABLE_PATTERN_SWEEP", "true").lower() == "true"
@@ -256,6 +278,16 @@ class AgentOrchestrator:
                 "commands": combined_commands,
             }
         )
+
+        repository_updates = lifecycle_result.get("repository_updates")
+        if repository_updates and self.pattern_lifecycle.repository:
+            try:
+                await self.pattern_lifecycle.repository.bulk_update_patterns(repository_updates)
+            except Exception as exc:  # pragma: no cover - resilience
+                logger.warning("Failed to persist ML updates: %s", exc)
+
+        if lifecycle_result.get("ml_insights"):
+            record.metadata.setdefault("ml_insights", []).extend(lifecycle_result["ml_insights"])
 
         await self.chart_snapshot_store.attach_analysis(
             record,
@@ -1090,7 +1122,14 @@ class AgentOrchestrator:
             "SUPPORT", "RESISTANCE", "PATTERN", "INDICATOR", "TIMEFRAME", "PLEASE",
             "CAN", "YOU", "ME", "THE", "WHAT", "IS", "TO", "WITH", "FOR", "NEAR",
             "HIGH", "LOW", "ADD", "REMOVE", "ENABLE", "DISABLE", "RESET", "ZOOM",
-            "SCROLL", "LOAD", "VIEW", "SET", "SWITCH", "ON", "OFF"
+            "SCROLL", "LOAD", "VIEW", "SET", "SWITCH", "ON", "OFF", "DOWN", "UP",
+            "ALL", "EVERY", "EVERYTHING", "SOME", "MANY", "MOST", "MUCH", "WHY",
+            "HOW", "WHEN", "WHERE", "WHO", "WHICH", "THAT", "THIS", "THESE",
+            "THOSE", "GOOD", "BAD", "BEST", "WORST", "GREAT", "POOR", "STRONG",
+            "WEAK", "BIG", "SMALL", "LARGE", "HUGE", "TINY", "FAST", "SLOW",
+            "TODAY", "YESTERDAY", "TOMORROW", "NOW", "THEN", "HERE", "THERE",
+            "MARKET", "STOCK", "STOCKS", "SHARE", "SHARES", "TRADE", "TRADES",
+            "TRADING", "TRADER", "MONEY", "CASH", "DOLLAR", "CENTS", "PERCENT"
         }
 
         # Crypto aliases
@@ -3052,6 +3091,23 @@ Remember to cite sources when using this knowledge and maintain educational tone
             "use_responses": True,
         }
 
+        # Extract additional chart commands from the response text
+        extracted_commands = []
+        if response_text:
+            extracted_commands = self.chart_command_extractor.extract_commands_from_response(
+                response_text, query, tool_results
+            )
+        
+        # Combine existing and extracted commands
+        all_commands = chart_commands + extracted_commands
+        # Remove duplicates while preserving order
+        seen = set()
+        final_commands = []
+        for cmd in all_commands:
+            if cmd not in seen:
+                seen.add(cmd)
+                final_commands.append(cmd)
+        
         result_payload: Dict[str, Any] = {
             "text": response_text or "I'm sorry, I couldn't generate a response.",
             "tools_used": tools_used,
@@ -3060,8 +3116,8 @@ Remember to cite sources when using this knowledge and maintain educational tone
             "model": self.model,
             "cached": False
         }
-        if chart_commands:
-            result_payload["chart_commands"] = chart_commands
+        if final_commands:
+            result_payload["chart_commands"] = final_commands
         try:
             logger.info(f"Response includes chart_commands: {bool(result_payload.get('chart_commands'))}")
             if result_payload.get('chart_commands'):
@@ -3224,12 +3280,29 @@ Remember to cite sources when using this knowledge and maintain educational tone
             total_time = time.monotonic() - start_time
             logger.info(f"Total query processing time: {total_time:.2f}s")
             
+            # Extract additional chart commands from the response text
+            extracted_commands = []
+            if response_text:
+                extracted_commands = self.chart_command_extractor.extract_commands_from_response(
+                    response_text, query, tool_results
+                )
+            
+            # Combine existing and extracted commands
+            all_commands = chart_commands + extracted_commands
+            # Remove duplicates while preserving order
+            seen = set()
+            final_commands = []
+            for cmd in all_commands:
+                if cmd not in seen:
+                    seen.add(cmd)
+                    final_commands.append(cmd)
+            
             return {
                 "text": response_text or "I couldn't generate a response.",
                 "tools_used": tools_used,
                 "data": tool_results,  # Required field for AgentResponse
                 "structured_data": structured_data,
-                "chart_commands": chart_commands,
+                "chart_commands": final_commands,
                 "timestamp": datetime.now().isoformat(),
                 "model": model,  # Required field for AgentResponse
                 "cached": False,
@@ -3604,6 +3677,23 @@ Remember to cite sources when using this knowledge and maintain educational tone
 
             response_text, chart_commands = self._append_chart_commands_to_data(query, tool_results, response_text)
 
+            # Extract additional chart commands from the response text
+            extracted_commands = []
+            if response_text:
+                extracted_commands = self.chart_command_extractor.extract_commands_from_response(
+                    response_text, query, tool_results
+                )
+            
+            # Combine existing and extracted commands
+            all_commands = chart_commands + extracted_commands
+            # Remove duplicates while preserving order
+            seen = set()
+            final_commands = []
+            for cmd in all_commands:
+                if cmd not in seen:
+                    seen.add(cmd)
+                    final_commands.append(cmd)
+            
             result_payload: Dict[str, Any] = {
                 "text": response_text,
                 "tools_used": tools_used,
@@ -3612,8 +3702,8 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 "model": self.model,
                 "cached": False  # Would be true if all results came from cache
             }
-            if chart_commands:
-                result_payload["chart_commands"] = chart_commands
+            if final_commands:
+                result_payload["chart_commands"] = final_commands
             try:
                 logger.info(f"Response includes chart_commands: {bool(result_payload.get('chart_commands'))}")
                 if result_payload.get('chart_commands'):
