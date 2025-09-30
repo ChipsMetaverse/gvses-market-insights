@@ -93,7 +93,11 @@ graph TD
     FastAPI -. ConversationManager .-> Supabase
 ```
 
-### What Changed (Latest Updates – Sep 29, 2025)
+### What Changed (Latest Updates – Sep 30, 2025)
+- **Trendline Drawing Fixed ✅**: Implemented missing `_generate_chart_commands` method and enhanced technical analysis for trendline drawing. Users can now say "Draw a trendline on TSLA" and see proper TRENDLINE commands executed (deployed Sep 30, 2025).
+- **Educational Queries Using LLM ✅**: Removed static template responses; educational queries now use GPT-5-mini for dynamic, contextual responses. Provides richer educational content for novice traders (deployed Sep 30, 2025).
+- **GitHub Actions Fixed ✅**: Updated workflow from deprecated `actions/upload-artifact@v3` to v4, enabling automatic deployments to Fly.io production.
+- **Production Deployment Restored ✅**: Added FLY_API_TOKEN to GitHub secrets and successfully deployed all changes to production at https://gvses-market-insights.fly.dev/.
 - **Chart Command Extraction Complete ✅**: Voice Assistant now generates visual chart commands from natural language responses. `ChartCommandExtractor` service parses text for support/resistance, Fibonacci, indicators, and trade setups (deployed Sep 29, 2025).
 - **Technical Analysis Pipeline Fixed**: Full pipeline working: Voice → Agent → Commands → Visual Chart. Users can say "Show support at 440" and see lines drawn on chart.
 - **Phase 5 ML Production Deployment Complete**: ML-driven pattern confidence now live in production (deployed Sep 28, 2025 - 19:57 UTC) with champion model `v1.0.0_20250928_131457`.
