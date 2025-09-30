@@ -1,0 +1,33 @@
+{
+  "evaluation_date": "2025-09-28T17:22:08.010471+00:00",
+  "models_evaluated": 2,
+  "model_comparison": [
+    {
+      "model": "random_forest",
+      "roc_auc": 0.5,
+      "accuracy": 0.3333333333333333,
+      "precision": 0.1111111111111111,
+      "recall": 0.3333333333333333,
+      "f1_score": 0.16666666666666666,
+      "log_loss": 1.0986122886681096,
+      "calibration_error": 4.996003610813204e-16,
+      "cv_mean": NaN,
+      "cv_std": NaN
+    },
+    {
+      "model": "logistic",
+      "roc_auc": 0.5,
+      "accuracy": 0.3333333333333333,
+      "precision": 0.1111111111111111,
+      "recall": 0.3333333333333333,
+      "f1_score": 0.16666666666666666,
+      "log_loss": 1.0986122886681096,
+      "calibration_error": 4.996003610813204e-16,
+      "cv_mean": NaN,
+      "cv_std": NaN
+    }
+  ],
+  "champion_model": "random_forest",
+  "feature_count": 50,
+  "training_samples": 732
+}

@@ -105,6 +105,8 @@ class PatternRepository:
                 updates["metadata"] = json.dumps(updates["metadata"])
             if "rule_evaluation" in updates and isinstance(updates["rule_evaluation"], dict):
                 updates["rule_evaluation"] = json.dumps(updates["rule_evaluation"])
+            if "ml_metadata" in updates and isinstance(updates["ml_metadata"], dict):
+                updates["ml_metadata"] = json.dumps(updates["ml_metadata"])
                 
             # Update pattern
             response = self.client.table("pattern_events") \

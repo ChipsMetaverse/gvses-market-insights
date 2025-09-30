@@ -1,5 +1,21 @@
 # Production Readiness Implementation Summary
 
+## Date: September 28, 2025 (Phase 5 Progress Update)
+
+### Phase 5 Highlights
+- **Centralized ML Model Registry**: Added `backend/ml/model_registry.py` to manage baseline and optional (XGBoost/LightGBM) configurations with graceful fallbacks.
+- **Trainer & Artifacts**: `PatternConfidenceTrainer` now consumes the registry, exports champion bundles (model, scalers, encoders, `model_card.json`), and skips unavailable boosters without failing.
+- **Inference Service Readiness**: `PatternConfidenceService` hot-loads champion artifacts, resolves feature names, and integrates with `PatternLifecycleManager` when `enable_phase5_ml=True`.
+- **Regression Coverage**: New suite `backend/tests/test_phase5_ml_flow.py` verifies registry behavior and champion artifact loading.
+- **Docs Updated**: `mermaid.md`, `HEADLESS_ARCHITECTURE.md`, and `README_phase5.md` reflect ML pipeline progress and remaining rollout tasks.
+
+### Next Tasks Toward Phase 5 Launch
+- Enable ML inference by default with monitoring/SLA dashboards.
+- Tune ML vs rule blending weights, persistence, and promotion criteria.
+- Extend CI to run Phase 5 smoke tests after artifact builds.
+
+---
+
 ## Date: January 19, 2025 (Final Update)
 
 ## Implementation Status: ✅ PRODUCTION READY - 100% REGRESSION TESTS PASSING

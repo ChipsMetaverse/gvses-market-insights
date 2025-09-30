@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-09-28T23:13:32.501214",
+  "tests": [
+    {
+      "test": "Support/Resistance",
+      "question": "Show support and resistance levels on TSLA",
+      "screenshot": "tech_quick_1_Support_Resistance.png",
+      "timestamp": "2025-09-28T23:13:56.990009"
+    },
+    {
+      "test": "Fibonacci",
+      "question": "Draw Fibonacci retracement on TSLA",
+      "screenshot": "tech_quick_2_Fibonacci.png",
+      "timestamp": "2025-09-28T23:14:10.814777"
+    },
+    {
+      "test": "Patterns",
+      "question": "Identify any patterns on TSLA chart",
+      "screenshot": "tech_quick_3_Patterns.png",
+      "timestamp": "2025-09-28T23:14:24.733679"
+    },
+    {
+      "test": "RSI Indicator",
+      "question": "Show RSI indicator on TSLA",
+      "screenshot": "tech_quick_4_RSI Indicator.png",
+      "timestamp": "2025-09-28T23:14:36.642598"
+    },
+    {
+      "test": "MACD Indicator",
+      "question": "Add MACD to TSLA chart",
+      "screenshot": "tech_quick_5_MACD Indicator.png",
+      "timestamp": "2025-09-28T23:14:48.537093"
+    },
+    {
+      "test": "Trade Setup",
+      "question": "Mark entry at 440, stop loss at 430, and target at 460 on TSLA",
+      "screenshot": "tech_quick_6_Trade Setup.png",
+      "timestamp": "2025-09-28T23:15:02.867298"
+    }
+  ]
+}

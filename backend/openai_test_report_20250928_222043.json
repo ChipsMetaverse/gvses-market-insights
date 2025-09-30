@@ -1,0 +1,214 @@
+{
+  "timestamp": "2025-09-28T22:18:07.896184",
+  "tests": [
+    {
+      "test_number": 1,
+      "category": "price",
+      "question": "What is the current price of TSLA?",
+      "expected_keywords": [
+        "TSLA",
+        "price",
+        "$"
+      ],
+      "response": "10:18 PM",
+      "found_keywords": [],
+      "missing_keywords": [
+        "TSLA",
+        "price",
+        "$"
+      ],
+      "accuracy_score": 0.0,
+      "passed": false,
+      "issues": [
+        "Insufficient keyword matches"
+      ]
+    },
+    {
+      "test_number": 2,
+      "category": "price",
+      "question": "How much is Apple stock?",
+      "expected_keywords": [
+        "AAPL",
+        "Apple",
+        "$"
+      ],
+      "response": "10:18 PM",
+      "found_keywords": [],
+      "missing_keywords": [
+        "AAPL",
+        "Apple",
+        "$"
+      ],
+      "accuracy_score": 0.0,
+      "passed": false,
+      "issues": [
+        "Insufficient keyword matches"
+      ]
+    },
+    {
+      "test_number": 3,
+      "category": "technical",
+      "question": "Show me the technical levels for TSLA",
+      "expected_keywords": [
+        "support",
+        "resistance",
+        "level"
+      ],
+      "response": "10:18 PM",
+      "found_keywords": [],
+      "missing_keywords": [
+        "support",
+        "resistance",
+        "level"
+      ],
+      "accuracy_score": 0.0,
+      "passed": false,
+      "issues": [
+        "Insufficient keyword matches"
+      ]
+    },
+    {
+      "test_number": 4,
+      "category": "patterns",
+      "question": "Are there any patterns in TSLA?",
+      "expected_keywords": [
+        "pattern",
+        "TSLA"
+      ],
+      "response": "10:19 PM",
+      "found_keywords": [],
+      "missing_keywords": [
+        "pattern",
+        "TSLA"
+      ],
+      "accuracy_score": 0.0,
+      "passed": false,
+      "issues": [
+        "Insufficient keyword matches"
+      ]
+    },
+    {
+      "test_number": 5,
+      "category": "news",
+      "question": "What's the latest news on Tesla?",
+      "expected_keywords": [
+        "Tesla",
+        "TSLA",
+        "news"
+      ],
+      "response": "10:19 PM",
+      "found_keywords": [],
+      "missing_keywords": [
+        "Tesla",
+        "TSLA",
+        "news"
+      ],
+      "accuracy_score": 0.0,
+      "passed": false,
+      "issues": [
+        "Insufficient keyword matches"
+      ]
+    },
+    {
+      "test_number": 6,
+      "category": "strategy",
+      "question": "Should I buy TSLA now?",
+      "expected_keywords": [
+        "TSLA",
+        "analysis"
+      ],
+      "response": "10:19 PM",
+      "found_keywords": [],
+      "missing_keywords": [
+        "TSLA",
+        "analysis"
+      ],
+      "accuracy_score": 0.0,
+      "passed": false,
+      "issues": [
+        "Insufficient keyword matches"
+      ]
+    },
+    {
+      "test_number": 7,
+      "category": "comparison",
+      "question": "Compare TSLA and NVDA",
+      "expected_keywords": [
+        "TSLA",
+        "NVDA"
+      ],
+      "response": "10:19 PM",
+      "found_keywords": [],
+      "missing_keywords": [
+        "TSLA",
+        "NVDA"
+      ],
+      "accuracy_score": 0.0,
+      "passed": false,
+      "issues": [
+        "Insufficient keyword matches"
+      ]
+    },
+    {
+      "test_number": 8,
+      "category": "educational",
+      "question": "What does BTD mean?",
+      "expected_keywords": [
+        "BTD",
+        "Buy",
+        "Dip"
+      ],
+      "response": "10:20 PM",
+      "found_keywords": [],
+      "missing_keywords": [
+        "BTD",
+        "Buy",
+        "Dip"
+      ],
+      "accuracy_score": 0.0,
+      "passed": false,
+      "issues": [
+        "Insufficient keyword matches"
+      ]
+    },
+    {
+      "test_number": 9,
+      "category": "risk",
+      "question": "What's a good stop loss for TSLA?",
+      "expected_keywords": [
+        "stop",
+        "loss",
+        "TSLA"
+      ],
+      "response": "10:20 PM",
+      "found_keywords": [],
+      "missing_keywords": [
+        "stop",
+        "loss",
+        "TSLA"
+      ],
+      "accuracy_score": 0.0,
+      "passed": false,
+      "issues": [
+        "Insufficient keyword matches"
+      ]
+    }
+  ],
+  "summary": {
+    "total_tests": 9,
+    "successful_responses": 0,
+    "failed_responses": 9,
+    "accuracy_scores": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "average_accuracy": 0.0
+  }
+}

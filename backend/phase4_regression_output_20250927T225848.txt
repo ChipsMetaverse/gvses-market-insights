@@ -1,0 +1,80 @@
+Phase 4 Regression Suite Output (2025-09-27T22:58:48-05:00)
+============================================================
+Command: python3 test_phase4_regression.py
+
+Summary:
+- Ran 21 tests (7 skipped due to missing Supabase credentials)
+- Result: OK
+
+Console Log:
+test_build_indicator_command (__main__.TestPhase4CommandBuilders.test_build_indicator_command)
+Test indicator command building ... ok
+test_build_indicator_set (__main__.TestPhase4CommandBuilders.test_build_indicator_set)
+Test default indicator set for pattern types ... ok
+test_build_lifecycle_commands (__main__.TestPhase4CommandBuilders.test_build_lifecycle_commands)
+Test lifecycle transition commands ... 2025-09-27 22:58:48,664 - services.command_builders - INFO - Pattern test_pattern confirmed - generated 1 commands
+ok
+test_build_pattern_commands (__main__.TestPhase4CommandBuilders.test_build_pattern_commands)
+Test building pattern commands ... ok
+test_build_trendline_command (__main__.TestPhase4CommandBuilders.test_build_trendline_command)
+Test trendline command generation ... ok
+test_clear_pattern_command (__main__.TestPhase4CommandBuilders.test_clear_pattern_command)
+Test clear pattern command ... ok
+test_full_lifecycle_flow (__main__.TestPhase4Integration.test_full_lifecycle_flow)
+Test complete pattern lifecycle flow ... 2025-09-27 22:58:48,667 - services.pattern_repository - WARNING - Supabase credentials not configured - pattern persistence disabled
+skipped 'Supabase not configured'
+test_evaluate_with_rules (__main__.TestPhase4PatternLifecycle.test_evaluate_with_rules)
+Test pattern evaluation with Phase 4 rules ... 2025-09-27 22:58:48,668 - services.pattern_repository - WARNING - Supabase credentials not configured - pattern persistence disabled
+skipped 'Supabase not configured'
+test_standard_update_fallback (__main__.TestPhase4PatternLifecycle.test_standard_update_fallback)
+Test fallback to standard update when Phase 4 disabled ... 2025-09-27 22:58:48,669 - services.pattern_repository - WARNING - Supabase credentials not configured - pattern persistence disabled
+<string>:5: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+<string>:6: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+/Volumes/WD My Passport 264F Media/claude-voice-mcp/backend/services/pattern_lifecycle.py:131: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  state.last_updated = datetime.utcnow()
+ok
+test_sweep_patterns (__main__.TestPhase4PatternLifecycle.test_sweep_patterns)
+Test pattern sweep functionality ... 2025-09-27 22:58:48,670 - services.pattern_repository - WARNING - Supabase credentials not configured - pattern persistence disabled
+skipped 'Supabase not configured'
+test_create_pattern (__main__.TestPhase4PatternRepository.test_create_pattern)
+Test creating a pattern ... 2025-09-27 22:58:48,671 - services.pattern_repository - WARNING - Supabase credentials not configured - pattern persistence disabled
+skipped 'Supabase not configured'
+test_get_active_patterns (__main__.TestPhase4PatternRepository.test_get_active_patterns)
+Test retrieving active patterns ... 2025-09-27 22:58:48,672 - services.pattern_repository - WARNING - Supabase credentials not configured - pattern persistence disabled
+skipped 'Supabase not configured'
+test_store_verdict (__main__.TestPhase4PatternRepository.test_store_verdict)
+Test storing analyst verdict ... 2025-09-27 22:58:48,673 - services.pattern_repository - WARNING - Supabase credentials not configured - pattern persistence disabled
+skipped 'Supabase not configured'
+test_update_pattern (__main__.TestPhase4PatternRepository.test_update_pattern)
+Test updating a pattern ... 2025-09-27 22:58:48,673 - services.pattern_repository - WARNING - Supabase credentials not configured - pattern persistence disabled
+skipped 'Supabase not configured'
+test_bulk_evaluate (__main__.TestPhase4PatternRules.test_bulk_evaluate)
+Test bulk pattern evaluation ... ok
+test_confidence_decay (__main__.TestPhase4PatternRules.test_confidence_decay)
+Test confidence decay over time ... ok
+test_get_rule_config (__main__.TestPhase4PatternRules.test_get_rule_config)
+Test retrieving rule configuration ... ok
+test_pattern_completion_by_target (__main__.TestPhase4PatternRules.test_pattern_completion_by_target)
+Test pattern completion when target is reached ... ok
+test_pattern_expiration_by_time (__main__.TestPhase4PatternRules.test_pattern_expiration_by_time)
+Test pattern expiration by age ... ok
+test_pattern_invalidation_by_breach (__main__.TestPhase4PatternRules.test_pattern_invalidation_by_breach)
+Test pattern invalidation on resistance breach ... ok
+test_summary_report (__main__.TestPhase4Regression.test_summary_report)
+Generate summary report of Phase 4 implementation ... 2025-09-27 22:58:48,675 - __main__ - INFO - ============================================================
+2025-09-27 22:58:48,675 - __main__ - INFO - PHASE 4 REGRESSION TEST SUMMARY
+2025-09-27 22:58:48,675 - __main__ - INFO - ============================================================
+2025-09-27 22:58:48,675 - __main__ - INFO - Status: COMPLETE
+2025-09-27 22:58:48,675 - __main__ - INFO - Components:
+2025-09-27 22:58:48,675 - __main__ - INFO -   ✅ Implemented - Rule-based pattern evaluation
+2025-09-27 22:58:48,675 - __main__ - INFO -   ✅ Implemented - Trendline and indicator commands
+2025-09-27 22:58:48,675 - __main__ - INFO -   ✅ Implemented - Database persistence layer
+2025-09-27 22:58:48,675 - __main__ - INFO -   ✅ Enhanced - Phase 4 rule integration
+2025-09-27 22:58:48,675 - __main__ - INFO -   ✅ Added - Periodic pattern evaluation
+2025-09-27 22:58:48,675 - __main__ - INFO -   ✅ Created - pattern_events table migration
+2025-09-27 22:58:48,675 - __main__ - INFO - Features: 7 implemented
+2025-09-27 22:58:48,675 - __main__ - INFO - Test Coverage: 6 test classes
+2025-09-27 22:58:48,675 - __main__ - INFO - ============================================================
+ok
+
+Result: OK (skipped=7)

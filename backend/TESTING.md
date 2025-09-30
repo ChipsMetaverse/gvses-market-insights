@@ -63,6 +63,17 @@ python3 test_dual_mcp.py
 python3 test_alpaca_mcp.py
 ```
 
+#### Phase 5 ML Flow Smoke Tests
+- **Purpose**: Validate ML model registry fallbacks and champion artifact loading prior to enabling Phase 5 in production.
+
+```bash
+# Run from repo root
+pytest backend/tests/test_phase5_ml_flow.py
+
+# Optional: retrain models used by tests (skips optional boosters if unavailable)
+PYTHONPATH=. python backend/ml/pattern_confidence.py --models random_forest logistic
+```
+
 ## Environment Variables
 
 ### Required for Testing

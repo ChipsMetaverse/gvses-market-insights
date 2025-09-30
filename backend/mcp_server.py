@@ -574,6 +574,117 @@ async def get_metrics(request: Request, authorization: Optional[str] = Header(No
         return {"status": "error", "error": str(e)}
 
 
+# Phase 5 ML Monitoring Endpoints
+@app.get("/api/ml/metrics")
+@limiter.limit("30/minute")
+async def get_ml_metrics(request: Request, hours: int = 1):
+    """Get Phase 5 ML performance metrics"""
+    try:
+        from services.ml_monitoring import get_ml_monitoring
+        monitoring = get_ml_monitoring()
+        
+        current_metrics = await monitoring.get_current_metrics()
+        history = await monitoring.get_metrics_history(hours=hours)
+        
+        return {
+            "current": current_metrics,
+            "history": history,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting ML metrics: {e}")
+        raise HTTPException(status_code=500, detail=f"ML metrics error: {str(e)}")
+
+@app.get("/api/ml/alerts")
+@limiter.limit("20/minute")
+async def get_ml_alerts(request: Request):
+    """Get current ML alerts and warnings"""
+    try:
+        from services.ml_monitoring import get_ml_monitoring
+        monitoring = get_ml_monitoring()
+        
+        alerts = await monitoring.get_alerts()
+        
+        return {
+            "alerts": alerts,
+            "count": len(alerts),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting ML alerts: {e}")
+        raise HTTPException(status_code=500, detail=f"ML alerts error: {str(e)}")
+
+@app.get("/api/ml/health")
+@limiter.limit("60/minute")
+async def get_ml_health(request: Request):
+    """Get Phase 5 ML system health status"""
+    try:
+        from services.pattern_confidence_service import get_confidence_service
+        from services.ml_monitoring import get_ml_monitoring
+        
+        confidence_service = get_confidence_service()
+        monitoring = get_ml_monitoring()
+        
+        # Get service stats
+        service_stats = confidence_service.get_service_stats()
+        current_metrics = await monitoring.get_current_metrics()
+        alerts = await monitoring.get_alerts()
+        
+        # Determine overall health
+        error_rate = current_metrics["performance"]["error_rate"]
+        sla_compliance = current_metrics["performance"]["sla_compliance"] 
+        critical_alerts = [a for a in alerts if a.get("level") == "critical"]
+        
+        if error_rate > 0.2 or sla_compliance < 0.90 or critical_alerts:
+            health_status = "critical"
+        elif error_rate > 0.05 or sla_compliance < 0.95:
+            health_status = "degraded"
+        else:
+            health_status = "healthy"
+        
+        return {
+            "status": health_status,
+            "phase5_enabled": True,
+            "model_loaded": service_stats["model_loaded"],
+            "model_version": service_stats["model_version"],
+            "error_rate": error_rate,
+            "sla_compliance": sla_compliance,
+            "predictions_made": service_stats["predictions_made"],
+            "average_latency_ms": service_stats["average_latency_ms"],
+            "cache_hit_rate": service_stats["cache_hit_rate"],
+            "fallback_rate": current_metrics["predictions"]["fallback_rate"],
+            "alerts_count": len(alerts),
+            "critical_alerts": len(critical_alerts),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting ML health: {e}")
+        raise HTTPException(status_code=500, detail=f"ML health error: {str(e)}")
+
+@app.post("/api/ml/baseline")
+@limiter.limit("5/minute")
+async def set_ml_baseline(request: Request, baseline_data: Dict[str, Any]):
+    """Set baseline feature distribution for drift detection"""
+    try:
+        from services.ml_monitoring import get_ml_monitoring
+        monitoring = get_ml_monitoring()
+        
+        features = baseline_data.get("features", {})
+        if not features:
+            raise HTTPException(status_code=400, detail="No features provided")
+        
+        monitoring.set_baseline(features)
+        
+        return {
+            "status": "success",
+            "message": f"Baseline set with {len(features)} features",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error setting ML baseline: {e}")
+        raise HTTPException(status_code=500, detail=f"Baseline error: {str(e)}")
+
+
 async def get_market_service():
     """Get or initialize market service."""
     global market_service

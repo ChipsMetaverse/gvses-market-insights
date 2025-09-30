@@ -1,0 +1,1006 @@
+{
+  "timestamp": "2025-09-29T19:16:17.177776",
+  "tests": [],
+  "errors": [],
+  "console_logs": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting...",
+      "timestamp": "2025-09-29T19:16:21.404913"
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected.",
+      "timestamp": "2025-09-29T19:16:21.417750"
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+      "timestamp": "2025-09-29T19:16:21.453582"
+    },
+    {
+      "type": "log",
+      "text": "Enhanced chart control initialized",
+      "timestamp": "2025-09-29T19:16:21.502026"
+    },
+    {
+      "type": "log",
+      "text": "Chart ready for enhanced agent control",
+      "timestamp": "2025-09-29T19:16:21.502250"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 0 messages to localStorage",
+      "timestamp": "2025-09-29T19:16:21.502439"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udf10 OpenAIRealtimeService initialized",
+      "timestamp": "2025-09-29T19:16:21.502909"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd0d Config.relayServerUrl: undefined",
+      "timestamp": "2025-09-29T19:16:21.503147"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udf10 OpenAIRealtimeService initialized",
+      "timestamp": "2025-09-29T19:16:21.503338"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd0d Config.relayServerUrl: undefined",
+      "timestamp": "2025-09-29T19:16:21.503481"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:16:21.503590"
+    },
+    {
+      "type": "log",
+      "text": "IndicatorContext not available - agent indicator control disabled",
+      "timestamp": "2025-09-29T19:16:21.504890"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:16:21.709188"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfaf handleConnectToggle called, voiceProvider: agent isConnected: false",
+      "timestamp": "2025-09-29T19:16:28.094847"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\ude80 Connecting to OpenAI Realtime...",
+      "timestamp": "2025-09-29T19:16:28.095074"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcde About to call startConversation()...",
+      "timestamp": "2025-09-29T19:16:28.095184"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfa4 Connecting to OpenAI Realtime API...",
+      "timestamp": "2025-09-29T19:16:28.095279"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:16:28.096629"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udf10 Creating RealtimeClient with relay URL: ws://localhost:8000/realtime-relay/dfc30b8b-36b2-4ec0-9a6b-9e35897547a1",
+      "timestamp": "2025-09-29T19:16:28.124258"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd17 Connecting to relay server: ws://localhost:8000/realtime-relay/dfc30b8b-36b2-4ec0-9a6b-9e35897547a1",
+      "timestamp": "2025-09-29T19:16:28.124596"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udce1 RealtimeEvent: client session.update {event_id: evt_p44NQMgkuPeiW7FuK, type: session.update, session: Object}",
+      "timestamp": "2025-09-29T19:16:28.147341"
+    },
+    {
+      "type": "log",
+      "text": "\u2705 RealtimeClient.connect() completed - waiting for session.created",
+      "timestamp": "2025-09-29T19:16:28.147460"
+    },
+    {
+      "type": "log",
+      "text": "\u2705 startConversation() completed",
+      "timestamp": "2025-09-29T19:16:28.147527"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udce1 RealtimeEvent: server session.created {type: session.created, event_id: event_CLIKarRPd0gMLGMEHHFvu, session: Object}",
+      "timestamp": "2025-09-29T19:16:28.912702"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\ude80 OpenAI session created - connection established!",
+      "timestamp": "2025-09-29T19:16:28.912821"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd27 DEBUG: About to set connected=true and call onConnected callback",
+      "timestamp": "2025-09-29T19:16:28.912896"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd27 DEBUG: this.connected is now: true",
+      "timestamp": "2025-09-29T19:16:28.913008"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd27 DEBUG: this.config.onConnected exists? function",
+      "timestamp": "2025-09-29T19:16:28.913196"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd27 DEBUG: Calling onConnected callback now...",
+      "timestamp": "2025-09-29T19:16:28.913282"
+    },
+    {
+      "type": "log",
+      "text": "Agent Voice: OpenAI connected for voice I/O",
+      "timestamp": "2025-09-29T19:16:28.913354"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd27 DEBUG: onConnected callback completed",
+      "timestamp": "2025-09-29T19:16:28.913534"
+    },
+    {
+      "type": "log",
+      "text": "Server event: session.created",
+      "timestamp": "2025-09-29T19:16:28.913693"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:16:28.913914"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udce1 RealtimeEvent: server session.updated {type: session.updated, event_id: event_CLIKaaRJBv7vnYSEY9zme, session: Object}",
+      "timestamp": "2025-09-29T19:16:28.990461"
+    },
+    {
+      "type": "log",
+      "text": "\u2699\ufe0f OpenAI session updated: {object: realtime.session, id: sess_CLIKa9uDYFy03jUAkwS6d, model: gpt-realtime-2025-08-28, modalities: Array(2), instructions: You are a voice interface only. Transcribe user sp\u2026erate responses, answer questions, or call tools.}",
+      "timestamp": "2025-09-29T19:16:28.990667"
+    },
+    {
+      "type": "log",
+      "text": "Server event: session.updated",
+      "timestamp": "2025-09-29T19:16:28.990795"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udce1 RealtimeEvent: server session.updated {type: session.updated, event_id: event_CLIKaaMXGnejW1nw7ihs1, session: Object}",
+      "timestamp": "2025-09-29T19:16:28.995670"
+    },
+    {
+      "type": "log",
+      "text": "\u2699\ufe0f OpenAI session updated: {object: realtime.session, id: sess_CLIKa9uDYFy03jUAkwS6d, model: gpt-realtime-2025-08-28, modalities: Array(2), instructions: You are a voice interface only. Transcribe user sp\u2026erate responses, answer questions, or call tools.}",
+      "timestamp": "2025-09-29T19:16:28.995808"
+    },
+    {
+      "type": "log",
+      "text": "Server event: session.updated",
+      "timestamp": "2025-09-29T19:16:28.995927"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfaf handleSendTextMessage called",
+      "timestamp": "2025-09-29T19:16:30.260877"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcdd Input text: What is the market doing today?",
+      "timestamp": "2025-09-29T19:16:30.261128"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd0c Is connected: true",
+      "timestamp": "2025-09-29T19:16:30.261400"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfa4 Voice provider: agent",
+      "timestamp": "2025-09-29T19:16:30.261542"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_dispatch {\"timestamp\":\"2025-09-30T00:16:30.260Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191390260-gqbkkz86g\",\"query\":\"What is the market doing today?\"}",
+      "timestamp": "2025-09-29T19:16:30.261693"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcac Added user message to chat thread",
+      "timestamp": "2025-09-29T19:16:30.261806"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 1 messages to localStorage",
+      "timestamp": "2025-09-29T19:16:30.262621"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:16:30.262787"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfaf handleSendTextMessage called",
+      "timestamp": "2025-09-29T19:16:32.379914"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcdd Input text: INVALIDTICKER",
+      "timestamp": "2025-09-29T19:16:32.380135"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd0c Is connected: true",
+      "timestamp": "2025-09-29T19:16:32.380382"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfa4 Voice provider: agent",
+      "timestamp": "2025-09-29T19:16:32.380570"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_dispatch {\"timestamp\":\"2025-09-30T00:16:32.379Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191392379-brtmt21xd\",\"query\":\"INVALIDTICKER\"}",
+      "timestamp": "2025-09-29T19:16:32.380681"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcac Added user message to chat thread",
+      "timestamp": "2025-09-29T19:16:32.380755"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 2 messages to localStorage",
+      "timestamp": "2025-09-29T19:16:32.381418"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:16:32.381587"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_response {\"timestamp\":\"2025-09-30T00:16:36.525Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191390260-gqbkkz86g\",\"toolsUsed\":[\"get_market_overview\"],\"chartCommands\":[\"LOAD:DOING\",\"TIMEFRAME:1D\",\"INDICATOR:SMA:ON\"]}",
+      "timestamp": "2025-09-29T19:16:36.526835"
+    },
+    {
+      "type": "log",
+      "text": "\u2705 Added backend agent response to chat",
+      "timestamp": "2025-09-29T19:16:36.527009"
+    },
+    {
+      "type": "info",
+      "text": "[agent] executing_chart_commands {\"timestamp\":\"2025-09-30T00:16:36.525Z\",\"messageId\":\"agent-1759191390260-gqbkkz86g\",\"chartCommands\":[\"LOAD:DOING\",\"TIMEFRAME:1D\",\"INDICATOR:SMA:ON\"]}",
+      "timestamp": "2025-09-29T19:16:36.527142"
+    },
+    {
+      "type": "log",
+      "text": "Searching for symbol with query: \"DOING\"",
+      "timestamp": "2025-09-29T19:16:36.528350"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 3 messages to localStorage",
+      "timestamp": "2025-09-29T19:16:36.538484"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:16:36.538617"
+    },
+    {
+      "type": "log",
+      "text": "No symbols found for query: \"DOING\"",
+      "timestamp": "2025-09-29T19:16:37.125626"
+    },
+    {
+      "type": "log",
+      "text": "Resolved \"DOING\" to stock symbol: DOING (DOING)",
+      "timestamp": "2025-09-29T19:16:37.125749"
+    },
+    {
+      "type": "log",
+      "text": "Voice command: Changing symbol to DOING Type: stock",
+      "timestamp": "2025-09-29T19:16:37.126731"
+    },
+    {
+      "type": "log",
+      "text": "Chart Command: \ud83d\udcc8 Switched to DOING (Success)",
+      "timestamp": "2025-09-29T19:16:37.127257"
+    },
+    {
+      "type": "log",
+      "text": "Voice command: Changing timeframe to 1D",
+      "timestamp": "2025-09-29T19:16:37.127431"
+    },
+    {
+      "type": "log",
+      "text": "Chart Command: Timeframe: 1D (Success)",
+      "timestamp": "2025-09-29T19:16:37.127514"
+    },
+    {
+      "type": "log",
+      "text": "Searching for symbol with query: \"DOING\"",
+      "timestamp": "2025-09-29T19:16:37.127582"
+    },
+    {
+      "type": "log",
+      "text": "No symbols found for query: \"DOING\"",
+      "timestamp": "2025-09-29T19:16:37.127648"
+    },
+    {
+      "type": "log",
+      "text": "Resolved \"DOING\" to stock symbol: DOING (DOING)",
+      "timestamp": "2025-09-29T19:16:37.127713"
+    },
+    {
+      "type": "log",
+      "text": "Voice command: Changing symbol to DOING Type: stock",
+      "timestamp": "2025-09-29T19:16:37.128419"
+    },
+    {
+      "type": "log",
+      "text": "Chart Command: \ud83d\udcc8 Switched to DOING (Success)",
+      "timestamp": "2025-09-29T19:16:37.128804"
+    },
+    {
+      "type": "log",
+      "text": "Voice command: Changing timeframe to 1D",
+      "timestamp": "2025-09-29T19:16:37.129113"
+    },
+    {
+      "type": "log",
+      "text": "Chart Command: Timeframe: 1D (Success)",
+      "timestamp": "2025-09-29T19:16:37.129315"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+      "timestamp": "2025-09-29T19:16:37.574606"
+    },
+    {
+      "type": "error",
+      "text": "Error fetching stock price for DOING: AxiosError",
+      "timestamp": "2025-09-29T19:16:37.575113"
+    },
+    {
+      "type": "error",
+      "text": "Failed to add DOING: Error: Failed to fetch stock price for DOING: AxiosError: Request failed with status code 500\n    at MarketDataService.getStockPrice (http://localhost:5174/src/services/marketDataService.ts:74:13)\n    at async addToWatchlist (http://localhost:5174/src/components/TradingDashboardSimple.tsx:209:20)",
+      "timestamp": "2025-09-29T19:16:37.575481"
+    },
+    {
+      "type": "log",
+      "text": "Enhanced chart control initialized",
+      "timestamp": "2025-09-29T19:16:37.619715"
+    },
+    {
+      "type": "log",
+      "text": "Chart ready for enhanced agent control",
+      "timestamp": "2025-09-29T19:16:37.619927"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+      "timestamp": "2025-09-29T19:16:37.896355"
+    },
+    {
+      "type": "error",
+      "text": "Error fetching stock price for DOING: AxiosError",
+      "timestamp": "2025-09-29T19:16:37.896818"
+    },
+    {
+      "type": "error",
+      "text": "Failed to add DOING: Error: Failed to fetch stock price for DOING: AxiosError: Request failed with status code 500\n    at MarketDataService.getStockPrice (http://localhost:5174/src/services/marketDataService.ts:74:13)\n    at async addToWatchlist (http://localhost:5174/src/components/TradingDashboardSimple.tsx:209:20)",
+      "timestamp": "2025-09-29T19:16:37.897293"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+      "timestamp": "2025-09-29T19:16:37.935902"
+    },
+    {
+      "type": "error",
+      "text": "Error fetching stock history for DOING: AxiosError",
+      "timestamp": "2025-09-29T19:16:37.936116"
+    },
+    {
+      "type": "error",
+      "text": "Error fetching chart data: AxiosError",
+      "timestamp": "2025-09-29T19:16:37.936256"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_response {\"timestamp\":\"2025-09-30T00:16:38.994Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191392379-brtmt21xd\",\"toolsUsed\":[\"get_company_info\"],\"chartCommands\":[]}",
+      "timestamp": "2025-09-29T19:16:38.995263"
+    },
+    {
+      "type": "log",
+      "text": "\u2705 Added backend agent response to chat",
+      "timestamp": "2025-09-29T19:16:38.995401"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 4 messages to localStorage",
+      "timestamp": "2025-09-29T19:16:38.998680"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:16:38.998799"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfaf handleSendTextMessage called",
+      "timestamp": "2025-09-29T19:16:49.566219"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcdd Input text: Show me XYZABC123",
+      "timestamp": "2025-09-29T19:16:49.566363"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd0c Is connected: true",
+      "timestamp": "2025-09-29T19:16:49.566537"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfa4 Voice provider: agent",
+      "timestamp": "2025-09-29T19:16:49.566689"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_dispatch {\"timestamp\":\"2025-09-30T00:16:49.565Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191409565-tqa6rlvzm\",\"query\":\"Show me XYZABC123\"}",
+      "timestamp": "2025-09-29T19:16:49.566894"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcac Added user message to chat thread",
+      "timestamp": "2025-09-29T19:16:49.567002"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 5 messages to localStorage",
+      "timestamp": "2025-09-29T19:16:49.568892"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:16:49.568988"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_response {\"timestamp\":\"2025-09-30T00:16:57.302Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191409565-tqa6rlvzm\",\"toolsUsed\":[\"get_company_info\",\"get_stock_price\",\"get_stock_history\"],\"chartCommands\":[]}",
+      "timestamp": "2025-09-29T19:16:57.303250"
+    },
+    {
+      "type": "log",
+      "text": "\u2705 Added backend agent response to chat",
+      "timestamp": "2025-09-29T19:16:57.303343"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 6 messages to localStorage",
+      "timestamp": "2025-09-29T19:16:57.306292"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:16:57.306377"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfaf handleSendTextMessage called",
+      "timestamp": "2025-09-29T19:17:06.807114"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcdd Input text: Buy 1000000 shares of AAPL",
+      "timestamp": "2025-09-29T19:17:06.807385"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd0c Is connected: true",
+      "timestamp": "2025-09-29T19:17:06.807563"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfa4 Voice provider: agent",
+      "timestamp": "2025-09-29T19:17:06.807686"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_dispatch {\"timestamp\":\"2025-09-30T00:17:06.806Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191426806-3drrjjkr3\",\"query\":\"Buy 1000000 shares of AAPL\"}",
+      "timestamp": "2025-09-29T19:17:06.807841"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcac Added user message to chat thread",
+      "timestamp": "2025-09-29T19:17:06.808025"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 7 messages to localStorage",
+      "timestamp": "2025-09-29T19:17:06.809736"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:17:06.809821"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_response {\"timestamp\":\"2025-09-30T00:17:17.720Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191426806-3drrjjkr3\",\"toolsUsed\":[\"get_stock_price\",\"get_stock_history\",\"get_comprehensive_stock_data\"],\"chartCommands\":[\"LOAD:AAPL\"]}",
+      "timestamp": "2025-09-29T19:17:17.721896"
+    },
+    {
+      "type": "log",
+      "text": "\u2705 Added backend agent response to chat",
+      "timestamp": "2025-09-29T19:17:17.722166"
+    },
+    {
+      "type": "info",
+      "text": "[agent] executing_chart_commands {\"timestamp\":\"2025-09-30T00:17:17.720Z\",\"messageId\":\"agent-1759191426806-3drrjjkr3\",\"chartCommands\":[\"LOAD:AAPL\"]}",
+      "timestamp": "2025-09-29T19:17:17.722326"
+    },
+    {
+      "type": "log",
+      "text": "Searching for symbol with query: \"AAPL\"",
+      "timestamp": "2025-09-29T19:17:17.722411"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 8 messages to localStorage",
+      "timestamp": "2025-09-29T19:17:17.737667"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:17:17.737825"
+    },
+    {
+      "type": "log",
+      "text": "Found symbol: AAPL (Apple Inc. Common Stock) via Alpaca search",
+      "timestamp": "2025-09-29T19:17:18.143733"
+    },
+    {
+      "type": "log",
+      "text": "Resolved \"AAPL\" to stock symbol: AAPL (Apple Inc. Common Stock)",
+      "timestamp": "2025-09-29T19:17:18.144057"
+    },
+    {
+      "type": "log",
+      "text": "Voice command: Changing symbol to AAPL Type: stock",
+      "timestamp": "2025-09-29T19:17:18.144296"
+    },
+    {
+      "type": "log",
+      "text": "Chart Command: \ud83d\udcc8 Switched to AAPL (Success)",
+      "timestamp": "2025-09-29T19:17:18.144378"
+    },
+    {
+      "type": "log",
+      "text": "Searching for symbol with query: \"AAPL\"",
+      "timestamp": "2025-09-29T19:17:18.144444"
+    },
+    {
+      "type": "log",
+      "text": "Found symbol: AAPL (Apple Inc. Common Stock) via Alpaca search",
+      "timestamp": "2025-09-29T19:17:18.144507"
+    },
+    {
+      "type": "log",
+      "text": "Resolved \"AAPL\" to stock symbol: AAPL (Apple Inc. Common Stock)",
+      "timestamp": "2025-09-29T19:17:18.144656"
+    },
+    {
+      "type": "log",
+      "text": "Voice command: Changing symbol to AAPL Type: stock",
+      "timestamp": "2025-09-29T19:17:18.144853"
+    },
+    {
+      "type": "log",
+      "text": "Chart Command: \ud83d\udcc8 Switched to AAPL (Success)",
+      "timestamp": "2025-09-29T19:17:18.144993"
+    },
+    {
+      "type": "log",
+      "text": "Enhanced chart control initialized",
+      "timestamp": "2025-09-29T19:17:18.152346"
+    },
+    {
+      "type": "log",
+      "text": "Chart ready for enhanced agent control",
+      "timestamp": "2025-09-29T19:17:18.152469"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfaf handleSendTextMessage called",
+      "timestamp": "2025-09-29T19:17:24.081609"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcdd Input text: What is everything down?",
+      "timestamp": "2025-09-29T19:17:24.081890"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd0c Is connected: true",
+      "timestamp": "2025-09-29T19:17:24.082093"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfa4 Voice provider: agent",
+      "timestamp": "2025-09-29T19:17:24.082201"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_dispatch {\"timestamp\":\"2025-09-30T00:17:24.080Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191444080-9sn3dzaqw\",\"query\":\"What is everything down?\"}",
+      "timestamp": "2025-09-29T19:17:24.082300"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcac Added user message to chat thread",
+      "timestamp": "2025-09-29T19:17:24.082367"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 9 messages to localStorage",
+      "timestamp": "2025-09-29T19:17:24.084660"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:17:24.084766"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_response {\"timestamp\":\"2025-09-30T00:17:32.386Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191444080-9sn3dzaqw\",\"toolsUsed\":[],\"chartCommands\":[]}",
+      "timestamp": "2025-09-29T19:17:32.387086"
+    },
+    {
+      "type": "log",
+      "text": "\u2705 Added backend agent response to chat",
+      "timestamp": "2025-09-29T19:17:32.387273"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 10 messages to localStorage",
+      "timestamp": "2025-09-29T19:17:32.399608"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:17:32.399853"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfaf handleSendTextMessage called",
+      "timestamp": "2025-09-29T19:17:41.294681"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcdd Input text: !@#$%^&*()",
+      "timestamp": "2025-09-29T19:17:41.294971"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd0c Is connected: true",
+      "timestamp": "2025-09-29T19:17:41.295171"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfa4 Voice provider: agent",
+      "timestamp": "2025-09-29T19:17:41.295320"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_dispatch {\"timestamp\":\"2025-09-30T00:17:41.294Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191461294-63pf630dr\",\"query\":\"!@#$%^&*()\"}",
+      "timestamp": "2025-09-29T19:17:41.295467"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcac Added user message to chat thread",
+      "timestamp": "2025-09-29T19:17:41.295542"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 11 messages to localStorage",
+      "timestamp": "2025-09-29T19:17:41.298586"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:17:41.298722"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_response {\"timestamp\":\"2025-09-30T00:17:47.422Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191461294-63pf630dr\",\"toolsUsed\":[],\"chartCommands\":[]}",
+      "timestamp": "2025-09-29T19:17:47.423019"
+    },
+    {
+      "type": "log",
+      "text": "\u2705 Added backend agent response to chat",
+      "timestamp": "2025-09-29T19:17:47.423155"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 12 messages to localStorage",
+      "timestamp": "2025-09-29T19:17:47.427561"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:17:47.427648"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfaf handleSendTextMessage called",
+      "timestamp": "2025-09-29T19:17:58.467923"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcdd Input text: [empty]",
+      "timestamp": "2025-09-29T19:17:58.468160"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udd0c Is connected: true",
+      "timestamp": "2025-09-29T19:17:58.468320"
+    },
+    {
+      "type": "log",
+      "text": "\ud83c\udfa4 Voice provider: agent",
+      "timestamp": "2025-09-29T19:17:58.468453"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_dispatch {\"timestamp\":\"2025-09-30T00:17:58.467Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191478467-fmefuszae\",\"query\":\"[empty]\"}",
+      "timestamp": "2025-09-29T19:17:58.468678"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcac Added user message to chat thread",
+      "timestamp": "2025-09-29T19:17:58.468776"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 13 messages to localStorage",
+      "timestamp": "2025-09-29T19:17:58.472753"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:17:58.472831"
+    },
+    {
+      "type": "info",
+      "text": "[agent] query_response {\"timestamp\":\"2025-09-30T00:18:06.200Z\",\"provider\":\"agent\",\"messageId\":\"agent-1759191478467-fmefuszae\",\"toolsUsed\":[],\"chartCommands\":[]}",
+      "timestamp": "2025-09-29T19:18:06.200950"
+    },
+    {
+      "type": "log",
+      "text": "\u2705 Added backend agent response to chat",
+      "timestamp": "2025-09-29T19:18:06.201065"
+    },
+    {
+      "type": "log",
+      "text": "\ud83d\udcbe Saved 14 messages to localStorage",
+      "timestamp": "2025-09-29T19:18:06.216352"
+    },
+    {
+      "type": "log",
+      "text": "Voice provider switched from agent to: agent",
+      "timestamp": "2025-09-29T19:18:06.216572"
+    }
+  ],
+  "network_errors": [
+    {
+      "url": "http://localhost:8000/api/technical-indicators?symbol=AAPL&indicators=moving_averages&days=1",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2025-09-29T19:16:21.517761"
+    }
+  ],
+  "ui_issues": [
+    {
+      "category": "UI",
+      "description": "Dashboard did not load on first visit",
+      "timestamp": "2025-09-29T19:16:27.934773"
+    },
+    {
+      "category": "UX",
+      "description": "No visible help or onboarding for new users",
+      "timestamp": "2025-09-29T19:16:27.937442"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.946263"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.951910"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.957912"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.964523"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.970425"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.976071"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.980717"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.985571"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.990744"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.995592"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:27.999967"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.004751"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.009336"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.013857"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.018672"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.023429"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.028858"
+    },
+    {
+      "category": "Market Panel",
+      "description": "Market insights panel not found",
+      "timestamp": "2025-09-29T19:16:28.029823"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.034816"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.048337"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.057898"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.064740"
+    },
+    {
+      "category": "Input",
+      "description": "Could not find input field for queries",
+      "timestamp": "2025-09-29T19:16:28.071421"
+    },
+    {
+      "category": "Response",
+      "description": "No response received for query",
+      "timestamp": "2025-09-29T19:16:49.459271"
+    },
+    {
+      "category": "Error Handling",
+      "description": "No error message for invalid query: INVALIDTICKER",
+      "timestamp": "2025-09-29T19:16:49.461092"
+    },
+    {
+      "category": "Response",
+      "description": "No response received for query",
+      "timestamp": "2025-09-29T19:17:06.660915"
+    },
+    {
+      "category": "Error Handling",
+      "description": "No error message for invalid query: Show me XYZABC123",
+      "timestamp": "2025-09-29T19:17:06.662087"
+    },
+    {
+      "category": "Response",
+      "description": "No response received for query",
+      "timestamp": "2025-09-29T19:17:23.890131"
+    },
+    {
+      "category": "Error Handling",
+      "description": "No error message for invalid query: Buy 1000000 shares of AAPL",
+      "timestamp": "2025-09-29T19:17:23.891498"
+    },
+    {
+      "category": "Response",
+      "description": "No response received for query",
+      "timestamp": "2025-09-29T19:17:41.182336"
+    },
+    {
+      "category": "Error Handling",
+      "description": "No error message for invalid query: What is everything down?",
+      "timestamp": "2025-09-29T19:17:41.183522"
+    },
+    {
+      "category": "Response",
+      "description": "No response received for query",
+      "timestamp": "2025-09-29T19:17:58.376080"
+    },
+    {
+      "category": "Error Handling",
+      "description": "No error message for invalid query: !@#$%^&*()",
+      "timestamp": "2025-09-29T19:17:58.377851"
+    },
+    {
+      "category": "Response",
+      "description": "No response received for query",
+      "timestamp": "2025-09-29T19:18:15.565566"
+    }
+  ]
+}

@@ -1129,9 +1129,41 @@ class AgentOrchestrator:
             "WEAK", "BIG", "SMALL", "LARGE", "HUGE", "TINY", "FAST", "SLOW",
             "TODAY", "YESTERDAY", "TOMORROW", "NOW", "THEN", "HERE", "THERE",
             "MARKET", "STOCK", "STOCKS", "SHARE", "SHARES", "TRADE", "TRADES",
-            "TRADING", "TRADER", "MONEY", "CASH", "DOLLAR", "CENTS", "PERCENT"
+            "TRADING", "TRADER", "MONEY", "CASH", "DOLLAR", "CENTS", "PERCENT",
+            # Common verbs that shouldn't be tickers
+            "DOING", "DO", "DOES", "DID", "DONE", "ARE", "AM", "WAS", "WERE", "BEEN",
+            "BEING", "BE", "HAS", "HAD", "HAVE", "HAVING", "MAY", "MIGHT", "MUST",
+            "SHALL", "SHOULD", "WILL", "WOULD", "COULD", "CAN'T", "WON'T", "DON'T",
+            # Additional common words
+            "WELL", "TECH", "ABOUT", "MORE", "LESS", "VERY", "REALLY", "JUST",
+            "ONLY", "ALSO", "STILL", "EVEN", "BACK", "AFTER", "OVER", "UNDER",
+            # Conjunctions and articles
+            "AND", "OR", "BUT", "NOR", "YET", "SO", "AS", "IF", "THAN", "BECAUSE"
         }
 
+        # Company name aliases
+        company_aliases = {
+            "APPLE": "AAPL",
+            "MICROSOFT": "MSFT",
+            "GOOGLE": "GOOGL",
+            "ALPHABET": "GOOGL",
+            "AMAZON": "AMZN",
+            "TESLA": "TSLA",
+            "META": "META",
+            "FACEBOOK": "META",
+            "NVIDIA": "NVDA",
+            "NETFLIX": "NFLX",
+            "BERKSHIRE": "BRK.B",
+            "JPMORGAN": "JPM",
+            "WALMART": "WMT",
+            "DISNEY": "DIS"
+        }
+        
+        # Check for company names first
+        for company, ticker in company_aliases.items():
+            if company in text:
+                return ticker
+        
         # Crypto aliases
         crypto_aliases = {
             "BITCOIN": "BTC-USD",
@@ -1305,9 +1337,68 @@ class AgentOrchestrator:
         commands = []
         lower_query = query.lower()
         
-        # Check if technical analysis was performed
-        if 'technical_analysis' in tool_results:
-            logger.info(f"Generating drawing commands from technical analysis data")
+        # Check if we need to perform technical analysis for drawing commands
+        needs_technical = any(keyword in lower_query for keyword in [
+            'support', 'resistance', 'fibonacci', 'fib', 'trend line', 'trendline',
+            'technical', 'levels', 'analysis', 'pattern', 'draw'
+        ])
+        
+        # If we need technical analysis and have candle data, perform it
+        if needs_technical and 'get_stock_history' in tool_results:
+            logger.info("Performing technical analysis for drawing commands")
+            history_data = tool_results.get('get_stock_history', {})
+            
+            if 'candles' in history_data:
+                candles = history_data['candles']
+                symbol = history_data.get('symbol', 'UNKNOWN')
+                
+                # Calculate technical levels
+                if len(candles) > 0:
+                    prices = [c.get('close', 0) for c in candles]
+                    highs = [c.get('high', 0) for c in candles]
+                    lows = [c.get('low', 0) for c in candles]
+                    
+                    # Calculate support/resistance levels
+                    support_levels = []
+                    resistance_levels = []
+                    
+                    if len(prices) > 20:
+                        # Find recent lows for support
+                        recent_lows = sorted(lows[-50:])[:5]  # 5 lowest points
+                        support_levels = sorted(list(set(recent_lows)))[:3]
+                        
+                        # Find recent highs for resistance
+                        recent_highs = sorted(highs[-50:], reverse=True)[:5]  # 5 highest points
+                        resistance_levels = sorted(list(set(recent_highs)), reverse=True)[:3]
+                    
+                    # Calculate trend lines if requested
+                    if 'trendline' in lower_query or 'trend line' in lower_query:
+                        trend_lines = self._calculate_trend_lines(candles)
+                        for line in trend_lines[:2]:  # Max 2 trend lines
+                            commands.append(
+                                f"TRENDLINE:{line['start_price']}:{line['start_time']}:"
+                                f"{line['end_price']}:{line['end_time']}"
+                            )
+                    
+                    # Add support/resistance if requested
+                    if 'support' in lower_query:
+                        for level in support_levels[:3]:
+                            commands.append(f"SUPPORT:{level}")
+                    
+                    if 'resistance' in lower_query:
+                        for level in resistance_levels[:3]:
+                            commands.append(f"RESISTANCE:{level}")
+                    
+                    # Add Fibonacci if requested
+                    if 'fibonacci' in lower_query or 'fib' in lower_query:
+                        if highs and lows:
+                            high = max(highs[-50:])
+                            low = min(lows[-50:])
+                            commands.append(f"FIBONACCI:{high}:{low}")
+        
+        # Check if technical analysis was already performed
+        elif 'technical_analysis' in tool_results:
+            logger.info(f"Using existing technical analysis data")
             ta_data = tool_results['technical_analysis']
             
             # Generate support level commands
@@ -1365,12 +1456,8 @@ class AgentOrchestrator:
             if 'stop_loss' in swing_data:
                 commands.append(f"STOPLOSS:{swing_data['stop_loss']}")
         
-        # Trigger technical analysis if keywords present but no TA data yet
-        if not commands and any(keyword in lower_query for keyword in [
-            'support', 'resistance', 'fibonacci', 'fib', 'trend line', 'trendline',
-            'technical', 'levels', 'analysis', 'pattern'
-        ]):
-            # Return a flag to trigger technical analysis
+        # If still no commands but technical keywords present, flag for analysis
+        if not commands and needs_technical:
             commands.append("ANALYZE:TECHNICAL")
         
         return commands
@@ -1590,6 +1677,60 @@ class AgentOrchestrator:
                     })
         
         return trend_lines[:2]  # Return max 2 trend lines
+
+    def _generate_chart_commands(
+        self, 
+        technical_analysis_data: Dict[str, Any], 
+        symbol: str
+    ) -> List[str]:
+        """Generate chart commands from technical analysis data."""
+        commands = []
+        
+        # Generate support level commands
+        if 'support_levels' in technical_analysis_data:
+            for level in technical_analysis_data['support_levels'][:3]:  # Max 3 levels
+                commands.append(f"SUPPORT:{level}")
+        
+        # Generate resistance level commands  
+        if 'resistance_levels' in technical_analysis_data:
+            for level in technical_analysis_data['resistance_levels'][:3]:  # Max 3 levels
+                commands.append(f"RESISTANCE:{level}")
+        
+        # Generate Fibonacci commands
+        if 'fibonacci_levels' in technical_analysis_data:
+            fib_data = technical_analysis_data['fibonacci_levels']
+            if 'high' in fib_data and 'low' in fib_data:
+                commands.append(f"FIBONACCI:{fib_data['high']}:{fib_data['low']}")
+        
+        # Generate trend line commands
+        if 'trend_lines' in technical_analysis_data:
+            for line in technical_analysis_data['trend_lines'][:2]:  # Max 2 trend lines
+                commands.append(
+                    f"TRENDLINE:{line['start_price']}:{line['start_time']}:"
+                    f"{line['end_price']}:{line['end_time']}"
+                )
+        
+        # Generate pattern highlight commands
+        if 'patterns' in technical_analysis_data:
+            for pattern in technical_analysis_data['patterns'][:1]:  # Top pattern only
+                if 'type' in pattern and 'start' in pattern and 'end' in pattern:
+                    commands.append(
+                        f"PATTERN:{pattern['type']}:{pattern['start']}:{pattern['end']}"
+                    )
+        
+        # Add entry/target/stop loss levels if present
+        if 'entry_points' in technical_analysis_data:
+            for entry in technical_analysis_data['entry_points'][:2]:
+                commands.append(f"ENTRY:{entry}")
+        
+        if 'targets' in technical_analysis_data:
+            for target in technical_analysis_data['targets'][:2]:
+                commands.append(f"TARGET:{target}")
+        
+        if 'stop_loss' in technical_analysis_data:
+            commands.append(f"STOPLOSS:{technical_analysis_data['stop_loss']}")
+        
+        return commands
 
     def _extract_tool_call_info(self, tool_call: Any) -> Dict[str, Any]:
         """Normalize tool call metadata regardless of SDK object shape."""
@@ -3148,7 +3289,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
         
         try:
             # Single LLM call with tools
-            model = "gpt-4o-mini" if intent in ["price-only", "news"] else self.model
+            model = "gpt-5-mini" if intent in ["price-only", "news", "educational"] else self.model
             max_tokens = 400 if intent in ["price-only", "news"] else 600
             
             t_llm = time.monotonic()
@@ -3176,6 +3317,10 @@ Remember to cite sources when using this knowledge and maintain educational tone
             response = await self.client.chat.completions.create(**completion_params)
             llm1_dur = time.monotonic()-t_llm
             logger.info(f"Single-pass LLM latency: {llm1_dur:.2f}s")
+            
+            # Debug logging for educational queries
+            if intent == "educational":
+                logger.info(f"Educational response content: {response.choices[0].message.content[:200] if response.choices[0].message.content else 'NONE'}")
             
             assistant_msg = response.choices[0].message
             tools_used = []
@@ -3724,6 +3869,21 @@ Remember to cite sources when using this knowledge and maintain educational tone
     def _classify_intent(self, query: str) -> str:
         """Classify query intent for fast-path routing."""
         ql = query.lower()
+        
+        # Educational queries (highest priority for novice traders)
+        educational_triggers = [
+            "what does", "what is", "how do i", "how to", "explain", 
+            "what's the difference", "what is the difference", "teach me",
+            "buy low", "sell high", "support and resistance", "support level",
+            "resistance level", "trading basics", "start trading", "beginner",
+            "learn", "understand", "meaning of", "definition"
+        ]
+        if any(trigger in ql for trigger in educational_triggers):
+            # Check if it's really educational (not just "what is AAPL")
+            symbol = self._extract_symbol_from_query(query)
+            if not symbol or "difference" in ql or "mean" in ql or "how" in ql:
+                return "educational"
+        
         # Company information queries (before price-only)
         company_info_triggers = ("what is", "who is", "tell me about", "explain")
         if any(p in ql for p in company_info_triggers):
@@ -3739,8 +3899,9 @@ Remember to cite sources when using this knowledge and maintain educational tone
             and not any(term in ql for term in ["analysis", "technical", "news", "chart", "pattern"])):
             return "price-only"
         
-        # Chart display commands
-        if any(term in ql for term in ["show chart", "display chart", "load chart", "view chart"]):
+        # Chart display commands (expanded to catch more variations)
+        if any(term in ql for term in ["show chart", "display chart", "load chart", "view chart", 
+                                        "show me the chart", "show me chart", "chart for", "chart of"]):
             return "chart-only"
         
         # Indicator toggle commands  
@@ -3757,6 +3918,95 @@ Remember to cite sources when using this knowledge and maintain educational tone
         
         # Default to general
         return "general"
+    
+    async def _handle_educational_query(self, query: str) -> Dict[str, Any]:
+        """Handle educational queries for novice traders."""
+        ql = query.lower()
+        
+        # Educational content database
+        educational_responses = {
+            "buy low": {
+                "title": "Buy Low, Sell High",
+                "content": "Buy low, sell high is the fundamental principle of trading. It means purchasing stocks when their price is relatively low (undervalued) and selling them when the price rises (overvalued). The challenge is determining what constitutes 'low' and 'high' - this requires analyzing market trends, company fundamentals, and technical indicators."
+            },
+            "support and resistance": {
+                "title": "Support and Resistance Levels",
+                "content": "Support is a price level where a stock tends to stop falling and bounce back up - it acts like a floor. Resistance is where a stock tends to stop rising and pull back - it acts like a ceiling. These levels form because traders remember past prices and tend to buy at support and sell at resistance. Breaking through these levels often signals significant moves."
+            },
+            "support level": {
+                "title": "Support Levels",
+                "content": "A support level is a price point where buying interest is strong enough to overcome selling pressure, causing the price to stop declining and potentially reverse upward. Think of it as a floor that holds the price up. Support levels often form at previous lows, round numbers, or moving averages."
+            },
+            "resistance level": {
+                "title": "Resistance Levels",
+                "content": "A resistance level is a price point where selling pressure overcomes buying interest, causing the price to stop rising and potentially reverse downward. Think of it as a ceiling that caps price advances. Resistance often forms at previous highs, psychological round numbers, or technical indicators."
+            },
+            "start trading": {
+                "title": "How to Start Trading Stocks",
+                "content": "To start trading stocks: 1) Open a brokerage account with a reputable broker, 2) Fund your account (start small, only invest what you can afford to lose), 3) Research companies and learn basic analysis, 4) Start with established companies you understand, 5) Use limit orders to control your entry price, 6) Always have an exit strategy before entering a trade, 7) Keep learning and track your trades."
+            },
+            "market order": {
+                "title": "Market Orders",
+                "content": "A market order executes immediately at the current best available price. It guarantees execution but not price. Use market orders when you need to buy or sell quickly, but be careful in volatile markets or with thinly traded stocks as you might get a worse price than expected."
+            },
+            "limit order": {
+                "title": "Limit Orders",
+                "content": "A limit order sets a specific price at which you're willing to buy or sell. Buy limits execute at or below your price, sell limits at or above. They give you price control but don't guarantee execution. Perfect for patient traders who want specific entry/exit points."
+            },
+            "stop loss": {
+                "title": "Stop Loss Orders",
+                "content": "A stop loss automatically sells your position if the price drops to a specified level, limiting your losses. For example, if you buy at $100 and set a stop loss at $95, you'll automatically sell if the price hits $95, limiting your loss to 5%. Essential for risk management."
+            },
+            "bull market": {
+                "title": "Bull Market",
+                "content": "A bull market is a period when stock prices are rising or expected to rise. The term comes from how a bull attacks - thrusting upward with its horns. Bull markets are characterized by optimism, investor confidence, and expectations of strong results."
+            },
+            "bear market": {
+                "title": "Bear Market",
+                "content": "A bear market is when prices fall 20% or more from recent highs. The term comes from how a bear attacks - swiping downward with its paws. Bear markets are marked by pessimism, falling prices, and widespread selling. They're normal parts of market cycles."
+            }
+        }
+        
+        # Find matching educational content
+        matched_content = None
+        for key, content in educational_responses.items():
+            if key in ql:
+                matched_content = content
+                break
+        
+        # If no exact match, provide general educational response
+        if not matched_content:
+            if "how do i" in ql or "how to" in ql:
+                response_text = "I can help you learn about trading! Here are some topics I can explain: buy low sell high, support and resistance levels, how to start trading, market orders vs limit orders, stop losses, and bull vs bear markets. What would you like to learn about?"
+            elif "what is" in ql or "what does" in ql:
+                response_text = "I'd be happy to explain trading concepts! I can teach you about support/resistance levels, market orders, limit orders, stop losses, bull/bear markets, and more. What specific concept would you like to understand?"
+            else:
+                response_text = "I'm here to help you learn trading! Ask me about any trading concept, strategy, or term you'd like to understand better."
+        else:
+            response_text = f"**{matched_content['title']}**\n\n{matched_content['content']}"
+        
+        # Add educational flag and chart commands if relevant
+        response = {
+            "text": response_text,
+            "tools_used": ["educational_content"],
+            "structured_data": {
+                "type": "educational",
+                "topic": matched_content['title'] if matched_content else "general"
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Add chart commands for concepts that benefit from visualization
+        if any(term in ql for term in ["support", "resistance", "chart", "show me"]):
+            symbol = self._extract_symbol_from_query(query)
+            if symbol:
+                response["chart_commands"] = [f"LOAD:{symbol.upper()}"]
+                if "support" in ql:
+                    response["chart_commands"].append("DRAW:SUPPORT")
+                if "resistance" in ql:
+                    response["chart_commands"].append("DRAW:RESISTANCE")
+        
+        return response
     
     def _extract_indicator_commands(self, query: str) -> List[str]:
         """Extract indicator commands from query."""
@@ -3825,14 +4075,14 @@ Remember to cite sources when using this knowledge and maintain educational tone
         else:
             logger.info(f"Skipping cache for technical analysis query: {query[:50]}...")
 
-        # Attempt to answer using fast static templates for known educational queries
-        static_response = await self._maybe_answer_with_static_template(
-            query,
-            conversation_history,
-        )
-        if static_response:
-            await self._cache_response(query, context, static_response)
-            return static_response
+        # Disabled static templates to enable LLM for educational queries
+        # static_response = await self._maybe_answer_with_static_template(
+        #     query,
+        #     conversation_history,
+        # )
+        # if static_response:
+        #     await self._cache_response(query, context, static_response)
+        #     return static_response
 
         # Fast-path for simple price queries (e.g., "Get AAPL price")
         quick_price_response = await self._maybe_answer_with_price_query(
@@ -3843,13 +4093,18 @@ Remember to cite sources when using this knowledge and maintain educational tone
             await self._cache_response(query, context, quick_price_response)
             return quick_price_response
 
+        # Disabled educational fast-path to enable LLM for educational queries
+        # if intent == "educational":
+        #     response = await self._handle_educational_query(query)
+        #     return response
+        
         # Fast-path for chart-only commands (no LLM needed)
         if intent == "chart-only":
             symbol = self._extract_symbol_from_query(query)
             if symbol:
                 response = {
                     "text": f"Loading {symbol.upper()} chart",
-                    "chart_commands": [f"CHART:{symbol.upper()}"],
+                    "chart_commands": [f"LOAD:{symbol.upper()}"],
                     "timestamp": datetime.now().isoformat(),
                     "intent": "chart-only"
                 }

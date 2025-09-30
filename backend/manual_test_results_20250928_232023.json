@@ -1,0 +1,71 @@
+{
+  "timestamp": "2025-09-28T23:19:48.576729",
+  "tests": [
+    {
+      "test": "Support Level",
+      "command": "SUPPORT:440",
+      "result": {
+        "success": true,
+        "command": "SUPPORT:440",
+        "indicators": []
+      },
+      "screenshot": "manual_test_1_Support_Level.png",
+      "timestamp": "2025-09-28T23:19:58.527900"
+    },
+    {
+      "test": "Resistance Level",
+      "command": "RESISTANCE:460",
+      "result": {
+        "success": true,
+        "command": "RESISTANCE:460",
+        "indicators": []
+      },
+      "screenshot": "manual_test_2_Resistance_Level.png",
+      "timestamp": "2025-09-28T23:20:01.024758"
+    },
+    {
+      "test": "Fibonacci",
+      "command": "FIBONACCI:430:470",
+      "result": {
+        "success": true,
+        "command": "FIBONACCI:430:470",
+        "indicators": []
+      },
+      "screenshot": "manual_test_3_Fibonacci.png",
+      "timestamp": "2025-09-28T23:20:03.520543"
+    },
+    {
+      "test": "RSI Indicator",
+      "command": "INDICATOR:RSI:ON",
+      "result": {
+        "success": true,
+        "command": "INDICATOR:RSI:ON",
+        "indicators": []
+      },
+      "screenshot": "manual_test_4_RSI_Indicator.png",
+      "timestamp": "2025-09-28T23:20:06.025755"
+    },
+    {
+      "test": "MACD Indicator",
+      "command": "INDICATOR:MACD:ON",
+      "result": {
+        "success": true,
+        "command": "INDICATOR:MACD:ON",
+        "indicators": []
+      },
+      "screenshot": "manual_test_5_MACD_Indicator.png",
+      "timestamp": "2025-09-28T23:20:08.100045"
+    },
+    {
+      "test": "Entry/Stop/Target",
+      "command": "ENTRY:445 STOP:435 TARGET:465",
+      "result": {
+        "success": true,
+        "command": "ENTRY:445 STOP:435 TARGET:465",
+        "indicators": []
+      },
+      "screenshot": "manual_test_6_Entry_Stop_Target.png",
+      "timestamp": "2025-09-28T23:20:10.626172"
+    }
+  ]
+}

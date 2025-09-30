@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
 import asyncio
 
 import logging
@@ -11,6 +12,7 @@ import logging
 from .pattern_rules import PatternRuleEngine, PatternStatus
 from .command_builders import TrendlineCommandBuilder, IndicatorCommandBuilder
 from .pattern_repository import PatternRepository
+from .pattern_confidence_service import PatternConfidenceService, ConfidencePrediction
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +40,23 @@ class PatternLifecycleManager:
         confirm_threshold: float = 75.0,
         max_misses: int = 2,
         enable_phase4_rules: bool = True,
+        enable_phase5_ml: bool = False,
+        confidence_service: Optional[PatternConfidenceService] = None,
+        ml_confidence_threshold: float = 0.55,
+        ml_weight: float = 0.6,
+        rule_weight: float = 0.4,
     ) -> None:
         self.confirm_threshold = confirm_threshold
         self.max_misses = max_misses
         self._states: Dict[Tuple[str, str], Dict[str, PatternState]] = {}
-        
+        self.enable_phase5_ml = enable_phase5_ml
+        self.ml_confidence_threshold = ml_confidence_threshold
+        self.confidence_service = confidence_service
+        self.blend_weights = {
+            "ml": ml_weight,
+            "rule": rule_weight,
+        }
+
         # Phase 4 components
         self.enable_phase4_rules = enable_phase4_rules
         if enable_phase4_rules:
@@ -55,6 +69,9 @@ class PatternLifecycleManager:
             self.command_builder = None
             self.indicator_builder = None
             self.repository = None
+
+        if self.enable_phase5_ml and not self.confidence_service:
+            self.confidence_service = PatternConfidenceService()
 
     def update(
         self,
@@ -76,6 +93,8 @@ class PatternLifecycleManager:
         states = self._states.setdefault(key, {})
         commands: List[str] = []
         summary: List[Dict[str, Any]] = []
+        repository_updates: List[Tuple[str, Dict[str, Any]]] = []
+        ml_insights: List[Dict[str, Any]] = []
         seen_ids: set[str] = set()
 
         for pattern in patterns:
@@ -90,7 +109,7 @@ class PatternLifecycleManager:
                 states[pattern_id] = existing_state
                 commands.append(f"ANNOTATE:PATTERN:{pattern_id}:pending")
 
-            transitions = self._apply_pattern_update(existing_state, pattern)
+            transitions = self._apply_pattern_update(existing_state, pattern, repository_updates, ml_insights)
             if transitions:
                 commands.extend(transitions)
 
@@ -121,15 +140,120 @@ class PatternLifecycleManager:
             deduped_commands.append(cmd)
             seen.add(cmd)
 
-        return {
+        result: Dict[str, Any] = {
             "states": summary,
             "chart_commands": deduped_commands,
         }
 
-    def _apply_pattern_update(self, state: PatternState, pattern: Dict[str, Any]) -> List[str]:
+        if repository_updates:
+            result["repository_updates"] = repository_updates
+        if ml_insights:
+            result["ml_insights"] = ml_insights
+
+        return result
+
+    def _maybe_enhance_with_ml(
+        self,
+        pattern: Dict[str, Any],
+        rule_confidence: float,
+    ) -> Optional[Dict[str, Any]]:
+        if not self.enable_phase5_ml or not self.confidence_service:
+            return None
+
+        try:
+            coro = self.confidence_service.predict_confidence(
+                pattern_data=pattern,
+                price_history=pattern.get("price_history"),
+                market_data=pattern.get("market_data"),
+                rule_confidence=rule_confidence,
+            )
+
+            loop = asyncio.new_event_loop()
+            try:
+                prediction: ConfidencePrediction = loop.run_until_complete(coro)
+            finally:
+                loop.close()
+
+            if prediction.fallback_used:
+                return None
+
+            # Apply thresholding; only use ML if confident enough
+            if prediction.ml_confidence < self.ml_confidence_threshold:
+                return None
+
+            rule_confidence_dec = rule_confidence / 100.0
+            blended_raw = prediction.blended_confidence
+            if blended_raw is None:
+                blended_raw = (
+                    prediction.ml_confidence * self.blend_weights["ml"]
+                    + rule_confidence_dec * self.blend_weights["rule"]
+                )
+
+            ml_confidence_pct = prediction.ml_confidence * 100.0
+            blended_confidence_pct = blended_raw * 100.0
+
+            return {
+                "prediction": prediction,
+                "ml_confidence": prediction.ml_confidence,
+                "ml_confidence_pct": ml_confidence_pct,
+                "blended_confidence": blended_raw,
+                "blended_confidence_pct": blended_confidence_pct,
+            }
+        except Exception as exc:
+            logger.warning("ML confidence enhancement failed: %s", exc)
+            return None
+
+    def _apply_pattern_update(
+        self,
+        state: PatternState,
+        pattern: Dict[str, Any],
+        repository_updates: List[Tuple[str, Dict[str, Any]]],
+        ml_insights: List[Dict[str, Any]],
+    ) -> List[str]:
         commands: List[str] = []
         state.last_updated = datetime.utcnow()
-        state.confidence = float(pattern.get("confidence") or 0)
+        rule_confidence = float(pattern.get("confidence") or 0)
+        blended_confidence = rule_confidence
+
+        if self.enable_phase5_ml and self.confidence_service:
+            ml_prediction = self._maybe_enhance_with_ml(pattern, rule_confidence)
+            if ml_prediction:
+                prediction: ConfidencePrediction = ml_prediction["prediction"]
+                blended_confidence = ml_prediction["blended_confidence_pct"]
+
+                ml_metadata = {
+                    "ml_confidence": ml_prediction["ml_confidence"],
+                    "ml_confidence_pct": ml_prediction["ml_confidence_pct"],
+                    "blended_confidence": ml_prediction["blended_confidence"],
+                    "blended_confidence_pct": ml_prediction["blended_confidence_pct"],
+                    "prediction_class": prediction.prediction_class,
+                    "model_version": prediction.model_version,
+                    "inference_latency_ms": prediction.inference_latency_ms,
+                    "fallback_used": prediction.fallback_used,
+                    "feature_count": prediction.feature_count,
+                    "class_probabilities": prediction.class_probabilities,
+                }
+
+                pattern.setdefault("ml", {}).update(ml_metadata)
+                ml_insights.append({
+                    "pattern_id": state.pattern_id,
+                    "symbol": pattern.get("symbol"),
+                    "timeframe": pattern.get("timeframe"),
+                    "ml": ml_metadata,
+                })
+
+                repository_payload = {
+                    "ml_confidence": ml_metadata["ml_confidence_pct"],
+                    "ml_confidence_raw": ml_metadata["ml_confidence"],
+                    "blended_confidence": ml_metadata["blended_confidence_pct"],
+                    "model_version": ml_metadata["model_version"],
+                    "prediction_class": ml_metadata["prediction_class"],
+                    "ml_metadata": ml_metadata,
+                    "confidence": blended_confidence,
+                }
+                repository_updates.append((state.pattern_id, repository_payload))
+
+        state.confidence = blended_confidence
         state.bias = pattern.get("bias")
         state.metadata = pattern
         state.misses = 0
@@ -210,7 +334,10 @@ class PatternLifecycleManager:
         return f"{base}_{suffix:04x}"
 
     def _state_summary(self, state: PatternState) -> Dict[str, Any]:
-        return {
+        metadata = state.metadata if isinstance(state.metadata, dict) else {}
+        ml_metadata = metadata.get("ml") if isinstance(metadata, dict) else None
+
+        summary: Dict[str, Any] = {
             "pattern_id": state.pattern_id,
             "status": state.status,
             "confidence": state.confidence,
@@ -218,6 +345,11 @@ class PatternLifecycleManager:
             "first_seen": state.first_seen.isoformat(),
             "last_updated": state.last_updated.isoformat(),
         }
+
+        if ml_metadata:
+            summary["ml"] = ml_metadata
+
+        return summary
 
     def _current_states(self, symbol: str, timeframe: str) -> List[Dict[str, Any]]:
         states = self._states.get((symbol.upper(), timeframe))
@@ -260,7 +392,7 @@ class PatternLifecycleManager:
             
             # Evaluate with rule engine
             new_status, evaluation_metadata = self.rule_engine.evaluate_pattern(
-                pattern, 
+                pattern,
                 current_price,
                 datetime.now(timezone.utc)
             )

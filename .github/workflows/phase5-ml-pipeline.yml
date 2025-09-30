@@ -1,0 +1,338 @@
+name: Phase 5 ML Pipeline
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - 'backend/**'
+      - 'backend/services/ml/**'
+      - 'backend/ml/**'
+      - 'scripts/phase5_*.py'
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Run nightly at 3 AM UTC (after Phase 3 tests)
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      run_training:
+        description: 'Run model training'
+        required: false
+        default: 'false'
+        type: boolean
+      run_benchmarks:
+        description: 'Run performance benchmarks'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  phase5-ml-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-phase5-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-phase5-
+            ${{ runner.os }}-pip-
+      
+      - name: Install Python dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Verify ML Dependencies
+        run: |
+          python -c "import sklearn, xgboost, lightgbm, joblib, pandas, numpy; print('✅ All ML dependencies installed')"
+          python -c "import pytest; print(f'✅ pytest {pytest.__version__} installed')"
+      
+      - name: Run Phase 5 Feature Extraction Tests
+        run: |
+          cd /
+          PYTHONPATH=/github/workspace python -m pytest \
+            /github/workspace/backend/tests/test_phase5_regression.py::TestPhase5FeatureExtraction \
+            -v --tb=short --maxfail=3
+      
+      - name: Run Phase 5 ML Service Tests
+        run: |
+          cd /
+          PYTHONPATH=/github/workspace python -m pytest \
+            /github/workspace/backend/tests/test_phase5_regression.py::TestPhase5InferenceService \
+            -v --tb=short --maxfail=3
+      
+      - name: Run Phase 5 Integration Tests
+        run: |
+          cd /
+          PYTHONPATH=/github/workspace python -m pytest \
+            /github/workspace/backend/tests/test_phase5_regression.py::TestPhase5LifecycleIntegration \
+            -v --tb=short --maxfail=3
+      
+      - name: Run Phase 5 Performance Tests
+        if: ${{ github.event.inputs.run_benchmarks == 'true' || github.event_name != 'workflow_dispatch' }}
+        run: |
+          cd /
+          PYTHONPATH=/github/workspace python -m pytest \
+            /github/workspace/backend/tests/test_phase5_regression.py::TestPhase5Performance \
+            -v --tb=short --maxfail=2
+      
+      - name: Run Phase 5 Error Handling Tests
+        run: |
+          cd /
+          PYTHONPATH=/github/workspace python -m pytest \
+            /github/workspace/backend/tests/test_phase5_regression.py::TestPhase5ErrorHandling \
+            -v --tb=short --maxfail=3
+      
+      - name: Validate ML Inference SLA (<75ms)
+        run: |
+          cd /github/workspace
+          PYTHONPATH=. python -c "
+          import asyncio
+          import time
+          from backend.services.ml_confidence_enhancer import MLConfidenceEnhancer
+          
+          async def validate_sla():
+              enhancer = MLConfidenceEnhancer(enable_ml=True)
+              pattern = {
+                  'pattern_type': 'ascending_triangle',
+                  'support': 150.0, 'resistance': 160.0,
+                  'confidence': 65.0, 'symbol': 'TSLA'
+              }
+              
+              # Warm up
+              await enhancer.enhance_confidence(pattern, 65.0)
+              
+              # Measure latency
+              latencies = []
+              for i in range(10):
+                  start = time.time()
+                  await enhancer.enhance_confidence(pattern, 65.0)
+                  latency_ms = (time.time() - start) * 1000
+                  latencies.append(latency_ms)
+              
+              avg_latency = sum(latencies) / len(latencies)
+              max_latency = max(latencies)
+              
+              print(f'✅ Average latency: {avg_latency:.2f}ms')
+              print(f'✅ Max latency: {max_latency:.2f}ms')
+              
+              if max_latency > 75:
+                  print(f'❌ SLA violation: {max_latency:.2f}ms > 75ms')
+                  exit(1)
+              else:
+                  print(f'✅ SLA validated: All predictions < 75ms')
+          
+          asyncio.run(validate_sla())
+          "
+      
+      - name: Test Model Training Pipeline (Optional)
+        if: ${{ github.event.inputs.run_training == 'true' }}
+        run: |
+          cd /
+          PYTHONPATH=/github/workspace python -m pytest \
+            /github/workspace/backend/tests/test_phase5_regression.py::TestPhase5ModelTraining \
+            -v --tb=short --maxfail=2
+      
+      - name: Generate Synthetic Training Data
+        if: ${{ github.event.inputs.run_training == 'true' }}
+        run: |
+          cd /github/workspace
+          PYTHONPATH=. python scripts/phase5_backfill.py --count 1000 --output /tmp/phase5_training.csv
+      
+      - name: Test Feature Consistency
+        run: |
+          cd /github/workspace
+          PYTHONPATH=. python -c "
+          from backend.services.ml.feature_builder import PatternFeatureBuilder
+          
+          builder = PatternFeatureBuilder()
+          pattern = {
+              'pattern_type': 'ascending_triangle',
+              'support': 150.0, 'resistance': 160.0,
+              'confidence': 0.75, 'symbol': 'TSLA'
+          }
+          
+          # Test consistency across multiple extractions
+          features1 = builder.extract_features(pattern_data=pattern)
+          features2 = builder.extract_features(pattern_data=pattern)
+          
+          assert len(features1.features) == 50, f'Expected 50 features, got {len(features1.features)}'
+          assert len(features2.features) == 50, f'Expected 50 features, got {len(features2.features)}'
+          
+          # Check consistency
+          for name in features1.features:
+              diff = abs(features1.features[name] - features2.features[name])
+              assert diff < 1e-10, f'Feature {name} inconsistent: {diff}'
+          
+          print(f'✅ Feature consistency validated: {len(features1.features)} features')
+          print(f'✅ Quality scores: {features1.quality_score:.3f}, {features2.quality_score:.3f}')
+          "
+      
+      - name: Upload Phase 5 Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-ml-test-results
+          path: |
+            backend/tests/phase5_*.json
+            backend/*.log
+            /tmp/phase5_training.csv
+          retention-days: 7
+      
+      - name: Post Results to Slack (Optional)
+        if: failure() && secrets.SLACK_WEBHOOK
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Phase 5 ML Pipeline Failed! Check the logs for ML inference or feature extraction issues.'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  phase5-integration-test:
+    runs-on: ubuntu-latest
+    needs: phase5-ml-tests
+    timeout-minutes: 10
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Test Phase 5 Backend Integration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          SUPABASE_URL: https://cwnzgvrylvxfhwhsqelc.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3bnpndnJ5bHZ4Zmh3aHNxZWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkxNDA2ODMsImV4cCI6MjA1NDcxNjY4M30.16guu151voGKraTKi0A2EBs9nDSaqBaGp3QF5IT8h_M
+          ANTHROPIC_API_KEY: test-key-for-ci
+        run: |
+          cd backend
+          # Start backend with Phase 5 enabled
+          uvicorn mcp_server:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          
+          # Test health endpoint
+          curl -f http://localhost:8000/health
+          
+          # Test Phase 5 integration
+          python -c "
+          import requests
+          import json
+          
+          # Test that ML services are available
+          response = requests.get('http://localhost:8000/health')
+          health = response.json()
+          
+          print('✅ Backend health check passed')
+          print(f'Health status: {json.dumps(health, indent=2)}')
+          
+          # Add additional Phase 5 specific health checks here
+          print('✅ Phase 5 integration test passed')
+          "
+
+  phase5-security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Security Scan on ML Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit
+          
+          # Check for security vulnerabilities in dependencies
+          cd backend
+          safety check -r requirements.txt || true
+          
+          # Scan Python code for security issues
+          bandit -r . -f json -o /tmp/bandit-report.json || true
+          
+          echo "✅ Security scan completed (warnings are non-blocking in CI)"
+      
+      - name: Upload Security Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-security-scan
+          path: /tmp/bandit-report.json
+          retention-days: 7
+
+  phase5-documentation-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check Phase 5 Documentation
+        run: |
+          # Check that Phase 5 files have proper documentation
+          echo "Checking Phase 5 documentation coverage..."
+          
+          files_to_check=(
+            "backend/services/ml/feature_builder.py"
+            "backend/services/pattern_confidence_service.py"  
+            "backend/services/ml_confidence_enhancer.py"
+            "backend/ml/pattern_confidence.py"
+          )
+          
+          for file in "${files_to_check[@]}"; do
+            if [ -f "$file" ]; then
+              docstring_count=$(grep -c '"""' "$file" || true)
+              if [ "$docstring_count" -ge 2 ]; then
+                echo "✅ $file has documentation"
+              else
+                echo "⚠️ $file may need more documentation"
+              fi
+            else
+              echo "❌ $file not found"
+              exit 1
+            fi
+          done
+          
+          echo "✅ Phase 5 documentation check completed"

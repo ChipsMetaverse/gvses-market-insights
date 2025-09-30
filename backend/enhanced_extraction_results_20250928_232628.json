@@ -1,0 +1,35 @@
+{
+  "timestamp": "2025-09-28T23:26:16.875940",
+  "tests": [
+    {
+      "test": "Support/Resistance",
+      "query": "Show support and resistance levels for TSLA",
+      "error": "HTTP 404",
+      "success": false
+    },
+    {
+      "test": "Fibonacci",
+      "query": "Draw Fibonacci retracement on TSLA",
+      "error": "HTTP 404",
+      "success": false
+    },
+    {
+      "test": "Indicators",
+      "query": "Add RSI and MACD indicators to TSLA chart",
+      "error": "HTTP 404",
+      "success": false
+    },
+    {
+      "test": "Trade Setup",
+      "query": "Mark entry at 440, stop loss at 430, and target at 460 on TSLA",
+      "error": "HTTP 404",
+      "success": false
+    },
+    {
+      "test": "Technical Analysis",
+      "query": "Do technical analysis on TSLA and show key levels",
+      "error": "HTTP 404",
+      "success": false
+    }
+  ]
+}
