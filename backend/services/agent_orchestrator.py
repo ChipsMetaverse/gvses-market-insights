@@ -2292,12 +2292,18 @@ class AgentOrchestrator:
                 "content": "\n\n".join(user_content_parts)
             })
 
-            completion = await self.client.chat.completions.create(
-                model=self.model,
-                messages=final_messages,
-                temperature=self.temperature,
-                max_tokens=900
-            )
+            # Use max_completion_tokens for GPT-5, max_tokens for older models
+            completion_params = {
+                "model": self.model,
+                "messages": final_messages,
+                "temperature": self.temperature,
+            }
+            if "gpt-5" in self.model.lower():
+                completion_params["max_completion_tokens"] = 900
+            else:
+                completion_params["max_tokens"] = 900
+            
+            completion = await self.client.chat.completions.create(**completion_params)
 
             if completion.choices:
                 return completion.choices[0].message.content
@@ -2601,16 +2607,20 @@ class AgentOrchestrator:
             Be specific and trading-focused. No disclaimers."""
             
             # Use OpenAI for insight generation with timeout
+            # Use max_completion_tokens for GPT-5, max_tokens for older models
+            completion_params = {
+                "model": "gpt-4.1",  # Fast, efficient model for insights
+                "temperature": 0.7,
+                "messages": [{
+                    "role": "user",
+                    "content": insight_prompt
+                }]
+            }
+            # GPT-4.1 does not use gpt-5 naming convention, so use max_tokens
+            completion_params["max_tokens"] = 100
+            
             response = await asyncio.wait_for(
-                self.client.chat.completions.create(
-                    model="gpt-4.1",  # Fast, efficient model for insights
-                    max_tokens=100,
-                    temperature=0.7,
-                    messages=[{
-                        "role": "user",
-                        "content": insight_prompt
-                    }]
-                ),
+                self.client.chat.completions.create(**completion_params),
                 timeout=2.0  # Quick 2-second timeout
             )
             
@@ -2969,17 +2979,21 @@ Remember to cite sources when using this knowledge and maintain educational tone
             try:
                 t_llm1_start = time.monotonic()
                 logger.info("Using Chat API for simple query (bypassing Responses API)")
-                chat_response = await self.client.chat.completions.create(
-                    model="gpt-4o-mini",  # Fast model for simple queries
-                    messages=[
+                # Use max_completion_tokens for GPT-5, max_tokens for older models
+                completion_params = {
+                    "model": "gpt-4o-mini",  # Fast model for simple queries
+                    "messages": [
                         {"role": "system", "content": self._build_system_prompt()},
                         {"role": "user", "content": query}
                     ],
-                    tools=self._get_tool_schemas(),
-                    tool_choice="auto",
-                    temperature=0.3,
-                    max_tokens=400
-                )
+                    "tools": self._get_tool_schemas(),
+                    "tool_choice": "auto",
+                    "temperature": 0.3,
+                }
+                # gpt-4o-mini doesn't use gpt-5 naming, so use max_tokens
+                completion_params["max_tokens"] = 400
+                
+                chat_response = await self.client.chat.completions.create(**completion_params)
                 chat_llm_dur = time.monotonic()-t_llm1_start
                 logger.info(f"Chat API (simple) latency: {chat_llm_dur:.2f}s")
                 
@@ -3000,12 +3014,16 @@ Remember to cite sources when using this knowledge and maintain educational tone
                     ]
                     
                     t_final = time.monotonic()
-                    final_response = await self.client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=final_messages,
-                        temperature=0.3,
-                        max_tokens=400
-                    )
+                    # Use max_completion_tokens for GPT-5, max_tokens for older models
+                    completion_params = {
+                        "model": "gpt-4o-mini",
+                        "messages": final_messages,
+                        "temperature": 0.3,
+                    }
+                    # gpt-4o-mini doesn't use gpt-5 naming, so use max_tokens
+                    completion_params["max_tokens"] = 400
+                    
+                    final_response = await self.client.chat.completions.create(**completion_params)
                     final_dur = time.monotonic()-t_final
                     logger.info(f"Chat API (final) latency: {final_dur:.2f}s")
                     response_text = final_response.choices[0].message.content
@@ -3539,14 +3557,20 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 }
             
             # Initial API call with tools
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                tools=self._get_tool_schemas(),
-                tool_choice="auto",
-                temperature=self.temperature,
-                max_tokens=1000  # Reduced for faster response
-            )
+            # Use max_completion_tokens for GPT-5, max_tokens for older models
+            completion_params = {
+                "model": self.model,
+                "messages": messages,
+                "tools": self._get_tool_schemas(),
+                "tool_choice": "auto",
+                "temperature": self.temperature,
+            }
+            if "gpt-5" in self.model.lower():
+                completion_params["max_completion_tokens"] = 1000  # Reduced for faster response
+            else:
+                completion_params["max_tokens"] = 1000  # Reduced for faster response
+            
+            response = await self.client.chat.completions.create(**completion_params)
             
             assistant_message = response.choices[0].message
             messages.append(assistant_message.model_dump())
@@ -4352,15 +4376,21 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 return
             
             # Create streaming response with tools
-            stream = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                tools=self._get_tool_schemas(),
-                tool_choice="auto",
-                temperature=self.temperature,
-                max_tokens=1000,  # Reduced for faster response
-                stream=True  # Enable TRUE streaming
-            )
+            # Use max_completion_tokens for GPT-5, max_tokens for older models
+            completion_params = {
+                "model": self.model,
+                "messages": messages,
+                "tools": self._get_tool_schemas(),
+                "tool_choice": "auto",
+                "temperature": self.temperature,
+                "stream": True  # Enable TRUE streaming
+            }
+            if "gpt-5" in self.model.lower():
+                completion_params["max_completion_tokens"] = 1000  # Reduced for faster response
+            else:
+                completion_params["max_tokens"] = 1000  # Reduced for faster response
+            
+            stream = await self.client.chat.completions.create(**completion_params)
             
             # Track state during streaming
             collected_tool_calls = []
