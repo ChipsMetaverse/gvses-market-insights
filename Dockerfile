@@ -72,4 +72,4 @@ RUN apt-get remove -y gcc g++ python3-dev curl && \
 EXPOSE 8080
 
 # Start supervisor
-CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+ENTRYPOINT ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
