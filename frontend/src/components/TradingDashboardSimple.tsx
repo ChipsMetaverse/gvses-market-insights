@@ -1135,7 +1135,7 @@ export const TradingDashboardSimple: React.FC = () => {
       <header className="dashboard-header-with-tickers">
         <div className="header-left">
           <h1 className="brand">GVSES</h1>
-          <span className="subtitle">AI Market Analysis Assistant</span>
+          <span className="subtitle">Market Assistant</span>
         </div>
         
         {/* Compact Ticker Cards in Header */}
