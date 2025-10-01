@@ -239,7 +239,8 @@ async def agent_health():
             "status": "healthy",
             "model": orchestrator.model,
             "tools_available": len(schemas),
-            "cache_size": len(orchestrator.cache)
+            "cache_size": len(orchestrator.cache),
+            "education_mode": "llm" if orchestrator.use_llm_for_education else "template"
         }
         
     except Exception as e:
@@ -248,6 +249,26 @@ async def agent_health():
             "status": "unhealthy",
             "error": str(e)
         }
+
+@router.post("/test/toggle-education-mode")
+async def toggle_education_mode(enabled: bool):
+    """Toggle education mode between LLM and templates (for A/B testing)."""
+    try:
+        orchestrator = get_orchestrator()
+        orchestrator.use_llm_for_education = enabled
+        mode = "LLM" if enabled else "Templates"
+        logger.info(f"Education mode toggled to: {mode}")
+        
+        return {
+            "status": "success",
+            "education_mode": mode,
+            "use_llm_for_education": enabled,
+            "message": f"Educational queries will now use {mode}"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error toggling education mode: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/analyze-chart")

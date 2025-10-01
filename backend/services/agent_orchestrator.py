@@ -144,6 +144,10 @@ class AgentOrchestrator:
             # Start background sweeper (will be started when event loop is available)
             asyncio.create_task(self._start_pattern_sweeper())
         
+        # A/B testing: Runtime toggle for education mode
+        self.use_llm_for_education = os.getenv("USE_LLM_FOR_EDUCATION", "true").lower() == "true"
+        logger.info(f"Education mode: {'LLM' if self.use_llm_for_education else 'Templates'}")
+        
         # Responses API support detection and schema configuration
         responses_client = getattr(self.client, "responses", None)
         self._responses_client = responses_client if responses_client and hasattr(responses_client, "create") else None
@@ -453,15 +457,15 @@ class AgentOrchestrator:
         words = normalized.split()
         
         # Remove common stop words (expanded set for better cache hits)
+        # Note: Keep "start", "stocks", "trading" to preserve semantic meaning for educational queries
         stop_words = {
             'what', 'is', 'the', 'a', 'an', 'how', 'do', 'does', 'can', 'tell', 'me', 'about', 'explain',
             'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'will', 'would', 'could', 'should',
             'may', 'might', 'must', 'shall', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from',
             'up', 'down', 'out', 'off', 'over', 'under', 'again', 'then', 'there', 'when', 'where',
             'why', 'all', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only',
-            'own', 'same', 'so', 'than', 'too', 'very', 'just', 'should', 'now', 'please', 'show',
-            'give', 'get', 'got', 'need', 'want', 'whats', "what's", 'its', "it's", 'and', 'or', 'but',
-            'work', 'works', 'working', 'worked'
+            'own', 'same', 'so', 'than', 'too', 'very', 'just', 'now', 'please', 'show',
+            'give', 'got', 'need', 'want', 'whats', "what's", 'its', "it's", 'and', 'or', 'but'
         }
         words = [w for w in words if w not in stop_words and len(w) > 1]
         
@@ -569,6 +573,55 @@ class AgentOrchestrator:
                 "reference": (
                     "Sources: Edwards & Magee, 'Technical Analysis of Stock Trends'; CMT Curriculum Level I"
                 )
+            },
+            {
+                "phrases": [
+                    "What does buy low mean?",
+                    "Explain buy low",
+                    "What is buy low?",
+                    "Buy low meaning"
+                ],
+                "topic": "Buy Low Trading Strategy",
+                "summary": (
+                    "'Buy low' refers to purchasing a stock when its price has declined to a support level or oversold condition, "
+                    "with the expectation that it will bounce back up. This contrasts with 'buy high' (momentum trading) where you "
+                    "buy during strength. The G'sves system defines a 'Buy Low Level' as a key support zone where demand historically "
+                    "appears—typically 2-3% above recent lows. Successful 'buy low' trades require patience, risk management (stop losses), "
+                    "and confirmation that the stock is stabilizing rather than continuing to fall."
+                ),
+                "highlights": [
+                    "Buy at support levels, not randomly during declines",
+                    "Use stop losses below support in case the level breaks",
+                    "Look for volume increase and bullish price action as confirmation",
+                    "G'sves Buy Low Level is a calculated support zone, not just any dip"
+                ],
+                "reference": (
+                    "Sources: G'sves Trading Methodology; Benjamin Graham 'The Intelligent Investor'"
+                )
+            },
+            {
+                "phrases": [
+                    "How do I start trading stocks?",
+                    "How to start trading?",
+                    "Getting started with trading",
+                    "Beginner trading guide"
+                ],
+                "topic": "Getting Started with Stock Trading",
+                "summary": (
+                    "Starting stock trading involves several key steps: (1) Open a brokerage account with a reputable firm, "
+                    "(2) Fund your account with capital you can afford to risk, (3) Learn basic concepts like support/resistance, "
+                    "trend analysis, and risk management, (4) Start with paper trading or small positions, (5) Develop a trading plan "
+                    "with entry/exit rules. Never invest money you can't afford to lose, and focus on education before taking large positions."
+                ),
+                "highlights": [
+                    "Start with paper trading to learn without risking real money",
+                    "Never risk more than 1-2% of your account on a single trade",
+                    "Learn to read charts and identify key support/resistance levels",
+                    "Have a plan before every trade—know your entry, target, and stop loss"
+                ],
+                "reference": (
+                    "Sources: SEC Investor Education; FINRA Trading Basics"
+                )
             }
         ]
 
@@ -589,6 +642,10 @@ class AgentOrchestrator:
         conversation_history: Optional[List[Dict[str, str]]],
     ) -> Optional[Dict[str, Any]]:
         """Return a static educational response when applicable."""
+        # A/B testing: Skip templates if LLM mode enabled
+        if self.use_llm_for_education:
+            return None
+            
         # Skip static responses when there's conversation history
         # This ensures context-aware responses work correctly (e.g., Test 4 in smoke tests)
         if conversation_history and len(conversation_history) > 0:
@@ -617,6 +674,7 @@ class AgentOrchestrator:
             "data": {
                 "topic": template.get("topic", "Educational"),
                 "source": "static_template",
+                "education_mode": "template"
             },
             "timestamp": datetime.now().isoformat(),
             "model": "static-educational",
@@ -3295,10 +3353,17 @@ Remember to cite sources when using this knowledge and maintain educational tone
     ) -> Dict[str, Any]:
         """Single-pass Chat Completions flow with tools and immediate response."""
         start_time = time.monotonic()
-        
+
+        # Retrieve relevant knowledge for educational/general/technical queries
+        retrieved_knowledge = ""
+        if intent in ["educational", "general", "technical"]:
+            retrieved_knowledge = await self._get_cached_knowledge(query)
+            if retrieved_knowledge:
+                logger.info(f"Retrieved {len(retrieved_knowledge)} chars of knowledge for {intent} query")
+
         # Build messages
         messages = []
-        messages.append({"role": "system", "content": self._build_system_prompt()})
+        messages.append({"role": "system", "content": self._build_system_prompt(retrieved_knowledge)})
         
         if conversation_history:
             messages.extend(conversation_history[-10:])
@@ -3307,8 +3372,9 @@ Remember to cite sources when using this knowledge and maintain educational tone
         
         try:
             # Single LLM call with tools
-            model = "gpt-5-mini" if intent in ["price-only", "news", "educational"] else self.model
-            max_tokens = 400 if intent in ["price-only", "news"] else 600
+            # Use gpt-4o-mini for educational queries (gpt-5-mini has issues with empty responses)
+            model = "gpt-4o-mini" if intent == "educational" else ("gpt-5-mini" if intent in ["price-only", "news"] else self.model)
+            max_tokens = 400 if intent in ["price-only", "news"] else 800  # More tokens for educational responses
             
             t_llm = time.monotonic()
             # Use correct parameter name based on model
@@ -3321,10 +3387,11 @@ Remember to cite sources when using this knowledge and maintain educational tone
             if not model.startswith("gpt-5"):
                 completion_params["temperature"] = 0.3 if intent in ["price-only", "technical"] else 0.7
             
-            # Add tools if needed
-            if intent != "price-only":
+            # Add tools only when they are useful for the intent
+            if intent not in ["price-only", "educational"]:
                 completion_params["tools"] = self._get_tool_schemas()
                 completion_params["tool_choice"] = "auto"
+            # For educational queries, no tools are provided, so no tool_choice needed
             
             # Use max_completion_tokens for newer models, max_tokens for older
             if model.startswith("gpt-4o") or model.startswith("gpt-5"):
@@ -3332,13 +3399,23 @@ Remember to cite sources when using this knowledge and maintain educational tone
             else:
                 completion_params["max_tokens"] = max_tokens
             
+            # Debug log request for conversational queries
+            if intent in ["educational", "general"]:
+                logger.info(f"LLM Request - Model: {completion_params['model']}, Messages: {len(messages)}, Tools: {len(completion_params.get('tools', []))}")
+                logger.info(f"User query: {query}")
+            
             response = await self.client.chat.completions.create(**completion_params)
             llm1_dur = time.monotonic()-t_llm
             logger.info(f"Single-pass LLM latency: {llm1_dur:.2f}s")
             
             # Debug logging for educational queries
-            if intent == "educational":
+            if intent == "educational" or intent == "general":
+                logger.info(f"LLM Response - Finish reason: {response.choices[0].finish_reason}")
                 logger.info(f"Educational response content: {response.choices[0].message.content[:200] if response.choices[0].message.content else 'NONE'}")
+                if response.choices[0].message.tool_calls:
+                    logger.info(f"Tool calls made: {[tc.function.name for tc in response.choices[0].message.tool_calls]}")
+                else:
+                    logger.info("No tool calls made")
             
             assistant_msg = response.choices[0].message
             tools_used = []
@@ -3471,7 +3548,8 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 "cached": False,
                 "session_id": None,
                 "intent": intent,
-                "latency_ms": int(total_time * 1000)
+                "latency_ms": int(total_time * 1000),
+                "education_mode": "llm"  # Tag for A/B testing
             }
             
         except Exception as e:
@@ -4128,9 +4206,13 @@ Remember to cite sources when using this knowledge and maintain educational tone
             if symbol:
                 response = {
                     "text": f"Loading {symbol.upper()} chart",
+                    "tools_used": [],
+                    "data": {},
                     "chart_commands": [f"LOAD:{symbol.upper()}"],
                     "timestamp": datetime.now().isoformat(),
-                    "intent": "chart-only"
+                    "model": "static-chart",
+                    "cached": False,
+                    "session_id": None
                 }
                 logger.info(f"Response includes chart_commands: True")
                 logger.info(f"Chart commands: {response['chart_commands']}")
@@ -4143,9 +4225,13 @@ Remember to cite sources when using this knowledge and maintain educational tone
             if commands:
                 response = {
                     "text": "Updating indicators",
+                    "tools_used": [],
+                    "data": {},
                     "chart_commands": commands,
                     "timestamp": datetime.now().isoformat(),
-                    "intent": "indicator-toggle"
+                    "model": "static-indicator",
+                    "cached": False,
+                    "session_id": None
                 }
                 logger.info(f"Response includes chart_commands: True")
                 logger.info(f"Chart commands: {response['chart_commands']}")
