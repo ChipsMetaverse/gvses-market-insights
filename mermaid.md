@@ -93,7 +93,8 @@ graph TD
     FastAPI -. ConversationManager .-> Supabase
 ```
 
-### What Changed (Latest Updates – Sep 30, 2025)
+### What Changed (Latest Updates – Oct 1, 2025)
+- **Educational Query Knowledge Retrieval Fixed ✅**: Educational queries now properly retrieve knowledge from the 2,520-chunk trading education knowledge base. Switched from gpt-5-mini to gpt-4o-mini for reliable responses, added knowledge retrieval to single-pass flow for educational/general/technical intents. Queries like "What is support and resistance?" now return comprehensive, knowledge-based responses (deployed Oct 1, 2025).
 - **Trendline Drawing Fixed ✅**: Implemented missing `_generate_chart_commands` method and enhanced technical analysis for trendline drawing. Users can now say "Draw a trendline on TSLA" and see proper TRENDLINE commands executed (deployed Sep 30, 2025).
 - **Educational Queries Using LLM ✅**: Removed static template responses; educational queries now use GPT-5-mini for dynamic, contextual responses. Provides richer educational content for novice traders (deployed Sep 30, 2025).
 - **GitHub Actions Fixed ✅**: Updated workflow from deprecated `actions/upload-artifact@v3` to v4, enabling automatic deployments to Fly.io production.
