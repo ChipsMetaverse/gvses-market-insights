@@ -37,31 +37,19 @@ async def test_turn_detection_restored():
         print(f"{RED}✗ Failed to check turn_detection: {e}{RESET}")
         return False
 
-async def test_legacy_service_deprecated():
-    """Test that legacy service is deprecated."""
-    print(f"\n{BLUE}Testing Legacy Service Deprecation...{RESET}")
+async def test_legacy_service_deleted():
+    """Test that legacy service has been removed."""
+    print(f"\n{BLUE}Testing Legacy Service Removal...{RESET}")
     
-    try:
-        with open('/Volumes/WD My Passport 264F Media/claude-voice-mcp/backend/services/openai_realtime_service.py', 'r') as f:
-            content = f.read()
-            
-        checks = [
-            ('[DEPRECATED]' in content, 'Deprecation notice added'),
-            ('"tools": [],' in content, 'Tools array emptied'),
-            ('"tool_choice": "none"' in content, 'Tool choice disabled')
-        ]
-        
-        all_good = True
-        for condition, description in checks:
-            if condition:
-                print(f"{GREEN}✓ {description}{RESET}")
-            else:
-                print(f"{RED}✗ {description} not found{RESET}")
-                all_good = False
-        
-        return all_good
-    except Exception as e:
-        print(f"{RED}✗ Failed to check legacy service: {e}{RESET}")
+    import os
+    legacy_path = '/Volumes/WD My Passport 264F Media/claude-voice-mcp/backend/services/openai_realtime_service.py'
+    
+    if not os.path.exists(legacy_path):
+        print(f"{GREEN}✓ Legacy service successfully removed{RESET}")
+        print(f"{GREEN}✓ Using relay server architecture instead{RESET}")
+        return True
+    else:
+        print(f"{RED}✗ Legacy service still exists - should be removed{RESET}")
         return False
 
 async def test_health_gate_added():
@@ -187,7 +175,7 @@ async def main():
     
     # Run tests
     results.append(('turn_detection Restored', await test_turn_detection_restored()))
-    results.append(('Legacy Service Deprecated', await test_legacy_service_deprecated()))
+    results.append(('Legacy Service Deleted', await test_legacy_service_deleted()))
     results.append(('Health-Gate Added', await test_health_gate_added()))
     results.append(('OpenAI Provider Hidden', await test_openai_provider_hidden()))
     results.append(('API URL Utility Created', await test_api_url_utility()))

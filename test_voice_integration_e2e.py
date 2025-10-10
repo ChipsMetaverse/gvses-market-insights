@@ -31,6 +31,7 @@ async def test_complete_voice_integration():
     try:
         from services.openai_tool_mapper import get_openai_tool_mapper
         from services.openai_tool_orchestrator import get_openai_tool_orchestrator, ToolContext
+        from services.openai_relay_server import openai_relay_server
         
         # Test 1: Tool Mapper with Voice Scenarios
         logger.info("1️⃣ Testing Tool Mapper for Voice Scenarios...")
@@ -136,37 +137,26 @@ async def test_complete_voice_integration():
         else:
             logger.warning("❌ Voice formatting test failed - no price data")
         
-        # Test 4: WebSocket Readiness
-        logger.info("\n4️⃣ Testing WebSocket Integration Readiness...")
-        
-        try:
-            from services.openai_realtime_service import OpenAIRealtimeService
-            
-            # Initialize service (don't connect, just test initialization)
-            service = OpenAIRealtimeService()
-            
-            # Check if tool mapper is integrated
-            if hasattr(service, 'tool_mapper'):
-                logger.info("✅ OpenAI Realtime Service has tool mapper integration")
-            else:
-                logger.warning("⚠️ OpenAI Realtime Service missing tool mapper integration")
-            
-            # Check API key
-            api_key = os.getenv("OPENAI_API_KEY")
-            if api_key and len(api_key) > 50:
-                logger.info("✅ OpenAI API key is configured for WebSocket connection")
-            else:
-                logger.warning("⚠️ OpenAI API key may not be properly configured")
-            
-            logger.info("✅ WebSocket integration is ready")
-            
-        except Exception as e:
-            logger.error(f"❌ WebSocket integration error: {e}")
+        # Test 4: Relay Readiness
+        logger.info("\n4️⃣ Testing Relay Server Readiness...")
+
+        if openai_relay_server is None:
+            logger.error("❌ OpenAI relay server instance missing")
             return False
+
+        if openai_relay_server.api_key:
+            logger.info("✅ Relay server API key configured")
+        else:
+            logger.warning("⚠️ Relay server API key not configured; voice sessions disabled")
+
+        logger.info(
+            "✅ Relay server limits: max %s concurrent sessions", 
+            getattr(openai_relay_server, "max_concurrent_sessions", "unknown")
+        )
         
         logger.info("\n🎉 Complete Voice Integration Test PASSED!")
         logger.info("🎤 Ready for live voice testing at http://localhost:5174/?provider-test")
-        logger.info("🔧 Select 'OpenAI Realtime Voice (Dev)' and test commands like:")
+        logger.info("🔧 Select 'OpenAI Relay Voice (Dev)' and test commands like:")
         logger.info("   - 'What's Tesla doing today?'")
         logger.info("   - 'Give me a market overview'")  
         logger.info("   - 'Show me Apple's technical analysis'")

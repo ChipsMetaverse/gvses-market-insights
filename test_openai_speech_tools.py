@@ -18,7 +18,7 @@ sys.path.insert(0, str(backend_dir))
 
 from services.openai_tool_mapper import get_openai_tool_mapper
 from services.openai_tool_orchestrator import get_openai_tool_orchestrator, ToolContext
-from services.openai_realtime_service import OpenAIRealtimeService
+from services.openai_relay_server import openai_relay_server
 
 # Configure logging
 logging.basicConfig(
@@ -104,30 +104,33 @@ async def test_tool_orchestrator():
         return False
 
 
-async def test_openai_realtime_service():
-    """Test the OpenAI Realtime service initialization."""
-    logger.info("🎙️ Testing OpenAI Realtime Service...")
-    
+async def test_openai_relay_server_ready():
+    """Test that the OpenAI relay server is configured."""
+    logger.info("🎙️ Testing OpenAI Relay Server...")
+
     try:
-        # Check if API key is configured
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            logger.warning("⚠️ OPENAI_API_KEY not found, skipping connection test")
-            return True
-        
-        service = OpenAIRealtimeService()
-        
-        # Test service initialization
-        if hasattr(service, 'tool_mapper'):
-            logger.info("✅ Service has tool mapper integration")
+        # Basic attribute checks to ensure relay is wired up
+        if openai_relay_server is None:
+            logger.error("❌ Relay server instance is missing")
+            return False
+
+        if not hasattr(openai_relay_server, "api_key"):
+            logger.error("❌ Relay server missing api_key attribute")
+            return False
+
+        if openai_relay_server.api_key:
+            logger.info("✅ Relay server API key configured")
         else:
-            logger.warning("⚠️ Service missing tool mapper integration")
-        
-        logger.info("✅ OpenAI Realtime Service initialized successfully")
+            logger.warning("⚠️ Relay server API key not configured; voice sessions will be disabled")
+
+        logger.info(
+            "✅ OpenAI relay server ready (max %s sessions)",
+            getattr(openai_relay_server, "max_concurrent_sessions", "unknown")
+        )
         return True
-        
+
     except Exception as e:
-        logger.error(f"❌ OpenAI Realtime service test failed: {e}")
+        logger.error(f"❌ OpenAI relay server test failed: {e}")
         return False
 
 
@@ -241,7 +244,7 @@ async def main():
     test_results["Tool Orchestrator"] = await test_tool_orchestrator()
     
     logger.info("\n" + "="*60)
-    test_results["OpenAI Realtime Service"] = await test_openai_realtime_service()
+    test_results["OpenAI Relay Server"] = await test_openai_relay_server_ready()
     
     logger.info("\n" + "="*60)
     test_results["Integration Scenarios"] = await test_tool_integration_scenarios()
