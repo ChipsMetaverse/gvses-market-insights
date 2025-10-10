@@ -1208,6 +1208,14 @@ class AgentOrchestrator:
 
         return self.intent_router.extract_symbol(query)
 
+    # DEPRECATED: Replaced by self.intent_router.extract_symbol()
+    # Method moved to core.intent_router.IntentRouter
+    def _extract_symbol_from_query(self, query: str) -> Optional[str]:
+        """Legacy wrapper for backward compatibility - redirects to IntentRouter."""
+        return self.intent_router.extract_symbol(query)
+    
+    # Original implementation commented out:
+    '''
     def _extract_symbol_from_query(self, query: str) -> Optional[str]:
         """Fallback symbol extraction from the user query."""
         if not query:
@@ -1287,6 +1295,7 @@ class AgentOrchestrator:
             if candidate and candidate not in stopwords and len(candidate) <= 6:
                 return candidate
         return None
+    '''
 
     def _append_chart_commands_to_data(
         self,
@@ -4113,58 +4122,9 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 "timestamp": datetime.now().isoformat()
             }
 
-    def _classify_intent(self, query: str) -> str:
-        """Classify query intent for fast-path routing."""
-        ql = query.lower()
-        
-        # Educational queries (highest priority for novice traders)
-        educational_triggers = [
-            "what does", "what is", "how do i", "how to", "explain", 
-            "what's the difference", "what is the difference", "teach me",
-            "buy low", "sell high", "support and resistance", "support level",
-            "resistance level", "trading basics", "start trading", "beginner",
-            "learn", "understand", "meaning of", "definition"
-        ]
-        if any(trigger in ql for trigger in educational_triggers):
-            # Check if it's really educational (not just "what is AAPL")
-            symbol = self.intent_router.extract_symbol(query)
-            if not symbol or "difference" in ql or "mean" in ql or "how" in ql:
-                return "educational"
-        
-        # Company information queries (before price-only)
-        company_info_triggers = ("what is", "who is", "tell me about", "explain")
-        if any(p in ql for p in company_info_triggers):
-            symbol_in_query = self.intent_router.extract_symbol(query)
-            if symbol_in_query and not any(term in ql for term in [
-                "price", "quote", "cost", "worth", "value", "trading", "trading at", "how much"
-            ]):
-                return "company-info"
-        
-        # Price-only queries
-        if (any(term in ql for term in ["price", "quote", "cost", "worth", "value", "trading at", "how much is"]) 
-            and len(query.split()) < 12
-            and not any(term in ql for term in ["analysis", "technical", "news", "chart", "pattern"])):
-            return "price-only"
-        
-        # Chart display commands (expanded to catch more variations)
-        if any(term in ql for term in ["show chart", "display chart", "load chart", "view chart", 
-                                        "show me the chart", "show me chart", "chart for", "chart of"]):
-            return "chart-only"
-        
-        # Indicator toggle commands  
-        if any(term in ql for term in ["add indicator", "remove indicator", "toggle", "show rsi", "hide rsi", "show macd", "hide macd"]):
-            return "indicator-toggle"
-        
-        # News queries
-        if any(term in ql for term in ["news", "headlines", "catalyst", "latest", "breaking", "announcement"]):
-            return "news"
-        
-        # Technical analysis
-        if any(term in ql for term in ["technical", "analysis", "pattern", "support", "resistance", "trend", "swing", "entry", "exit"]):
-            return "technical"
-        
-        # Default to general
-        return "general"
+    # DEPRECATED: Replaced by self.intent_router.classify_intent()
+    # Method moved to core.intent_router.IntentRouter
+    pass  # Placeholder to maintain line numbering
     
     async def _handle_educational_query(self, query: str) -> Dict[str, Any]:
         """Handle educational queries for novice traders."""
