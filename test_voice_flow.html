@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Flow Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #00ff00;
+            border-radius: 5px;
+        }
+        button {
+            background: #00ff00;
+            color: #1a1a1a;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 3px;
+        }
+        button:hover {
+            background: #00cc00;
+        }
+        .log {
+            background: #000;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success { color: #00ff00; }
+        .error { color: #ff0000; }
+        .info { color: #00aaff; }
+    </style>
+</head>
+<body>
+    <h1>🎤 Voice Assistant Flow Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Direct Agent Orchestrator Call</h2>
+        <button onclick="testAgentOrchestrator()">Test Agent Orchestrator</button>
+        <div id="agent-result" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: OpenAI Session Creation</h2>
+        <button onclick="testOpenAISession()">Test OpenAI Session</button>
+        <div id="openai-result" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Complete Voice Flow (Simulated)</h2>
+        <button onclick="testCompleteFlow()">Test Complete Flow</button>
+        <div id="flow-result" class="log"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+
+        function log(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            element.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            element.scrollTop = element.scrollHeight;
+        }
+
+        async function testAgentOrchestrator() {
+            const resultId = 'agent-result';
+            document.getElementById(resultId).innerHTML = '';
+            log(resultId, '🚀 Testing agent orchestrator endpoint...', 'info');
+
+            try {
+                const response = await fetch(`${API_URL}/api/agent/orchestrate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: 'What is the price of Bitcoin?',
+                        conversation_history: []
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                log(resultId, `✅ Agent responded successfully`, 'success');
+                log(resultId, `Response text: "${data.text}"`, 'success');
+                log(resultId, `Tools used: ${JSON.stringify(data.tools_used)}`, 'info');
+                log(resultId, `Model: ${data.model}`, 'info');
+                log(resultId, `Cached: ${data.cached}`, 'info');
+
+                if (!data.text || data.text.includes("couldn't generate")) {
+                    log(resultId, `⚠️ WARNING: Empty or error response!`, 'error');
+                } else {
+                    log(resultId, `✅ Valid response received`, 'success');
+                }
+            } catch (error) {
+                log(resultId, `❌ Error: ${error.message}`, 'error');
+                console.error('Agent orchestrator test failed:', error);
+            }
+        }
+
+        async function testOpenAISession() {
+            const resultId = 'openai-result';
+            document.getElementById(resultId).innerHTML = '';
+            log(resultId, '🚀 Testing OpenAI session creation...', 'info');
+
+            try {
+                const response = await fetch(`${API_URL}/openai/realtime/session`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                log(resultId, `✅ Session created successfully`, 'success');
+                log(resultId, `Session URL: ${data.url.substring(0, 50)}...`, 'success');
+                log(resultId, `Model: ${data.model}`, 'info');
+
+            } catch (error) {
+                log(resultId, `❌ Error: ${error.message}`, 'error');
+                console.error('OpenAI session test failed:', error);
+            }
+        }
+
+        async function testCompleteFlow() {
+            const resultId = 'flow-result';
+            document.getElementById(resultId).innerHTML = '';
+            log(resultId, '🚀 Testing complete voice flow (simulated)...', 'info');
+
+            // Step 1: Simulate STT output
+            log(resultId, '📝 Step 1: STT - User speech recognized', 'info');
+            const userTranscript = 'What is the price of Bitcoin?';
+            log(resultId, `   Transcript: "${userTranscript}"`, 'info');
+
+            // Step 2: Send to agent orchestrator
+            log(resultId, '🤖 Step 2: Calling agent orchestrator...', 'info');
+            try {
+                const agentResponse = await fetch(`${API_URL}/api/agent/orchestrate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: userTranscript,
+                        conversation_history: []
+                    })
+                });
+
+                if (!agentResponse.ok) {
+                    throw new Error(`Agent HTTP ${agentResponse.status}`);
+                }
+
+                const agentData = await agentResponse.json();
+                log(resultId, `   ✅ Agent response: "${agentData.text}"`, 'success');
+
+                if (!agentData.text || agentData.text.includes("couldn't generate")) {
+                    log(resultId, `   ⚠️ WARNING: Agent returned empty/error response!`, 'error');
+                    log(resultId, `   This is likely why users see "I couldn't generate a response"`, 'error');
+                    return;
+                }
+
+                // Step 3: Would send to TTS
+                log(resultId, '🔊 Step 3: TTS - Would convert response to speech', 'info');
+                log(resultId, `   Text to speak: "${agentData.text.substring(0, 100)}..."`, 'info');
+
+                log(resultId, '✅ COMPLETE FLOW SUCCESSFUL!', 'success');
+
+            } catch (error) {
+                log(resultId, `❌ Flow failed at agent step: ${error.message}`, 'error');
+                console.error('Complete flow test failed:', error);
+            }
+        }
+    </script>
+</body>
+</html>

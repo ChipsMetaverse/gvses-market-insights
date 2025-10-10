@@ -88,7 +88,7 @@ class AgentOrchestratorService {
    * Send a query to the agent orchestrator
    */
   async sendQuery(
-    query: string, 
+    query: string,
     conversationHistory?: Array<{ role: string; content: string }>
   ): Promise<AgentResponse> {
     const payload: AgentQuery = {
@@ -98,6 +98,13 @@ class AgentOrchestratorService {
       session_id: this.sessionId
     };
 
+    console.log('[AGENT ORCHESTRATOR SERVICE] 🌐 Making HTTP request to /api/agent/orchestrate');
+    console.log('[AGENT ORCHESTRATOR SERVICE] 📨 Request payload:', {
+      query: payload.query,
+      historyLength: payload.conversation_history?.length || 0,
+      sessionId: payload.session_id
+    });
+
     const response = await fetch(`${this.baseUrl}/api/agent/orchestrate`, {
       method: 'POST',
       headers: {
@@ -106,11 +113,27 @@ class AgentOrchestratorService {
       body: JSON.stringify(payload),
     });
 
+    console.log('[AGENT ORCHESTRATOR SERVICE] 📡 HTTP response received:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+
     if (!response.ok) {
-      throw new Error(`Agent orchestrator error: ${response.status} ${response.statusText}`);
+      const errorMsg = `Agent orchestrator error: ${response.status} ${response.statusText}`;
+      console.error('[AGENT ORCHESTRATOR SERVICE] ❌', errorMsg);
+      throw new Error(errorMsg);
     }
 
-    return await response.json();
+    const data = await response.json();
+    console.log('[AGENT ORCHESTRATOR SERVICE] 📦 Parsed JSON response:', {
+      hasText: !!data.text,
+      textLength: data.text?.length || 0,
+      textPreview: data.text?.substring(0, 100),
+      toolsUsed: data.tools_used
+    });
+
+    return data;
   }
 
   /**

@@ -1,0 +1,24 @@
+{
+  "name": "gvses-direct-api-mcp",
+  "version": "1.0.0",
+  "description": "Direct API MCP wrapper for Alpaca and Yahoo Finance - optimized for Agent Builder",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "node test.js"
+  },
+  "keywords": ["mcp", "alpaca", "trading", "agent-builder", "openai"],
+  "author": "G'sves",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "date-fns": "^2.30.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

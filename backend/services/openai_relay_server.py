@@ -25,22 +25,126 @@ class OpenAIRealtimeRelay:
     Secure relay server for OpenAI Realtime API following recommended patterns.
     Acts as a proxy between frontend RealtimeClient and OpenAI's API.
     """
-    
+
     def __init__(self):
         self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             logger.warning("⚠️ OPENAI_API_KEY not found - OpenAI Realtime features will be disabled")
             self.api_key = "test-key"  # Use dummy key for CI environments
-        
+
         # Log API key info (masked for security)
         masked_key = f"{self.api_key[:8]}...{self.api_key[-4:]}" if len(self.api_key) > 12 else "***"
         logger.info(f"🔑 OpenAI API key loaded: {masked_key}")
-        
+
+        # Use conversational Realtime API (GA) with transcription support
         self.openai_url = "wss://api.openai.com/v1/realtime"
-        self.model = "gpt-realtime-2025-08-28"
+        # GA model - configurable via environment variable
+        self.model = os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime")
         # NO TOOLS - Realtime API is voice-only, agent handles all tools
+
+        # Thread-safe session management
         self.active_sessions = {}  # Track active sessions
+        self.session_lock = asyncio.Lock()  # Protect concurrent access
+
+        # Configurable limits for performance and stability
+        self.max_concurrent_sessions = int(os.getenv("MAX_CONCURRENT_SESSIONS", "10"))  # Limit concurrent sessions
+        self.session_timeout = int(os.getenv("SESSION_TIMEOUT_SECONDS", "300"))  # 5 minute timeout
+        self.activity_timeout = int(os.getenv("ACTIVITY_TIMEOUT_SECONDS", "60"))  # 1 minute of inactivity
+        self.cleanup_interval = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "60"))  # Cleanup every minute
+
+        # Logging configuration
+        self.enable_detailed_logging = os.getenv("VOICE_DEBUG", "false").lower() == "true"
         
+        # Metrics tracking
+        self.metrics = {
+            "sessions_created": 0,
+            "sessions_closed": 0,
+            "sessions_rejected": 0,
+            "sessions_timed_out": 0,
+            "messages_sent": 0,
+            "messages_received": 0,
+            "errors": 0,
+            "tts_requests": 0,
+            "tts_failures": 0,
+            "cleanup_runs": 0,
+            "start_time": time.time()
+        }
+        self.metrics_lock = asyncio.Lock()
+
+        logger.info(f"🔧 OpenAI Relay Config: max_sessions={self.max_concurrent_sessions}, timeout={self.session_timeout}s")
+
+        # Start cleanup task
+        self.cleanup_task = asyncio.create_task(self._cleanup_expired_sessions())
+
+    async def _cleanup_expired_sessions(self):
+        """Background task to clean up expired sessions."""
+        while True:
+            try:
+                await asyncio.sleep(self.cleanup_interval)  # Configurable cleanup interval
+
+                async with self.session_lock:
+                    current_time = asyncio.get_event_loop().time()
+                    expired_sessions = []
+
+                    for session_id, session_data in self.active_sessions.items():
+                        # Check if session has expired or connections are dead
+                        if current_time - session_data.get("created_at", current_time) > self.session_timeout:
+                            expired_sessions.append(session_id)
+                        elif current_time - session_data.get("last_activity", current_time) > self.activity_timeout:
+                            expired_sessions.append(session_id)
+                        else:
+                            # Check connection states more safely
+                            try:
+                                if session_data.get("websocket") and hasattr(session_data["websocket"], 'client_state'):
+                                    if session_data["websocket"].client_state != "CONNECTED":
+                                        expired_sessions.append(session_id)
+                            except:
+                                # Connection check failed, mark as expired
+                                expired_sessions.append(session_id)
+
+                            try:
+                                if session_data.get("openai_ws") and hasattr(session_data["openai_ws"], 'closed'):
+                                    if session_data["openai_ws"].closed:
+                                        expired_sessions.append(session_id)
+                            except:
+                                # Connection check failed, mark as expired
+                                expired_sessions.append(session_id)
+
+                    # Clean up expired sessions
+                    for session_id in expired_sessions:
+                        if session_id in self.active_sessions:
+                            session_data = self.active_sessions[session_id]
+                            logger.info(f"🧹 Cleaning up expired session {session_id}")
+
+                            # Close connections
+                            try:
+                                if session_data.get("websocket"):
+                                    await session_data["websocket"].close(code=1000, reason="Session expired")
+                            except:
+                                pass
+
+                            try:
+                                if session_data.get("openai_ws"):
+                                    await session_data["openai_ws"].close()
+                            except:
+                                pass
+
+                            del self.active_sessions[session_id]
+                            
+                            # Update metrics
+                            async with self.metrics_lock:
+                                self.metrics["sessions_closed"] += 1
+                                self.metrics["sessions_timed_out"] += 1
+
+                    if expired_sessions:
+                        logger.info(f"🧹 Cleaned up {len(expired_sessions)} expired sessions")
+                        async with self.metrics_lock:
+                            self.metrics["cleanup_runs"] += 1
+
+            except Exception as e:
+                logger.error(f"Error in session cleanup: {e}")
+                await asyncio.sleep(60)  # Continue on error
+
     async def handle_relay_connection(
         self,
         websocket: WebSocket,
@@ -64,22 +168,37 @@ class OpenAIRealtimeRelay:
         This method assumes the WebSocket has already been accepted with proper subprotocol handling.
         """
         openai_ws: Optional[WebSocketClientProtocol] = None
-        
+
+        # Check concurrent session limit
+        async with self.session_lock:
+            if len(self.active_sessions) >= self.max_concurrent_sessions:
+                logger.warning(f"🚫 Rejecting connection {session_id} - max concurrent sessions ({self.max_concurrent_sessions}) reached")
+                async with self.metrics_lock:
+                    self.metrics["sessions_rejected"] += 1
+                await websocket.send_json({
+                    "type": "error",
+                    "error": {
+                        "message": f"Maximum concurrent sessions ({self.max_concurrent_sessions}) reached. Please try again later.",
+                        "type": "rate_limit_error"
+                    }
+                })
+                await websocket.close(code=1013, reason="Too many concurrent sessions")
+                return
+
         try:
-            # Connect to OpenAI Realtime API
+            # Connect to OpenAI Transcription WebSocket (GA)
             headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "OpenAI-Beta": "realtime=v1"
+                "Authorization": f"Bearer {self.api_key}"
             }
-            
+
             # Add model parameter to URL
             url_with_model = f"{self.openai_url}?model={self.model}"
-            
+
             try:
-                # Note: OpenAI Realtime API doesn't use WebSocket subprotocols
+                # websockets 13.0+ uses additional_headers parameter
                 openai_ws = await websockets.connect(
                     url_with_model,
-                    extra_headers=headers
+                    additional_headers=headers
                 )
             except websockets.exceptions.InvalidStatusCode as e:
                 logger.error(f"❌ OpenAI WebSocket connection rejected with status {e.status_code}")
@@ -97,50 +216,37 @@ class OpenAIRealtimeRelay:
                 return
             except Exception as e:
                 logger.error(f"❌ Failed to connect to OpenAI: {type(e).__name__}: {e}")
-                error_msg = {"type": "error", "error": {"message": f"Connection failed: {str(e)}", "type": "connection_error"}}
+                logger.error(f"   Note: OpenAI Realtime API requires beta access. Check https://platform.openai.com/settings")
+                error_msg = {
+                    "type": "error",
+                    "error": {
+                        "message": f"Connection failed: {str(e)}. OpenAI Realtime API requires beta access.",
+                        "type": "connection_error",
+                        "help": "Visit https://platform.openai.com/settings to request access"
+                    }
+                }
                 await websocket.send_json(error_msg)
-                await websocket.close(code=1011, reason="Server error")
+                await websocket.close(code=1011, reason="OpenAI connection failed")
                 return
             
-            logger.info(f"Relay connection established for session {session_id}")
-            
-            # Store session info - NO TOOLS (voice-only)
-            self.active_sessions[session_id] = {
-                "websocket": websocket,
-                "openai_ws": openai_ws,
-                "session_configured": False
-            }
-            
-            # Wait for session.created event before configuring
-            logger.info(f"Waiting for session.created from OpenAI for session {session_id}")
-            
-            # Start listening for session.created
-            session_created = False
-            for _ in range(10):  # Try up to 10 messages
-                try:
-                    msg = await asyncio.wait_for(openai_ws.recv(), timeout=2.0)
-                    if isinstance(msg, str):
-                        data = json.loads(msg)
-                        # Forward to frontend
-                        await websocket.send_json(data)
-                        
-                        if data.get("type") == "session.created":
-                            logger.info(f"Received session.created for session {session_id}")
-                            session_created = True
-                            # NOW configure the session with tools
-                            await self._configure_session(openai_ws)
-                            self.active_sessions[session_id]["session_configured"] = True
-                            break
-                except asyncio.TimeoutError:
-                    logger.warning(f"Timeout waiting for session.created for session {session_id}")
-                    break
-                except Exception as e:
-                    logger.error(f"Error waiting for session.created: {e}")
-                    break
-            
-            if not session_created:
-                logger.warning(f"Never received session.created for session {session_id}, sending config anyway")
-                await self._configure_session(openai_ws)
+            logger.info(f"✅ OpenAI Realtime connection established for session {session_id}")
+            logger.info(f"   Model: {self.model}")
+            logger.info(f"   WebSocket connected successfully")
+
+            # Store session info with timestamp
+            current_time = asyncio.get_event_loop().time()
+            async with self.session_lock:
+                self.active_sessions[session_id] = {
+                    "websocket": websocket,
+                    "openai_ws": openai_ws,
+                    "session_configured": False,
+                    "created_at": current_time,
+                    "last_activity": current_time
+                }
+                async with self.metrics_lock:
+                    self.metrics["sessions_created"] += 1
+
+            logger.info(f"Starting bidirectional relay for session {session_id}")
             
             # Create bidirectional relay tasks
             frontend_to_openai_task = asyncio.create_task(
@@ -176,52 +282,107 @@ class OpenAIRealtimeRelay:
                 pass
                 
         finally:
-            # Clean up session
-            if session_id in self.active_sessions:
-                del self.active_sessions[session_id]
-                
-            # Close connections
-            if openai_ws:
-                await openai_ws.close()
-            try:
-                await websocket.close()
-            except:
-                pass
-            
+            # Clean up session with proper locking
+            async with self.session_lock:
+                if session_id in self.active_sessions:
+                    logger.info(f"🧹 Cleaning up session {session_id} on disconnect")
+                    session_data = self.active_sessions[session_id]
+
+                    # Close connections
+                    try:
+                        if session_data.get("websocket"):
+                            await session_data["websocket"].close(code=1000, reason="Session ended")
+                    except:
+                        pass
+
+                    try:
+                        if session_data.get("openai_ws"):
+                            await session_data["openai_ws"].close()
+                    except:
+                        pass
+
+                    del self.active_sessions[session_id]
+
             logger.info(f"Relay connection closed for session {session_id}")
-    
+
+    async def shutdown(self):
+        """Clean shutdown of the relay server."""
+        logger.info("🛑 Shutting down OpenAI Realtime Relay Server")
+
+        # Cancel cleanup task
+        if hasattr(self, 'cleanup_task') and not self.cleanup_task.done():
+            self.cleanup_task.cancel()
+            try:
+                await self.cleanup_task
+            except asyncio.CancelledError:
+                pass
+
+        # Clean up all active sessions
+        async with self.session_lock:
+            session_ids = list(self.active_sessions.keys())
+            for session_id in session_ids:
+                logger.info(f"🧹 Force cleaning up session {session_id} on shutdown")
+                session_data = self.active_sessions[session_id]
+
+                # Close connections
+                try:
+                    if session_data.get("websocket"):
+                        await session_data["websocket"].close(code=1001, reason="Server shutting down")
+                except:
+                    pass
+
+                try:
+                    if session_data.get("openai_ws"):
+                        await session_data["openai_ws"].close()
+                except:
+                    pass
+
+                del self.active_sessions[session_id]
+
+        logger.info("✅ OpenAI Realtime Relay Server shutdown complete")
+
     async def _configure_session(self, openai_ws: WebSocketClientProtocol):
-        """Configure the OpenAI session for voice-only interaction (no tools)."""
-        
-        # NO TOOLS - Voice interface only
-        # The agent orchestrator handles all tool execution
-        tools = []
-        
-        # Voice-only instructions - just transcribe and speak what's provided
-        instructions = "You are a voice interface only. Transcribe user speech accurately. Only speak text that is explicitly provided to you. Do not generate responses, answer questions, or call tools."
-        
-        # Send session configuration
+        """Configure OpenAI Realtime session for passive voice I/O (GA API format)."""
+
+        # STRICT passive-only instructions: NO autonomous responses, ONLY transcription
+        instructions = """You are a passive voice bridge.
+
+Primary responsibilities:
+1. Convert incoming speech to text accurately.
+2. Relay agent-provided text back as spoken audio when prompted.
+
+Do NOT initiate responses, small talk, or tool calls. Stay silent unless text-to-speech content is explicitly provided."""
+
+        # GA (General Availability) OpenAI Realtime API configuration
         session_config = {
             "type": "session.update",
             "session": {
-                "modalities": ["text", "audio"],
+                "type": "realtime",
+                "model": self.model,
                 "instructions": instructions,
-                "voice": "alloy",
-                "input_audio_format": "pcm16",
-                "output_audio_format": "pcm16",
-                "input_audio_transcription": {
-                    "model": "whisper-1"
+                "audio": {
+                    "input": {
+                        "format": {"type": "audio/pcm", "rate": 24000},
+                        "transcription": {"model": "whisper-1"},
+                        "turn_detection": {
+                            "type": "server_vad",
+                            "threshold": 0.5,
+                            "prefix_padding_ms": 300,
+                            "silence_duration_ms": 500
+                        }
+                    },
+                    "output": {
+                        "format": {"type": "audio/pcm", "rate": 24000},
+                        "voice": "alloy"
+                    }
                 },
-                # Voice-only configuration - no turn detection to avoid server errors
-                # Combined with empty tools and tool_choice: "none", this enforces voice-only I/O
-                "tools": [],  # Explicitly empty
-                "tool_choice": "none",  # CRITICAL: Disable tool usage
-                "temperature": 0.6,  # Minimum allowed temperature for OpenAI Realtime API
-                "max_response_output_tokens": 10  # Absolute minimum - we don't want any generated text
+                "tools": []
             }
         }
-        
+
         await openai_ws.send(json.dumps(session_config))
+
+        logger.info("✅ GA OpenAI config applied with server_vad for automatic speech-end detection")
     
     def _get_fallback_instructions(self) -> str:
         """Get fallback instructions for voice-only interface."""
@@ -255,13 +416,28 @@ All intelligence and tool execution is handled by the separate agent system."""
                 if data["type"] == "websocket.disconnect":
                     break
                 
-                # Forward message to OpenAI
+                # Forward message to OpenAI (with filtering)
                 if "text" in data:
                     # JSON message from RealtimeClient
+                    # Filter out client-originated session.update events
+                    # The relay server handles all session configuration
+                    try:
+                        message = json.loads(data["text"])
+                        if message.get("type") == "session.update":
+                            logger.info(f"🚫 Blocked client session.update for session {session_id} - relay handles session config")
+                            continue
+                    except json.JSONDecodeError:
+                        pass  # Not JSON, forward as-is
+
                     await openai_ws.send(data["text"])
                 elif "bytes" in data:
                     # Binary audio data
                     await openai_ws.send(data["bytes"])
+
+                # Update activity timestamp for any frontend activity
+                async with self.session_lock:
+                    if session_id in self.active_sessions:
+                        self.active_sessions[session_id]["last_activity"] = asyncio.get_event_loop().time()
                     
         except WebSocketDisconnect as e:
             # Log close code and reason for debugging
@@ -277,21 +453,35 @@ All intelligence and tool execution is handled by the separate agent system."""
         frontend_ws: WebSocket,
         session_id: str
     ):
-        """Relay messages from OpenAI API to RealtimeClient with tool execution."""
+        """Relay messages from OpenAI API to RealtimeClient with session configuration."""
         try:
             async for message in openai_ws:
                 if isinstance(message, str):
                     # JSON message from OpenAI
                     data = json.loads(message)
-                    
-                    # NO TOOL HANDLING - Just forward all messages
-                    # Tools are handled by the agent orchestrator
-                    await frontend_ws.send_json(data)
-                        
+
+                    # Configure session when we see session.created
+                    if data.get("type") == "session.created" and not self.active_sessions[session_id]["session_configured"]:
+                        logger.info(f"📡 Received session.created for session {session_id}, configuring...")
+                        # Forward session.created to frontend first
+                        await frontend_ws.send_json(data)
+                        # Then configure the session
+                        await self._configure_session(openai_ws)
+                        self.active_sessions[session_id]["session_configured"] = True
+                        logger.info(f"✅ Session configured for {session_id}")
+                    else:
+                        # Forward all other messages normally
+                        await frontend_ws.send_json(data)
+
+                    # Update activity timestamp
+                    async with self.session_lock:
+                        if session_id in self.active_sessions:
+                            self.active_sessions[session_id]["last_activity"] = asyncio.get_event_loop().time()
+
                 elif isinstance(message, bytes):
                     # Binary audio data from OpenAI
                     await frontend_ws.send_bytes(message)
-                    
+
         except websockets.exceptions.ConnectionClosed as e:
             # Log close code and reason for debugging
             logger.info(f"🔌 OpenAI WebSocket closed for session {session_id} - Code: {e.code}, Reason: {e.reason}")
@@ -307,12 +497,19 @@ All intelligence and tool execution is handled by the separate agent system."""
         return self.active_sessions.get(session_id)
     
     async def get_active_sessions(self) -> Dict[str, Dict[str, Any]]:
-        """Get all active relay sessions."""
+        """Get all active relay sessions with detailed status."""
+        current_time = asyncio.get_event_loop().time()
         return {
             session_id: {
                 "session_id": session_id,
                 "connection_active": True,
-                "voice_only": True  # This is now a voice-only interface
+                "voice_only": True,  # This is now a voice-only interface
+                "session_configured": session.get("session_configured", False),
+                "created_at": session.get("created_at", current_time),
+                "last_activity": session.get("last_activity", current_time),
+                "websocket_connected": session.get("websocket") is not None,
+                "openai_connected": session.get("openai_ws") is not None,
+                "idle_seconds": current_time - session.get("last_activity", current_time)
             }
             for session_id, session in self.active_sessions.items()
         }
@@ -351,12 +548,13 @@ All intelligence and tool execution is handled by the separate agent system."""
             
             await openai_ws.send(json.dumps(tts_message))
             
-            # Request audio response
+            # Request audio response (GA format)
             response_request = {
                 "type": "response.create",
                 "response": {
-                    "modalities": ["audio"],  # Audio only for TTS
-                    "instructions": "Speak this message clearly and naturally."
+                    "output_modalities": ["audio"],  # GA parameter name
+                    "instructions": "Speak this message clearly and naturally.",
+                    "conversation": "none"  # Don't append GPT's response to conversation
                 }
             }
             
@@ -367,7 +565,50 @@ All intelligence and tool execution is handled by the separate agent system."""
             
         except Exception as e:
             logger.error(f"Error sending TTS to session {session_id}: {e}")
-            return False
+            async with self.metrics_lock:
+                self.metrics["tts_failures"] += 1
+                self.metrics["errors"] += 1
+            return {"success": False, "error": str(e)}
+    
+    async def get_metrics(self) -> Dict[str, Any]:
+        """Get current metrics."""
+        async with self.metrics_lock:
+            uptime = time.time() - self.metrics["start_time"]
+            return {
+                **self.metrics,
+                "uptime_seconds": uptime,
+                "uptime_formatted": f"{uptime/3600:.1f} hours",
+                "current_sessions": len(self.active_sessions),
+                "session_utilization": f"{len(self.active_sessions)}/{self.max_concurrent_sessions}"
+            }
+    
+    def _reset_metrics(self) -> None:
+        """Reset metrics (internal use for testing)."""
+        self.metrics = {
+            "sessions_created": 0,
+            "sessions_closed": 0,
+            "sessions_rejected": 0,
+            "sessions_timed_out": 0,
+            "messages_sent": 0,
+            "messages_received": 0,
+            "errors": 0,
+            "tts_requests": 0,
+            "tts_failures": 0,
+            "cleanup_runs": 0,
+            "start_time": time.time()
+        }
+        logger.info("Metrics reset")
+    
+    def get_metrics_sync(self) -> Dict[str, Any]:
+        """Synchronous version of get_metrics for non-async contexts."""
+        uptime = time.time() - self.metrics["start_time"]
+        return {
+            **self.metrics,
+            "uptime_seconds": uptime,
+            "uptime_formatted": f"{uptime/3600:.1f} hours",
+            "current_sessions": len(self.active_sessions),
+            "session_utilization": f"{len(self.active_sessions)}/{self.max_concurrent_sessions}"
+        }
 
 # Create singleton instance
 try:

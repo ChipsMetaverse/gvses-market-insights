@@ -1,0 +1,190 @@
+{
+  "test_date": "2025-09-30T21:13:41.163289",
+  "test_queries": [
+    "What does buy low mean?",
+    "How do I start trading stocks?",
+    "What is support and resistance?",
+    "Explain RSI indicator",
+    "What is MACD?",
+    "Show me the chart for Apple",
+    "What's the difference between support and resistance?"
+  ],
+  "template_results": [
+    {
+      "query": "What does buy low mean?",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 10325.227975845337,
+      "char_count": 31,
+      "has_response": false,
+      "cached": false
+    },
+    {
+      "query": "How do I start trading stocks?",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 8844.022035598755,
+      "char_count": 31,
+      "has_response": false,
+      "cached": false
+    },
+    {
+      "query": "What is support and resistance?",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 9057.050704956055,
+      "char_count": 31,
+      "has_response": false,
+      "cached": false
+    },
+    {
+      "query": "Explain RSI indicator",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 7279.076099395752,
+      "char_count": 31,
+      "has_response": false,
+      "cached": false
+    },
+    {
+      "query": "What is MACD?",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 9018.823862075806,
+      "char_count": 31,
+      "has_response": false,
+      "cached": false
+    },
+    {
+      "query": "Show me the chart for Apple",
+      "response": "Loading AAPL chart",
+      "tools_used": [],
+      "model": "static-chart",
+      "education_mode": "unknown",
+      "latency_ms": 5.985021591186523,
+      "char_count": 18,
+      "has_response": true,
+      "cached": false
+    },
+    {
+      "query": "What's the difference between support and resistance?",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 8818.76015663147,
+      "char_count": 31,
+      "has_response": false,
+      "cached": false
+    }
+  ],
+  "llm_results": [
+    {
+      "query": "What does buy low mean?",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 3.648042678833008,
+      "char_count": 31,
+      "has_response": false,
+      "cached": true
+    },
+    {
+      "query": "How do I start trading stocks?",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 3.8728713989257812,
+      "char_count": 31,
+      "has_response": false,
+      "cached": true
+    },
+    {
+      "query": "What is support and resistance?",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 8265.671253204346,
+      "char_count": 31,
+      "has_response": false,
+      "cached": false
+    },
+    {
+      "query": "Explain RSI indicator",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 2.7108192443847656,
+      "char_count": 31,
+      "has_response": false,
+      "cached": true
+    },
+    {
+      "query": "What is MACD?",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 2.849578857421875,
+      "char_count": 31,
+      "has_response": false,
+      "cached": true
+    },
+    {
+      "query": "Show me the chart for Apple",
+      "response": "Loading AAPL chart",
+      "tools_used": [],
+      "model": "static-chart",
+      "education_mode": "unknown",
+      "latency_ms": 2.9392242431640625,
+      "char_count": 18,
+      "has_response": true,
+      "cached": false
+    },
+    {
+      "query": "What's the difference between support and resistance?",
+      "response": "I couldn't generate a response.",
+      "tools_used": [],
+      "model": "gpt-5-mini",
+      "education_mode": "unknown",
+      "latency_ms": 7873.472690582275,
+      "char_count": 31,
+      "has_response": false,
+      "cached": false
+    }
+  ],
+  "comparison": {
+    "total_queries": 7,
+    "template_mode": {
+      "success_count": 1,
+      "success_rate": 14.285714285714285,
+      "avg_latency_ms": 7621.277979442051,
+      "avg_response_length": 18.0
+    },
+    "llm_mode": {
+      "success_count": 1,
+      "success_rate": 14.285714285714285,
+      "avg_latency_ms": 2307.880640029907,
+      "avg_response_length": 18.0
+    },
+    "improvements": {
+      "success_rate_delta": 0.0,
+      "latency_increase_ms": -5313.397339412144,
+      "content_richness_delta": 0.0
+    }
+  }
+}

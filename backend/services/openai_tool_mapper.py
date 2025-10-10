@@ -9,6 +9,7 @@ import logging
 import asyncio
 from typing import Dict, List, Any, Optional
 from mcp_client import get_mcp_client
+from services.chart_tool_registry import get_chart_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -47,33 +48,76 @@ class OpenAIToolMapper:
             raise
     
     async def _load_mcp_tools(self):
-        """Load tools from MCP server and convert to OpenAI format."""
+        """Load tools from MCP server and chart registry, convert to OpenAI format."""
         try:
             # Get list of available tools from MCP server
             tools_response = await self.mcp_client.list_tools()
-            
+
             if not tools_response or "tools" not in tools_response:
                 logger.warning("No tools received from MCP server")
                 return
-            
+
             mcp_tools = tools_response["tools"]
             logger.info(f"Loading {len(mcp_tools)} tools from MCP server...")
-            
+
             for tool in mcp_tools:
                 openai_tool = self._convert_mcp_to_openai_tool(tool)
                 if openai_tool:
                     tool_name = tool["name"]
                     self.tool_cache[tool_name] = openai_tool
                     self.schema_cache[tool_name] = tool
-                    logger.debug(f"Converted tool: {tool_name}")
-            
+                    logger.debug(f"Converted MCP tool: {tool_name}")
+
             logger.info(f"Successfully converted {len(self.tool_cache)} MCP tools to OpenAI format")
-            
+
+            # Load chart control tools from knowledge-based registry
+            await self._load_chart_control_tools()
+
         except Exception as e:
             logger.error(f"Failed to load MCP tools: {e}")
             # Continue with empty tool cache for graceful degradation
             self.tool_cache = {}
             self.schema_cache = {}
+
+    async def _load_chart_control_tools(self):
+        """Load chart manipulation tools from the chart tool registry."""
+        try:
+            registry = get_chart_tool_registry()
+            chart_tools = registry.get_all_tools()
+
+            logger.info(f"Loading {len(chart_tools)} chart control tools...")
+
+            for tool_dict in chart_tools:
+                # Convert chart tool to OpenAI function format
+                openai_tool = {
+                    "type": "function",
+                    "function": {
+                        "name": tool_dict["name"],
+                        "description": tool_dict["description"],
+                        "parameters": {
+                            "type": "object",
+                            "properties": tool_dict["parameters"],
+                            "required": list(tool_dict["parameters"].keys())
+                        }
+                    }
+                }
+
+                # Add to cache
+                self.tool_cache[tool_dict["name"]] = openai_tool
+                self.schema_cache[tool_dict["name"]] = {
+                    "name": tool_dict["name"],
+                    "description": tool_dict["description"],
+                    "category": tool_dict["category"],
+                    "frontend_command": tool_dict["frontend_command"]
+                }
+
+                logger.debug(f"Converted chart tool: {tool_dict['name']}")
+
+            logger.info(f"Successfully added {len(chart_tools)} chart control tools")
+
+        except Exception as e:
+            logger.error(f"Failed to load chart control tools: {e}")
+            # Non-fatal - chart tools are optional enhancement
     
     def _convert_mcp_to_openai_tool(self, mcp_tool: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """

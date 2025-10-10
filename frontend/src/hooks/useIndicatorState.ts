@@ -292,14 +292,20 @@ export function useIndicatorState(options: UseIndicatorStateOptions = {}) {
 // Helper function to convert timeframe to days
 function timeframeToDays(timeframe: string): number {
   const map: { [key: string]: number } = {
-    '1D': 1,
-    '5D': 5,
-    '1W': 7,
-    '1M': 30,
-    '3M': 90,
-    '6M': 180,
-    '1Y': 365,
-    'YTD': Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24))
+    // Intraday (all map to 1 day of data)
+    '10S': 1, '30S': 1, '1m': 1, '3m': 1, '5m': 1,
+    '10m': 1, '15m': 1, '30m': 1,
+    // Hours (2-7 days for sufficient context)
+    '1H': 2, '2H': 3, '3H': 3, '4H': 5, '6H': 5, '8H': 7, '12H': 7,
+    // Days
+    '1D': 1, '2D': 2, '3D': 3, '5D': 5, '1W': 7,
+    // Months
+    '1M': 30, '3M': 90, '6M': 180,
+    // Years - Multi-year support
+    '1Y': 365, '2Y': 730, '3Y': 1095, '5Y': 1825,
+    // Special
+    'YTD': Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24)),
+    'MAX': 3650 // 10 years
   };
   return map[timeframe] || 30;
 }

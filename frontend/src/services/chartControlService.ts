@@ -4,6 +4,7 @@
  */
 
 import { marketDataService, SymbolSearchResult } from './marketDataService';
+import { chartToolService } from './chartToolService';
 
 export interface ChartCommand {
   type: 'symbol' | 'timeframe' | 'indicator' | 'zoom' | 'scroll' | 'style' | 'reset' | 'crosshair' | 'drawing';
@@ -652,11 +653,33 @@ class ChartControlService {
 
   /**
    * Parse agent response for chart commands (async for symbol search)
+   * Enhanced with knowledge-based tool mapping
    */
   async parseAgentResponse(response: string, chartCommandsFromApi?: string[]): Promise<ChartCommand[]> {
     const commands: ChartCommand[] = [];
-    
-    // Process explicit chart commands from API first
+
+    // PHASE 1: Try knowledge-based tool mapping first
+    try {
+      const toolMapping = await chartToolService.mapVoiceCommandToTool(response);
+      if (toolMapping.tool && toolMapping.command) {
+        console.log(`Knowledge-based tool match: ${toolMapping.tool.name}`, toolMapping);
+
+        // Convert tool command to ChartCommand
+        const knowledgeCommand = this.convertToolCommandToChartCommand(
+          toolMapping.command,
+          toolMapping.tool,
+          toolMapping.parameters
+        );
+
+        if (knowledgeCommand) {
+          commands.push(knowledgeCommand);
+        }
+      }
+    } catch (error) {
+      console.warn('Knowledge-based tool mapping failed, falling back to pattern matching:', error);
+    }
+
+    // PHASE 2: Process explicit chart commands from API
     if (chartCommandsFromApi && chartCommandsFromApi.length > 0) {
       for (const cmd of chartCommandsFromApi) {
         // Check if it's a drawing command
@@ -675,7 +698,7 @@ class ChartControlService {
           } else if (cmd.startsWith('TIMEFRAME:')) {
             const timeframe = cmd.substring(10);
             commands.push({
-              type: 'timeframe', 
+              type: 'timeframe',
               value: timeframe,
               timestamp: Date.now()
             });
@@ -822,6 +845,57 @@ class ChartControlService {
     }
 
     return commands;
+  }
+
+  /**
+   * Convert a knowledge-based tool command to a ChartCommand
+   */
+  private convertToolCommandToChartCommand(
+    toolCommand: string,
+    tool: any,
+    parameters: Record<string, any>
+  ): ChartCommand | null {
+    // Parse tool command format: "INDICATOR:RSI" or "DRAW:HORIZONTAL:price=100"
+    const parts = toolCommand.split(':');
+    const commandType = parts[0];
+
+    if (commandType === 'INDICATOR' || commandType === 'HIDE') {
+      const indicatorName = parts[1];
+      const enabled = commandType === 'INDICATOR';
+
+      return {
+        type: 'indicator',
+        value: {
+          name: indicatorName,
+          enabled
+        },
+        metadata: {
+          knowledgeBased: true,
+          toolName: tool.name,
+          description: tool.description
+        },
+        timestamp: Date.now()
+      };
+    }
+
+    if (commandType === 'DRAW') {
+      const drawingType = parts[1];
+
+      return {
+        type: 'drawing',
+        value: {
+          action: drawingType.toLowerCase(),
+          ...parameters
+        },
+        metadata: {
+          knowledgeBased: true,
+          toolName: tool.name
+        },
+        timestamp: Date.now()
+      };
+    }
+
+    return null;
   }
 
   /**

@@ -1,14 +1,13 @@
 /**
  * OpenAI Realtime Provider Implementation
- * Uses official @openai/realtime-api-beta SDK with relay server
+ * Uses official openai-realtime-api SDK with relay server
  */
 
 import { AbstractBaseProvider } from './BaseProvider';
-import { 
-  VoiceProvider, 
-  ProviderConfig, 
-  AudioChunk, 
-  Message,
+import {
+  VoiceProvider,
+  ProviderConfig,
+  AudioChunk,
   ProviderCapabilities
 } from './types';
 import { OpenAIRealtimeService } from '../services/OpenAIRealtimeService';
@@ -17,7 +16,6 @@ export class OpenAIRealtimeProvider extends AbstractBaseProvider implements Voic
   private service: OpenAIRealtimeService | null = null;
   private currentVoice: string;
   private sessionId: string;
-  private isConversationActive: boolean = false;
 
   constructor(config: ProviderConfig) {
     super(config);
@@ -118,7 +116,6 @@ export class OpenAIRealtimeProvider extends AbstractBaseProvider implements Voic
       await this.service.disconnect();
     }
     
-    this.isConversationActive = false;
     // Connection state will be updated via the onDisconnected callback
   }
 
@@ -128,12 +125,10 @@ export class OpenAIRealtimeProvider extends AbstractBaseProvider implements Voic
       await this.connect();
     }
     
-    this.isConversationActive = true;
     this.emit('conversationStarted', { timestamp: new Date().toISOString() });
   }
 
   async stopConversation(): Promise<void> {
-    this.isConversationActive = false;
     this.emit('conversationStopped', { timestamp: new Date().toISOString() });
     await this.disconnect();
   }
@@ -168,8 +163,7 @@ export class OpenAIRealtimeProvider extends AbstractBaseProvider implements Voic
     this.service.sendTextMessage(message);
     
     // Emit user message event
-    const userMessage = this.createMessage('user', message);
-    this.emit('message', userMessage);
+    this.emit('message', this.createMessage('user', message));
   }
 
   async setVoice(voiceId: string): Promise<void> {
@@ -207,10 +201,6 @@ export class OpenAIRealtimeProvider extends AbstractBaseProvider implements Voic
 
   getConversationHistory(): any[] {
     return this.service?.getConversationHistory() || [];
-  }
-
-  getAvailableTools(): any[] {
-    return this.service?.getAvailableTools() || [];
   }
 
   // Private methods

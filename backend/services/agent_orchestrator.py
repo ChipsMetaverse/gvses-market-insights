@@ -209,6 +209,14 @@ class AgentOrchestrator:
         # Pre-computed fast-path responses for common educational queries
         self._static_response_templates = self._build_static_response_templates()
 
+        # G'sves Assistant Configuration
+        self.gvses_assistant_id = os.getenv("GVSES_ASSISTANT_ID")
+        self.use_gvses_assistant = os.getenv("USE_GVSES_ASSISTANT", "false").lower() == "true"
+        if self.gvses_assistant_id and self.use_gvses_assistant:
+            logger.info(f"G'sves Assistant enabled: {self.gvses_assistant_id}")
+        else:
+            logger.info("G'sves Assistant disabled - using default orchestrator")
+
     async def ingest_chart_snapshot(
         self,
         *,
@@ -1112,6 +1120,28 @@ class AgentOrchestrator:
                         "required": []
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "detect_chart_patterns",
+                    "description": "Analyze the current chart for technical patterns (triangles, head & shoulders, flags, wedges, double tops/bottoms, etc.) and automatically draw them on the chart for the user",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {
+                                "type": "string",
+                                "description": "Stock or crypto symbol to analyze"
+                            },
+                            "timeframe": {
+                                "type": "string",
+                                "description": "Chart timeframe (1D, 1W, 1M, etc.)",
+                                "default": "1D"
+                            }
+                        },
+                        "required": ["symbol"]
+                    }
+                }
             }
         ]
 
@@ -1256,6 +1286,13 @@ class AgentOrchestrator:
     ) -> (Optional[str], List[str]):
         """Build chart control commands and optionally augment response text/data."""
         commands = self._build_chart_commands(query, tool_results)
+
+        # Include pattern detection commands if tool was used
+        if tool_results and "detect_chart_patterns" in tool_results:
+            pattern_data = tool_results["detect_chart_patterns"]
+            if isinstance(pattern_data, dict) and pattern_data.get("chart_commands"):
+                commands.extend(pattern_data["chart_commands"])
+
         if commands:
             tool_results.setdefault("chart_commands", commands)
         return response_text, commands
@@ -2052,6 +2089,26 @@ class AgentOrchestrator:
                     },
                     "required": ["trades"]
                 }
+            },
+            {
+                "type": "function",
+                "name": "detect_chart_patterns",
+                "description": "Analyze the current chart for technical patterns (triangles, head & shoulders, flags, wedges, double tops/bottoms, etc.) and automatically draw them on the chart for the user",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {
+                            "type": "string",
+                            "description": "Stock or crypto symbol to analyze"
+                        },
+                        "timeframe": {
+                            "type": "string",
+                            "description": "Chart timeframe (1D, 1W, 1M, etc.)",
+                            "default": "1D"
+                        }
+                    },
+                    "required": ["symbol"]
+                }
             }
         ]
 
@@ -2456,6 +2513,83 @@ class AgentOrchestrator:
                     image_base64=image_base64,
                     user_context=context,
                 )
+            elif tool_name == "detect_chart_patterns":
+                if not self.chart_image_analyzer:
+                    raise RuntimeError("Chart image analyzer not available")
+
+                symbol = arguments.get("symbol")
+                timeframe = arguments.get("timeframe", "1D")
+
+                # Get latest chart snapshot
+                snapshot = await self.get_chart_state(symbol=symbol, timeframe=timeframe)
+                if not snapshot or not snapshot.get("image_base64"):
+                    result = {
+                        "error": "No chart snapshot available. The chart must be visible to detect patterns.",
+                        "patterns": [],
+                        "summary": "Chart snapshot not found",
+                        "chart_commands": []
+                    }
+                else:
+                    # Retrieve pattern knowledge from knowledge base
+                    pattern_knowledge = await self.vector_retriever.search_knowledge(
+                        query="chart patterns candlestick patterns technical analysis patterns triangles head shoulders flags wedges double tops double bottoms",
+                        top_k=15  # Get comprehensive pattern definitions
+                    )
+
+                    # Build enhanced context with pattern knowledge
+                    pattern_context = f"""Analyze {symbol} {timeframe} chart for technical patterns.
+
+PATTERN TYPES TO LOOK FOR:
+
+**Chart Patterns**:
+- Triangles (ascending, descending, symmetrical)
+- Head and shoulders (regular, inverse)
+- Double tops/bottoms, triple tops/bottoms
+- Flags and pennants
+- Wedges (rising, falling)
+- Rectangles and channels
+- Cup and handle
+- Rounding tops/bottoms
+
+**Candlestick Patterns**:
+- Doji (indicates indecision)
+- Engulfing (bullish/bearish)
+- Hammer and shooting star
+- Harami patterns
+- Morning/evening stars
+
+**Price Action**:
+- Support and resistance levels
+- Breakouts and breakdowns
+- Trend reversals
+- Consolidation zones
+- Volume divergences
+
+KNOWLEDGE:
+{pattern_knowledge[:2000] if pattern_knowledge else "Use standard pattern recognition"}
+
+Return JSON with detected patterns, confidence levels, and key support/resistance."""
+
+                    # Analyze using vision model with enhanced context
+                    analysis = await self.chart_image_analyzer.analyze_chart(
+                        image_base64=snapshot["image_base64"],
+                        user_context=pattern_context
+                    )
+
+                    # Generate drawing commands via lifecycle manager
+                    lifecycle_result = self.pattern_lifecycle.update(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        analysis=analysis
+                    )
+
+                    result = {
+                        "patterns": analysis.get("patterns", []),
+                        "summary": analysis.get("summary", ""),
+                        "chart_commands": lifecycle_result.get("chart_commands", []),
+                        "symbol": symbol,
+                        "timeframe": timeframe
+                    }
             elif tool_name == "generate_daily_watchlist":
                 # Generate a watchlist with mock data (can be enhanced with real market scanning)
                 from datetime import timedelta
@@ -3374,7 +3508,8 @@ Remember to cite sources when using this knowledge and maintain educational tone
             # Single LLM call with tools
             # Use gpt-4o-mini for educational queries (gpt-5-mini has issues with empty responses)
             model = "gpt-4o-mini" if intent == "educational" else ("gpt-5-mini" if intent in ["price-only", "news"] else self.model)
-            max_tokens = 400 if intent in ["price-only", "news"] else 800  # More tokens for educational responses
+            # Increased tokens for complex queries like planning (was 800, now 1500)
+            max_tokens = 400 if intent in ["price-only", "news"] else 1500  # More tokens for complex responses
             
             t_llm = time.monotonic()
             # Use correct parameter name based on model
@@ -3387,8 +3522,8 @@ Remember to cite sources when using this knowledge and maintain educational tone
             if not model.startswith("gpt-5"):
                 completion_params["temperature"] = 0.3 if intent in ["price-only", "technical"] else 0.7
             
-            # Add tools only when they are useful for the intent
-            if intent not in ["price-only", "educational"]:
+            # Add tools for all intents EXCEPT educational (which uses knowledge base only)
+            if intent != "educational":
                 completion_params["tools"] = self._get_tool_schemas()
                 completion_params["tool_choice"] = "auto"
             # For educational queries, no tools are provided, so no tool_choice needed
@@ -4132,8 +4267,61 @@ Remember to cite sources when using this knowledge and maintain educational tone
             commands.append("ADD:VOLUME")
         elif "remove volume" in ql or "hide volume" in ql:
             commands.append("REMOVE:VOLUME")
-        
+
         return commands
+
+    async def _process_with_gvses_assistant(
+        self,
+        query: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> Dict[str, Any]:
+        """
+        Process query using the G'sves trading assistant.
+        Uses OpenAI Responses API with the G'sves assistant for intelligent trading analysis.
+        """
+        logger.info(f"Processing query with G'sves assistant: {query[:50]}...")
+
+        try:
+            # Build messages for the assistant
+            messages = []
+            if conversation_history:
+                messages.extend(conversation_history[-10:])  # Keep last 10 messages
+            messages.append({"role": "user", "content": query})
+
+            # Get tool schemas for Responses API format
+            tools = self._get_tool_schemas(for_responses_api=True)
+
+            # Call Responses API with G'sves assistant
+            response = await self.client.responses.create(
+                model="gpt-4o",
+                assistant_id=self.gvses_assistant_id,
+                messages=messages,
+                tools=tools,
+                store=True  # Enable multi-turn conversations
+            )
+
+            # Extract response text
+            response_text = response.output_text if hasattr(response, 'output_text') else str(response)
+
+            # Track which tools were used
+            tools_used = []
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                tools_used = [tool.function.name for tool in response.tool_calls]
+
+            return {
+                "text": response_text,
+                "tools_used": tools_used,
+                "data": {},
+                "timestamp": datetime.now().isoformat(),
+                "model": "gpt-4o-gvses-assistant",
+                "cached": False,
+                "session_id": None
+            }
+
+        except Exception as e:
+            logger.error(f"Error processing query with G'sves assistant: {e}")
+            # Fall back to regular orchestrator on error
+            return await self._process_query_single_pass(query, conversation_history, self._classify_intent(query), False)
 
     async def process_query(
         self,
@@ -4158,7 +4346,14 @@ Remember to cite sources when using this knowledge and maintain educational tone
             logger.info(f"Symbol detected: {self._extract_symbol_from_query(query)}")
         except Exception:
             pass
-        
+
+        # Route trading analysis queries to G'sves assistant if enabled
+        if self.use_gvses_assistant and self.gvses_assistant_id:
+            # Use G'sves for trading analysis, but not for chart commands or indicator toggles
+            if intent not in ["chart-only", "indicator-toggle"]:
+                logger.info("Routing query to G'sves trading assistant")
+                return await self._process_with_gvses_assistant(query, conversation_history)
+
         # Check response cache first for immediate return
         # Skip cache for technical analysis queries to ensure fresh analysis
         technical_keywords = ['swing', 'entry', 'exit', 'target', 'support', 'resistance', 

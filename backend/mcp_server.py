@@ -30,7 +30,6 @@ from market_data_service import MarketDataService
 from routers.dashboard_router import router as dashboard_router
 from mcp_client import get_stock_history as mcp_get_stock_history
 from services.market_service_factory import MarketServiceFactory
-from services.openai_realtime_service import OpenAIRealtimeService
 from services.openai_relay_server import openai_relay_server
 
 # Load environment variables from .env if present
@@ -90,7 +89,7 @@ except ImportError as e:
 except Exception as e:
     logger.error(f"Error mounting agent router: {e}")
 
-# Mount Computer Use verification router if enabled
+        # Mount Computer Use verification router if enabled
 if os.getenv("USE_COMPUTER_USE", "false").lower() == "true":
     try:
         from routers.computer_use_router import router as computer_use_router
@@ -100,6 +99,13 @@ if os.getenv("USE_COMPUTER_USE", "false").lower() == "true":
         logger.warning(f"Computer Use router not available: {e}")
     except Exception as e:
         logger.error(f"Error mounting Computer Use router: {e}")
+
+        # Initialize OpenAI relay server for voice functionality
+        try:
+            from services.openai_relay_server import openai_relay_server
+            logger.info("OpenAI Realtime Relay Server initialized for voice functionality")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI relay server: {e}")
 
 # Initialize Supabase client
 def get_supabase_client() -> Client:
@@ -338,13 +344,12 @@ conversation_manager = None
 claude_service = None
 market_service = None  # Will be initialized in startup event
 market_service_error = None  # Track initialization errors for debugging
-openai_service = None  # OpenAI Realtime service
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
-    global supabase, conversation_manager, claude_service, market_service, market_service_error, openai_service, orchestrator
+    global supabase, conversation_manager, claude_service, market_service, market_service_error, orchestrator
     
     try:
         # Initialize Supabase (required)
@@ -387,25 +392,22 @@ async def startup_event():
         else:
             logger.warning("⚠️ Alpaca credentials not found - using Yahoo Finance only")
         
-        # Initialize OpenAI Realtime service
+        # Log relay server status
         try:
-            # Check for required environment variable
-            if not os.environ.get("OPENAI_API_KEY"):
-                logger.warning("OPENAI_API_KEY not found in environment - OpenAI relay will be disabled")
-                openai_service = None
+            if openai_relay_server and openai_relay_server.api_key:
+                logger.info(
+                    "✅ OpenAI Relay Server ready (max %s concurrent sessions)",
+                    openai_relay_server.max_concurrent_sessions
+                )
+                logger.info(
+                    "   Session timeout: %ss, Activity timeout: %ss",
+                    openai_relay_server.session_timeout,
+                    openai_relay_server.activity_timeout
+                )
             else:
-                openai_service = OpenAIRealtimeService()
-                logger.info("OpenAI Realtime service initialized successfully")
-                # Log enhanced training status
-                try:
-                    from services.openai_relay_server import openai_relay_server
-                    # Voice-only interface - no tools
-                    logger.info("OpenAI Realtime voice-only interface loaded")
-                except:
-                    pass
+                logger.warning("⚠️ OpenAI Relay Server: API key not configured")
         except Exception as e:
-            logger.warning(f"OpenAI Realtime service initialization failed: {e}")
-            openai_service = None
+            logger.warning(f"⚠️ OpenAI Relay Server status check failed: {e}")
         
         # Initialize and warm up market service
         try:
@@ -445,7 +447,7 @@ async def test_direct_service():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    global market_service, market_service_error, openai_service
+    global market_service, market_service_error
     response = {
         "status": "healthy",
         "service_mode": MarketServiceFactory.get_service_mode(),
@@ -477,25 +479,16 @@ async def health_check():
         # Try to import the relay server directly
         from services.openai_relay_server import openai_relay_server
         active_sessions = await openai_relay_server.get_active_sessions()
+        metrics = await openai_relay_server.get_metrics()
         response["openai_relay_ready"] = True
         response["openai_relay"] = {
             "active": True,
             "sessions": len(active_sessions),
+            "max_sessions": openai_relay_server.max_concurrent_sessions,
             "voice_only": True,  # Voice-only interface (no tools)
-            "api_key_configured": bool(openai_relay_server.api_key)
+            "api_key_configured": bool(openai_relay_server.api_key),
+            "metrics": metrics
         }
-    except ImportError:
-        # Fallback to checking OpenAI service
-        if openai_service:
-            response["openai_relay_ready"] = True
-            response["openai_relay"] = {
-                "active": True,
-                "reason": "OpenAI service mode",
-                "api_key_configured": bool(openai_service.api_key)
-            }
-        else:
-            response["openai_relay_ready"] = False
-            response["openai_relay"] = {"active": False, "reason": "Service not initialized"}
     except Exception as e:
         response["openai_relay_ready"] = False
         response["openai_relay"] = {"active": False, "error": str(e)}
@@ -1523,46 +1516,12 @@ async def debug_ask_endpoint():
     return debug_info
 
 
-@app.websocket("/openai/realtime/ws")
-async def openai_websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for OpenAI Realtime voice interaction."""
-    if not openai_service:
-        await websocket.close(code=1011, reason="OpenAI service not initialized")
-        return
-    
-    try:
-        # Handle WebSocket subprotocol negotiation
-        headers = dict(websocket.headers)
-        subprotocol = None
-        
-        # Check for Sec-WebSocket-Protocol header
-        if "sec-websocket-protocol" in headers:
-            requested_protocols = headers["sec-websocket-protocol"]
-            # Use the first requested protocol (RealtimeClient typically sends protocol headers)
-            subprotocol = requested_protocols.split(',')[0].strip() if requested_protocols else None
-            logger.info(f"WebSocket subprotocol requested: {subprotocol}")
-        
-        # Accept WebSocket with subprotocol if requested
-        if subprotocol:
-            await websocket.accept(subprotocol=subprotocol)
-        else:
-            await websocket.accept()
-        
-        # Pass the accepted websocket to the OpenAI service
-        await openai_service.handle_websocket_connection_accepted(websocket, None)
-    except Exception as e:
-        logger.error(f"OpenAI WebSocket error: {e}")
-        try:
-            await websocket.close(code=1011, reason=str(e))
-        except:
-            pass
-
-
 @app.post("/openai/realtime/session")
 async def create_openai_session(request: Request):
-    """Create a new OpenAI Realtime session."""
-    if not openai_service:
-        raise HTTPException(status_code=503, detail="OpenAI service not initialized")
+    """Create a new OpenAI Realtime session via relay server."""
+    # Use the relay server instead of deprecated service
+    if not openai_relay_server.api_key:
+        raise HTTPException(status_code=503, detail="OpenAI API key not configured")
     
     try:
         session_id = str(uuid.uuid4())
@@ -1575,14 +1534,63 @@ async def create_openai_session(request: Request):
         # Get the host from headers or request
         host = request.headers.get("host", request.url.netloc)
         
+        # Return relay-based WebSocket URL
         return {
             "session_id": session_id,
-            "ws_url": f"{ws_scheme}://{host}/realtime-relay/{session_id}",
-            "status": "ready"
+            "url": f"{ws_scheme}://{host}/realtime-relay/{session_id}",  # Changed key to match frontend expectations
+            "ws_url": f"{ws_scheme}://{host}/realtime-relay/{session_id}",  # Keep for backward compatibility
+            "status": "ready",
+            "relay": True  # Indicate this is using the relay server
         }
     except Exception as e:
         logger.error(f"Error creating OpenAI session: {e}")
         raise HTTPException(status_code=500, detail="Failed to create session")
+
+
+class TTSRequest(BaseModel):
+    text: str
+    voice: str = "alloy"
+
+
+@app.post("/openai/tts")
+async def generate_tts(request: TTSRequest):
+    """Generate TTS audio using OpenAI's /v1/audio/speech API."""
+    try:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/audio/speech",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "tts-1",
+                    "input": request.text,
+                    "voice": request.voice,
+                    "response_format": "pcm"  # Return raw PCM16 audio
+                },
+                timeout=30.0
+            )
+
+            if response.status_code != 200:
+                logger.error(f"OpenAI TTS API error: {response.status_code} - {response.text}")
+                raise HTTPException(status_code=response.status_code, detail="TTS generation failed")
+
+            # Return raw PCM16 audio data
+            from fastapi.responses import Response
+            return Response(
+                content=response.content,
+                media_type="audio/pcm",
+                headers={"Content-Type": "audio/pcm"}
+            )
+
+    except Exception as e:
+        logger.error(f"TTS generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.websocket("/realtime-relay/{session_id}")
@@ -1592,25 +1600,13 @@ async def openai_relay_endpoint(websocket: WebSocket, session_id: str):
     ==================================
     Secure WebSocket relay for RealtimeClient connections following OpenAI patterns.
     Provides secure access to OpenAI's Realtime API without exposing API keys.
-    Handles WebSocket subprotocol negotiation for compatibility with RealtimeClient.
+    Note: We accept WITH 'realtime' subprotocol to match RealtimeClient expectations.
     """
     try:
-        # Extract subprotocol from request headers if present
-        subprotocol = None
-        headers = websocket.headers
-        
-        # Check for Sec-WebSocket-Protocol header
-        if "sec-websocket-protocol" in headers:
-            requested_protocols = headers["sec-websocket-protocol"]
-            # Use the first requested protocol (RealtimeClient typically sends 'openai-realtime')
-            subprotocol = requested_protocols.split(',')[0].strip() if requested_protocols else None
-            logger.info(f"WebSocket subprotocol requested: {subprotocol}")
-        
-        # Accept WebSocket with subprotocol if requested
-        if subprotocol:
-            await websocket.accept(subprotocol=subprotocol)
-        else:
-            await websocket.accept()
+        # Accept WebSocket WITH 'realtime' subprotocol
+        # The RealtimeClient sends ['realtime', 'openai-insecure-api-key.{key}', 'openai-beta.realtime-v1']
+        # We respond with 'realtime' to establish the connection
+        await websocket.accept(subprotocol='realtime')
         
         # Pass the accepted websocket to the relay handler
         await openai_relay_server.handle_relay_connection_accepted(websocket, session_id)
@@ -1685,6 +1681,22 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         logger.error(f"WebSocket error: {e}")
         await websocket.close()
 
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean shutdown of all services."""
+    logger.info("🛑 Shutting down MCP server")
+
+    # Clean up OpenAI relay server if available
+    try:
+        from services.openai_relay_server import openai_relay_server
+        await openai_relay_server.shutdown()
+        logger.info("✅ OpenAI relay server shut down successfully")
+    except Exception as e:
+        logger.error(f"Error shutting down OpenAI relay server: {e}")
+
+    # Clean up any other active connections or resources
+    logger.info("✅ MCP server shutdown complete")
 
 
 if __name__ == "__main__":

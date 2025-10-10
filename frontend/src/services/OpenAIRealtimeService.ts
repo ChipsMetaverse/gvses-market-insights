@@ -1,12 +1,11 @@
 /**
  * OpenAI Realtime Service using Official SDK
  * ==========================================
- * Uses the official @openai/realtime-api-beta SDK with RealtimeClient
+ * Uses the official @openai/realtime-api SDK with RealtimeClient
  * following OpenAI's recommended patterns for voice agents.
  */
 
-import { RealtimeClient } from '@openai/realtime-api-beta';
-import type { ItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
+import { RealtimeClient } from 'openai-realtime-api';
 import { getApiUrl } from '../utils/apiConfig';
 
 interface VoiceConnectionConfig {
@@ -15,10 +14,20 @@ interface VoiceConnectionConfig {
   onConnected?: () => void;
   onDisconnected?: () => void;
   onError?: (error: any) => void;
-  onTranscript?: (text: string, final: boolean) => void;
+  onTranscript?: (text: string, final: boolean, itemId?: string) => void;
   onAudioResponse?: (audioData: Int16Array) => void;
-  onToolCall?: (toolName: string, arguments: any) => void;
+  onToolCall?: (toolName: string, args: any) => void;
   onToolResult?: (toolName: string, result: any) => void;
+}
+
+type ConversationHistory = Array<Record<string, unknown>>;
+interface BasicConversationItem {
+  id?: string;
+  type?: string;
+  status?: string;
+  role?: string;
+  name?: string;
+  arguments?: any;
 }
 
 export class OpenAIRealtimeService {
@@ -26,24 +35,27 @@ export class OpenAIRealtimeService {
   private config: VoiceConnectionConfig;
   private connected: boolean = false;
   private sessionId: string;
-  
+  private apiKey: string = '';
+  private relaySessionId: string | null = null;
+
   constructor(config: VoiceConnectionConfig) {
     this.config = config;
     this.sessionId = config.sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Store config for later use in connect()
     console.log('🌐 OpenAIRealtimeService initialized');
     console.log('🔍 Config.relayServerUrl:', config.relayServerUrl);
-    
+
     // Client will be created in connect() after fetching session
     this.client = null as any;
   }
   
   private setupEventHandlers(): void {
     // FIXED: Use correct RealtimeClient events from official docs
+    const client = this.client as any;
     
     // Error events (connection failures, etc.)
-    this.client.on('error', (event) => {
+    client.on('error', (event: any) => {
       console.error('🔴 RealtimeClient error:', event);
       this.connected = false;
       this.config.onError?.(event);
@@ -51,22 +63,12 @@ export class OpenAIRealtimeService {
     });
     
     // Raw server/client events for debugging
-    this.client.on('realtime.event', ({ time, source, event }) => {
-      console.log('📡 RealtimeEvent:', source, event.type, event);
-      
+    client.on('realtime.event', ({ source, event }: { source: string; event: any }) => {
       // Handle session.created as connection confirmation
       if (source === 'server' && event.type === 'session.created') {
-        console.log('🚀 OpenAI session created - connection established!');
-        console.log('🔧 DEBUG: About to set connected=true and call onConnected callback');
         this.connected = true;
-        console.log('🔧 DEBUG: this.connected is now:', this.connected);
-        console.log('🔧 DEBUG: this.config.onConnected exists?', typeof this.config.onConnected);
         if (this.config.onConnected) {
-          console.log('🔧 DEBUG: Calling onConnected callback now...');
           this.config.onConnected();
-          console.log('🔧 DEBUG: onConnected callback completed');
-        } else {
-          console.warn('🔧 DEBUG: onConnected callback is missing!');
         }
       }
       
@@ -88,118 +90,157 @@ export class OpenAIRealtimeService {
     const currentMessages = new Map<string, { role: string; content: string }>();
     
     // Conversation flow events
-    this.client.on('conversation.interrupted', () => {
+    client.on('conversation.interrupted', () => {
       console.log('Conversation interrupted (user started speaking)');
       // Stop any current audio playback
     });
-    
-    this.client.on('conversation.updated', ({ item, delta }) => {
-      const items = this.client.conversation.getItems();
-      
-      switch (item.type) {
-        case 'message':
-          if (delta?.transcript) {
-            // Accumulate transcript deltas
-            const messageKey = `${item.role}-${item.id}`;
-            
-            if (!currentMessages.has(messageKey)) {
-              currentMessages.set(messageKey, {
-                role: item.role,
-                content: ''
-              });
-            }
-            
-            const message = currentMessages.get(messageKey)!;
-            message.content += delta.transcript;
-            
-            // Send the accumulated transcript (updating the same message)
-            if (item.role === 'user') {
-              // User transcripts: final=false during speaking (for UI updates)
-              this.config.onTranscript?.(message.content, false, item.id);
-            }
-            // Don't emit assistant transcripts - they're not needed for agent processing
-            // The agent will provide its own response text
-          }
-          break;
-          
-        case 'function_call':
-          if (delta?.arguments) {
-            // Function call arguments being populated
-            console.log(`Tool ${item.name} arguments:`, delta.arguments);
-          }
-          break;
-          
-        case 'function_call_output':
-          // Tool execution result
-          console.log('Tool execution result:', item.output);
-          break;
+
+    // CORRECT STT Events: User speech transcription (input audio)
+    client.on('conversation.item.input_audio_transcription.delta', (event: { item_id: string; delta?: string }) => {
+      if (!event.delta) {
+        return;
       }
-      
-      // Handle audio delta
-      if (delta?.audio) {
-        this.config.onAudioResponse?.(delta.audio);
+
+      console.log('📝 [STT DELTA] User speech transcription:', event.delta);
+      const messageKey = `user-${event.item_id}`;
+      const existing = currentMessages.get(messageKey) ?? { role: 'user', content: '' };
+      existing.content += event.delta;
+      currentMessages.set(messageKey, existing);
+
+      this.config.onTranscript?.(existing.content, false, event.item_id);
+    });
+
+    client.on('conversation.item.input_audio_transcription.completed', (event: { item_id: string; transcript?: string }) => {
+      if (!event.transcript) {
+        return;
+      }
+
+      console.log('✅ [STT COMPLETE] Final user transcript:', event.transcript);
+      const messageKey = `user-${event.item_id}`;
+      currentMessages.set(messageKey, { role: 'user', content: event.transcript });
+      this.config.onTranscript?.(event.transcript, true, event.item_id);
+    });
+
+    client.on('conversation.item.input_audio_transcription.failed', (event: { error?: unknown }) => {
+      console.error('❌ [STT FAILED]', event.error);
+    });
+
+    // TTS Events: Assistant speech output
+    client.on('response.output_audio_transcript.delta', (event: { delta?: string }) => {
+      console.log('🔊 [TTS TRANSCRIPT] Assistant speech:', event.delta);
+      // Transcript only - actual audio comes from response.audio.delta
+    });
+
+    // CRITICAL: TTS Audio Data - This is what we actually play back! (GA event)
+    client.on('response.output_audio.delta', (event: { delta?: string }) => {
+      if (event.delta) {
+        console.log('🔊 [TTS AUDIO] Received audio chunk:', event.delta.length, 'bytes');
+        // Convert base64 to Int16Array for playback
+        const audioData = this.base64ToInt16Array(event.delta);
+        console.log('🔊 [TTS AUDIO] Converted to Int16Array:', audioData.length, 'samples');
+        console.log('🔊 [TTS AUDIO] Calling onAudioResponse callback');
+        this.config.onAudioResponse?.(audioData);
+        console.log('🔊 [TTS AUDIO] onAudioResponse callback completed');
       }
     });
-    
-    // Clear message when completed
-    this.client.on('conversation.item.completed', ({ item }) => {
+
+    client.on('response.output_audio.done', (_event: any) => {
+      console.log('✅ [TTS AUDIO] Complete');
+    });
+    client.on('response.done', (_event: any) => {
+      console.log('✅ [TTS RESPONSE] Complete');
+    });
+
+    // Conversation item events (for monitoring)
+    // Legacy VAD events (may not fire in passive mode with turn_detection: none)
+    client.on('input_audio_buffer.speech_started', () => {
+      console.log('🎤 [VAD] User started speaking');
+    });
+    client.on('input_audio_buffer.speech_stopped', () => {
+      console.log('🛑 [VAD] User stopped speaking');
+      // In passive mode (turn_detection: none), we may need to manually commit
+      // But GA events should handle transcription automatically
+    });
+
+    // Clear messages when completed to avoid stale partial transcripts
+    client.on('conversation.item.completed', ({ item }: { item: BasicConversationItem }) => {
+      console.log(`✅ [COMPLETED] Item completed - Type: ${item.type}, Role: ${item.role}, Status: ${item.status}`);
+
       if (item.type === 'message') {
         const messageKey = `${item.role}-${item.id}`;
-        
-        // Emit final transcript for user messages before clearing
+
         if (item.role === 'user') {
           const finalMessage = currentMessages.get(messageKey);
-          if (finalMessage && finalMessage.content) {
-            console.log('📝 User speech completed, emitting final transcript:', finalMessage.content);
-            // Emit as final (true) so agent hook will process it
+          if (finalMessage?.content) {
             this.config.onTranscript?.(finalMessage.content, true, item.id);
           }
         }
-        // Note: We don't emit assistant transcripts at all - the agent provides responses
-        
+
         currentMessages.delete(messageKey);
       }
-    });
-    
-    this.client.on('conversation.item.appended', ({ item }) => {
-      console.log('Item appended:', item.type, item.status);
-    });
-    
-    this.client.on('conversation.item.completed', ({ item }) => {
-      console.log('Item completed:', item.type);
-      
+
       if (item.type === 'function_call') {
-        // Tool call completed, notify UI
         this.config.onToolCall?.(item.name || 'unknown', item.arguments);
       }
     });
     
-    // Raw event access for debugging
-    this.client.on('realtime.event', ({ time, source, event }) => {
-      if (source === 'server') {
-        console.log('Server event:', event.type);
-        
-        // Handle custom relay events
-        switch (event.type) {
-          case 'tool_call_start':
-            console.log(`Starting tool: ${event.tool_name}`);
-            this.config.onToolCall?.(event.tool_name, event.arguments);
-            break;
-            
-          case 'tool_call_complete':
-            console.log(`Tool completed: ${event.tool_name}`, event.success);
-            this.config.onToolResult?.(event.tool_name, event.result);
-            break;
-            
-          case 'tool_call_error':
-            console.error(`Tool error: ${event.tool_name}`, event.error);
-            this.config.onError?.(event);
-            break;
-        }
-      }
-    });
   }
-  
+
+  /**
+   * Configure session with server-side voice activity detection
+   * This enables automatic turn detection so the model responds when user stops speaking
+   */
+  private async updateSession(): Promise<void> {
+    if (!this.client) {
+    }
+
+    console.log('⚙️ Configuring session with server_vad turn detection...');
+
+    try {
+      const client: any = this.client as any;
+      if (typeof client.updateSession === 'function') {
+        await client.updateSession({
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.5,              // Voice activity detection sensitivity (0.0-1.0)
+            silence_duration_ms: 500,    // Silence duration before ending turn (ms)
+            prefix_padding_ms: 100       // Audio to include before speech starts (ms)
+          },
+          modalities: ['text', 'audio'],  // Enable both text and audio responses
+          voice: 'alloy',                 // OpenAI voice model
+          input_audio_transcription: {    // Enable user speech transcription
+            model: 'whisper-1'
+          }
+        });
+      } else if (client.session && typeof client.session.update === 'function') {
+        await client.session.update({
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.5,
+            silence_duration_ms: 500,
+            prefix_padding_ms: 100
+          },
+          modalities: ['text', 'audio'],
+          voice: 'alloy',
+          input_audio_transcription: {
+            model: 'whisper-1'
+          }
+        });
+      } else {
+        console.warn('⚠️ RealtimeClient instance does not expose updateSession API; skipping configuration');
+      }
+        input_audio_transcription: {    // Enable user speech transcription
+          model: 'whisper-1'
+        }
+      });
+
+      console.log('✅ Session configured successfully with automatic turn detection');
+    } catch (error) {
+      console.error('❌ Failed to update session:', error);
+      throw error;
+    }
+  }
+
   async connect(): Promise<void> {
     try {
       console.log('🎤 Connecting to OpenAI Realtime API...');
@@ -218,7 +259,16 @@ export class OpenAIRealtimeService {
       }
       
       const sessionData = await sessionResponse.json();
-      
+
+      // Track relay session identifier so orchestrator queries can align
+      this.relaySessionId = sessionData.session_id || sessionData.id || null;
+      if (this.relaySessionId) {
+        this.sessionId = this.relaySessionId;
+      }
+
+      // Store API key for TTS endpoint
+      this.apiKey = sessionData.api_key || sessionData.client_secret?.value || '';
+
       // Build dynamic WebSocket URL from session
       let relayUrl: string = sessionData.ws_url;
       if (!relayUrl) {
@@ -230,32 +280,41 @@ export class OpenAIRealtimeService {
         const wsUrl = apiUrl.replace(/^http/, 'ws');
         relayUrl = `${wsUrl}${relayUrl}`;
       }
-      console.log('🌐 Creating RealtimeClient with relay URL:', relayUrl);
-      
-      // Now create the client with the relay URL (this will execute tools!)
-      this.client = new RealtimeClient({ 
-        url: relayUrl
+      // Now create the client with the relay URL
+      // We pass a dummy API key since the relay server handles the real API key
+      // The SDK requires an API key to create proper WebSocket subprotocols
+      this.client = new RealtimeClient({
+        url: relayUrl,
+        apiKey: this.apiKey || 'relay-server',  // Use real key if available
+        dangerouslyAllowAPIKeyInBrowser: true  // Allow API key in browser context
       });
       
       // Set up event handlers on the new client
       this.setupEventHandlers();
-      
-      console.log('🔗 Connecting to relay server:', relayUrl);
-      
+
       // FIXED: RealtimeClient.connect() handles connection internally
       // Success is indicated by session.created event, not explicit return
       await this.client.connect();
-      
-      console.log('✅ RealtimeClient.connect() completed - waiting for session.created');
-      
-      // Note: Connection success confirmed via 'realtime.event' with session.created
-      
-    } catch (error) {
+
+      // Configure session with automatic turn detection after connection
+      await this.updateSession();
+
+    } catch (error: any) {
       console.error('❌ Failed to connect to OpenAI Realtime API:', error);
+      console.error('ℹ️  OpenAI Realtime API requires beta access. Visit https://platform.openai.com/settings');
+
+      // Enhanced error message for user
+      const enhancedError = new Error(
+        error.message + '\n\n' +
+        '⚠️ OpenAI Realtime API requires beta access.\n' +
+        'Please visit https://platform.openai.com/settings to request access.'
+      );
+
       this.connected = false;
-      this.config.onError?.(error);
+      this.relaySessionId = null;
+      this.config.onError?.(enhancedError);
       this.config.onDisconnected?.();
-      throw error;
+      throw enhancedError;
     }
   }
   
@@ -279,29 +338,40 @@ export class OpenAIRealtimeService {
   
   sendTextMessage(text: string): void {
     if (!this.connected) {
+      console.error('❌ Cannot send TTS: Not connected to OpenAI');
       throw new Error('Not connected to OpenAI Realtime API');
     }
-    
-    console.log('📤 Sending text for TTS:', text);
-    
-    // With turn_detection disabled in the relay server, this won't auto-generate responses
-    // The text will be sent for TTS only, as configured by the relay
-    this.client.sendUserMessageContent([
-      { type: 'input_text', text }
-    ]);
-    
-    // Explicitly request audio response for TTS
-    // Since turn_detection is disabled, we need to manually trigger the response
-    this.createResponse();
-    
-    console.log('✅ TTS request sent');
+
+    console.log('🔊 [TTS] Creating assistant message for TTS');
+
+    // Step 1: Add assistant message to conversation
+    (this.client as any).realtime.send('conversation.item.create', {
+      item: {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text }]
+      }
+    });
+
+    // Step 2: Trigger audio-only response with conversation: "none"
+    // This generates TTS for the assistant message without GPT adding its own response
+    (this.client as any).realtime.send('response.create', {
+      response: {
+        output_modalities: ['audio'],  // GA parameter
+        instructions: 'Generate audio output for the previous assistant message exactly as written.',
+        conversation: 'none'
+      }
+    } as any);
+
+    console.log('✅ [TTS] Waiting for response.audio.delta events');
   }
   
   sendAudioData(audioData: Int16Array): void {
     if (!this.connected) {
       throw new Error('Not connected to OpenAI Realtime API');
     }
-    
+
+    console.log('📤 Sending', audioData.length, 'audio samples to OpenAI Realtime API');
     this.client.appendInputAudio(audioData);
   }
   
@@ -318,19 +388,47 @@ export class OpenAIRealtimeService {
     if (!this.connected) {
       return;
     }
-    
-    // Get current conversation items to find the active response
-    const items = this.client.conversation.getItems();
-    const activeItem = items.find(item => item.status === 'in_progress');
-    
-    if (activeItem?.id) {
-      // Interrupt the current response
-      this.client.cancelResponse(activeItem.id, 0);
+
+    // GA-compliant: Only cancel active RESPONSE items (not other in-progress items)
+    const items = this.client.conversation.getItems() as BasicConversationItem[];
+    const activeResponse = items.find((item: BasicConversationItem) =>
+      item.type === 'response' && item.status === 'in_progress'
+    );
+
+    if (activeResponse?.id) {
+      try {
+        this.client.cancelResponse(activeResponse.id, 0);
+        console.log('🛑 Cancelled active response:', activeResponse.id);
+      } catch (err) {
+        // Ignore "response_cancel_not_active" errors (race condition)
+        console.warn('⚠️ Cancel failed (response may have completed):', err);
+      }
+    } else {
+      console.log('ℹ️ No active response to cancel');
     }
   }
-  
-  getConversationHistory(): ItemType[] {
-    return this.client.conversation.getItems();
+
+  /**
+   * Convert base64 encoded PCM16 audio to Int16Array for playback
+   */
+  private base64ToInt16Array(base64: string): Int16Array {
+    // Decode base64 to binary string
+    const binaryString = atob(base64);
+
+    // Create Uint8Array from binary string
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Convert to Int16Array (PCM16 format)
+    const int16Array = new Int16Array(bytes.buffer);
+
+    return int16Array;
+  }
+
+  getConversationHistory(): ConversationHistory {
+    return this.client.conversation.getItems() as unknown as ConversationHistory;
   }
   
   getSessionId(): string {

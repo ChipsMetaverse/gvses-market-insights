@@ -13,6 +13,7 @@ import logging
 from datetime import datetime
 from services.agent_orchestrator import get_orchestrator
 from services.openai_relay_server import openai_relay_server
+from services.chart_tool_registry import get_chart_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -226,23 +227,81 @@ async def clear_cache():
         logger.error(f"Error clearing cache: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/tools/chart")
+async def get_chart_tools():
+    """
+    Get all available chart manipulation tools derived from knowledge base.
+
+    Returns chart indicators, drawing tools, and other chart controls
+    that the voice agent can use to manipulate the trading chart.
+    """
+    try:
+        registry = get_chart_tool_registry()
+        tools = registry.get_all_tools()
+
+        return {
+            "tools": tools,
+            "count": len(tools),
+            "categories": list(set(tool["category"] for tool in tools))
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting chart tools: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tools/chart/search")
+async def search_chart_tools(query: str, top_k: int = 5):
+    """
+    Search for chart tools using semantic search.
+
+    Args:
+        query: Natural language query (e.g., "show momentum indicators")
+        top_k: Maximum number of results to return
+
+    Returns:
+        List of relevant chart tools with knowledge base context
+    """
+    try:
+        registry = get_chart_tool_registry()
+        tools = await registry.search_tools_by_query(query, top_k=top_k)
+
+        return {
+            "query": query,
+            "tools": [tool.to_dict() for tool in tools],
+            "count": len(tools)
+        }
+
+    except Exception as e:
+        logger.error(f"Error searching chart tools: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/health")
 async def agent_health():
     """Check agent service health."""
     try:
         orchestrator = get_orchestrator()
-        
+
         # Try to get tool schemas as a health check
         schemas = orchestrator._get_tool_schemas()
-        
+
+        # Check chart tool registry
+        try:
+            registry = get_chart_tool_registry()
+            chart_tools_count = len(registry.tools)
+        except Exception:
+            chart_tools_count = 0
+
         return {
             "status": "healthy",
             "model": orchestrator.model,
             "tools_available": len(schemas),
+            "chart_tools_available": chart_tools_count,
             "cache_size": len(orchestrator.cache),
             "education_mode": "llm" if orchestrator.use_llm_for_education else "template"
         }
-        
+
     except Exception as e:
         logger.error(f"Agent health check failed: {e}")
         return {

@@ -1,0 +1,287 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "G'sves Market Data API",
+    "description": "Real-time market data and analysis endpoints for G'sves Trading Assistant",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://gvses-market-insights.fly.dev",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:8000",
+      "description": "Development server"
+    }
+  ],
+  "paths": {
+    "/api/stock-price": {
+      "get": {
+        "operationId": "getStockPrice",
+        "summary": "Get real-time stock price",
+        "description": "Returns current price, change, and market data for a symbol",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stock ticker symbol (e.g., AAPL, TSLA, NVDA)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {"type": "string"},
+                    "price": {"type": "number"},
+                    "change": {"type": "number"},
+                    "change_percent": {"type": "number"},
+                    "volume": {"type": "integer"},
+                    "high": {"type": "number"},
+                    "low": {"type": "number"},
+                    "open": {"type": "number"},
+                    "previous_close": {"type": "number"},
+                    "data_source": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock-history": {
+      "get": {
+        "operationId": "getStockHistory",
+        "summary": "Get historical stock data",
+        "description": "Returns OHLCV candles for charting and technical analysis",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stock ticker symbol"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30
+            },
+            "description": "Number of days of historical data (default: 30)"
+          },
+          {
+            "name": "interval",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["1m", "5m", "15m", "1h", "1d"],
+              "default": "1d"
+            },
+            "description": "Candle interval"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {"type": "string"},
+                    "bars": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "time": {"type": "string", "format": "date-time"},
+                          "open": {"type": "number"},
+                          "high": {"type": "number"},
+                          "low": {"type": "number"},
+                          "close": {"type": "number"},
+                          "volume": {"type": "integer"}
+                        }
+                      }
+                    },
+                    "data_source": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/symbol-search": {
+      "get": {
+        "operationId": "searchSymbol",
+        "summary": "Search for stock symbols",
+        "description": "Search for stocks by company name or ticker. Returns tradable symbols with company names.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Company name or ticker to search (e.g., 'Microsoft', 'MSFT')"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10
+            },
+            "description": "Maximum number of results to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "symbol": {"type": "string"},
+                          "name": {"type": "string"},
+                          "exchange": {"type": "string"},
+                          "asset_class": {"type": "string"}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock-news": {
+      "get": {
+        "operationId": "getStockNews",
+        "summary": "Get stock news",
+        "description": "Returns recent news articles from CNBC and Yahoo Finance for a symbol",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stock ticker symbol"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10
+            },
+            "description": "Maximum number of articles to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {"type": "string"},
+                    "articles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "title": {"type": "string"},
+                          "summary": {"type": "string"},
+                          "url": {"type": "string"},
+                          "published_at": {"type": "string", "format": "date-time"},
+                          "source": {"type": "string"}
+                        }
+                      }
+                    },
+                    "data_source": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market-overview": {
+      "get": {
+        "operationId": "getMarketOverview",
+        "summary": "Get market overview",
+        "description": "Returns current status of major market indices (S&P 500, NASDAQ, Dow Jones)",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "indices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "symbol": {"type": "string"},
+                          "name": {"type": "string"},
+                          "price": {"type": "number"},
+                          "change": {"type": "number"},
+                          "change_percent": {"type": "number"}
+                        }
+                      }
+                    },
+                    "market_status": {"type": "string"},
+                    "data_source": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Optional API key for authenticated requests"
+      }
+    }
+  }
+}

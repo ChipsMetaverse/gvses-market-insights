@@ -15,6 +15,7 @@ import { OpenAIRealtimeService } from '../services/OpenAIRealtimeService';
 import { getApiUrl } from '../utils/apiConfig';
 import { chartControlService } from '../services/chartControlService';
 import { enhancedChartControl } from '../services/enhancedChartControl';
+import { useOpenAIAudioProcessor } from './useOpenAIAudioProcessor';
 
 interface AgentVoiceMessage {
   id: string;
@@ -51,12 +52,30 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<AgentVoiceMessage[]>([]);
   const [backendHealthy, setBackendHealthy] = useState<boolean | null>(null);
-  
+
   const openAIServiceRef = useRef<OpenAIRealtimeService | null>(null);
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const conversationHistoryRef = useRef<Array<{ role: string; content: string }>>([]);
+
+  // Microphone audio processor for capturing user voice
+  const audioProcessor = useOpenAIAudioProcessor({
+    onAudioData: (audioData: Int16Array) => {
+      // Send microphone audio to OpenAI Realtime for STT
+      if (openAIServiceRef.current && isConnected) {
+        openAIServiceRef.current.sendAudioData(audioData);
+      }
+    },
+    onError: (err) => {
+      console.error('Agent Voice: Microphone error:', err);
+      const errorMessage = err.message || 'Microphone access failed';
+      setError(errorMessage);
+      callbacksRef.current.onError?.(errorMessage);
+    }
+  });
+
+  const { isRecording, startRecording, stopRecording } = audioProcessor;
 
   // Store current callback refs to prevent re-renders
   const callbacksRef = useRef({
@@ -165,15 +184,8 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
     try {
       await enhancedChartControl.processEnhancedResponse(serialized);
     } catch (err) {
-      console.error('Enhanced chart command processing failed:', err);
-      try {
-        const parsed = await chartControlService.parseAgentResponse(serialized);
-        for (const command of parsed) {
-          chartControlService.executeCommand(command);
-        }
-      } catch (fallbackErr) {
-        console.error('Fallback chart command execution failed:', fallbackErr);
-      }
+      console.warn('Enhanced chart command processing failed (non-critical):', err);
+      // Chart commands are optional - don't block voice assistant if they fail
     }
   }, []);
 
@@ -202,10 +214,24 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
       });
 
       // Send to agent orchestrator
+      console.log('[AGENT VOICE] 🚀 Calling agentOrchestratorService.sendQuery() with:', {
+        userTranscript,
+        historyLength: conversationHistoryRef.current.length
+      });
+
       const agentResponse: AgentResponse = await agentOrchestratorService.sendQuery(
         userTranscript,
         conversationHistoryRef.current.slice(-10) // Last 10 messages for context
       );
+
+      console.log('[AGENT VOICE] 📦 Received agent response:', {
+        hasText: !!agentResponse.text,
+        textLength: agentResponse.text?.length || 0,
+        textPreview: agentResponse.text?.substring(0, 100),
+        toolsUsed: agentResponse.tools_used,
+        hasData: !!agentResponse.data,
+        hasChartCommands: !!(agentResponse.chart_commands || agentResponse.data?.chart_commands)
+      });
 
       await executeChartCommands(agentResponse.chart_commands || agentResponse.data?.chart_commands);
 
@@ -235,13 +261,17 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
       });
 
       // If this was a voice interaction, send response to TTS
-      if (source === 'voice' && openAIServiceRef.current && isConnected) {
-        try {
-          console.log('Sending agent response to OpenAI for TTS:', agentResponse.text);
-          openAIServiceRef.current.sendTextMessage(agentResponse.text);
-        } catch (ttsError) {
-          console.warn('TTS failed, but text response is available:', ttsError);
-        }
+      // CRITICAL FIX: Check the OpenAI service's actual connection state, not React state
+      const actuallyConnected = openAIServiceRef.current?.isConnected() || false;
+      console.log('🚨 [TTS CHECK] source:', source, 'hasRef:', !!openAIServiceRef.current, 'reactState:', isConnected, 'actualConnection:', actuallyConnected);
+      if (source === 'voice' && openAIServiceRef.current && actuallyConnected) {
+        console.log('[AGENT VOICE] 🔊 Sending to TTS:', agentResponse.text.substring(0, 100));
+
+        // Send to Realtime API for TTS
+        openAIServiceRef.current.sendTextMessage(agentResponse.text);
+      } else {
+        console.log('🚨 [TTS CHECK] TTS SKIPPED - Condition not met');
+        console.log('🚨 [TTS CHECK] Reason - source:', source, 'hasRef:', !!openAIServiceRef.current, 'actuallyConnected:', actuallyConnected);
       }
 
     } catch (err) {
@@ -261,10 +291,14 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
       openAIServiceRef.current = new OpenAIRealtimeService({
         sessionId: sessionId,
         onConnected: () => {
-          console.log('Agent Voice: OpenAI connected for voice I/O');
+          console.log('🚨 [AGENT VOICE HOOK] onConnected callback FIRED');
+          console.log('🚨 [AGENT VOICE HOOK] About to call setIsConnected(true)');
           setIsConnected(true);
+          console.log('🚨 [AGENT VOICE HOOK] setIsConnected(true) CALLED');
           setIsLoading(false);
+          console.log('🚨 [AGENT VOICE HOOK] About to call onConnectionChange callback');
           callbacksRef.current.onConnectionChange?.(true);
+          console.log('🚨 [AGENT VOICE HOOK] onConnected callback COMPLETED');
         },
         onDisconnected: () => {
           console.log('Agent Voice: OpenAI disconnected');
@@ -282,10 +316,13 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
           callbacksRef.current.onError?.(errorMessage);
         },
         onTranscript: (text, final) => {
+          console.log(`🎤 [AGENT VOICE] Transcript received - Final: ${final}, Text: "${text}"`);
           if (final) {
             // User spoke - send FINAL transcript to agent orchestrator
-            console.log('Agent Voice: User final transcript received:', text);
+            console.log('✅ [AGENT VOICE] User final transcript received, sending to agent:', text);
             sendToAgent(text, 'voice');
+          } else {
+            console.log('⏳ [AGENT VOICE] Partial transcript (waiting for final)');
           }
           // We ignore partial transcripts and assistant transcripts
         },
@@ -311,33 +348,91 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
 
   // Connect/disconnect functions
   const connect = useCallback(async () => {
+    console.log('🚨 [CONNECT] ==================== connect() CALLED ====================');
+    console.log('🚨 [CONNECT] backendHealthy:', backendHealthy);
+    console.log('🚨 [CONNECT] openAIServiceRef.current exists:', !!openAIServiceRef.current);
+    console.log('🚨 [CONNECT] isConnected:', isConnected);
+    console.log('🚨 [CONNECT] isLoading:', isLoading);
+
     // Check backend health before attempting connection
     if (backendHealthy === false) {
+      console.error('🚨 [CONNECT] BLOCKED: Backend not healthy');
       const errorMessage = 'Backend not ready. Please check server status.';
       setError(errorMessage);
       callbacksRef.current.onError?.(errorMessage);
       return;
     }
-    
+
+    console.log('🚨 [CONNECT] Backend health check PASSED');
+
     if (openAIServiceRef.current && !isConnected && !isLoading) {
+      console.log('🚨 [CONNECT] All conditions MET - proceeding with connection');
       setIsLoading(true);
       setError(null);
+
+      console.log('🎙️ [AGENT VOICE] Step 1: Requesting microphone access...');
+
       try {
+        // CRITICAL: Request microphone FIRST, before connecting to OpenAI
+        await startRecording();
+        console.log('✅ [AGENT VOICE] Microphone access granted and recording started');
+
+        // Now connect to OpenAI Realtime for voice I/O
+        console.log('🌐 [AGENT VOICE] Step 2: Connecting to OpenAI Realtime...');
         await openAIServiceRef.current.connect();
+        console.log('✅ [AGENT VOICE] Connected to OpenAI Realtime');
+
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Connection failed';
+        console.error('❌ [AGENT VOICE] Connection failed:', err);
         setError(errorMessage);
         setIsLoading(false);
+
+        // Clean up microphone if it was started
+        if (isRecording) {
+          stopRecording();
+        }
+
         callbacksRef.current.onError?.(errorMessage);
       }
+    } else {
+      console.error('🚨 [CONNECT] BLOCKED: Conditions not met');
+      console.error('🚨 [CONNECT] - openAIServiceRef.current exists:', !!openAIServiceRef.current);
+      console.error('🚨 [CONNECT] - isConnected (should be false):', isConnected);
+      console.error('🚨 [CONNECT] - isLoading (should be false):', isLoading);
+      if (!openAIServiceRef.current) {
+        console.error('🚨 [CONNECT] ERROR: OpenAI service ref is null!');
+      }
+      if (isConnected) {
+        console.error('🚨 [CONNECT] ERROR: Already connected!');
+      }
+      if (isLoading) {
+        console.error('🚨 [CONNECT] ERROR: Already loading!');
+      }
     }
-  }, [isConnected, isLoading, backendHealthy]);
+  }, [isConnected, isLoading, backendHealthy, startRecording, stopRecording, isRecording]);
 
   const disconnect = useCallback(() => {
+    console.log('🛑 [AGENT VOICE] Disconnecting...');
+
+    // Stop microphone recording
+    if (isRecording) {
+      console.log('🛑 [AGENT VOICE] Stopping microphone recording');
+      stopRecording();
+    }
+
+    // Disconnect OpenAI WebSocket
     if (openAIServiceRef.current && isConnected) {
+      console.log('🛑 [AGENT VOICE] Closing OpenAI connection');
       openAIServiceRef.current.disconnect();
     }
-  }, [isConnected]);
+
+    // Clear audio playback queue
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+
+    console.log('✅ [AGENT VOICE] Disconnected successfully');
+  }, [isConnected, isRecording, stopRecording]);
 
   // Send text message (for text-only interactions)
   const sendTextMessage = useCallback(async (text: string) => {
@@ -356,16 +451,17 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
     isConnected,
     isLoading,
     isThinking,
+    isRecording,
     error,
     messages,
     backendHealthy,
-    
+
     // Actions
     connect,
     disconnect,
     sendTextMessage,
     clearConversation,
-    
+
     // Utility
     sessionId: agentOrchestratorService.getSessionId()
   };

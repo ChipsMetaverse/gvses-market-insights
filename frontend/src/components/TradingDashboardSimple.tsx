@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { TradingChart } from './TradingChart';
+import { TimeRangeSelector } from './TimeRangeSelector';
 import { marketDataService } from '../services/marketDataService';
 import { agentOrchestratorService, ChartSnapshot } from '../services/agentOrchestratorService';
 import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import { useOpenAIRealtimeConversation } from '../hooks/useOpenAIRealtimeConversation';
 import { useAgentVoiceConversation } from '../hooks/useAgentVoiceConversation';
 // import { ProviderSelector } from './ProviderSelector'; // Removed - conflicts with useElevenLabsConversation
+// FIXED: Microphone now requested BEFORE connection (following official OpenAI pattern)
 import { chartControlService } from '../services/chartControlService';
 import { enhancedChartControl } from '../services/enhancedChartControl';
 import { useIndicatorContext } from '../contexts/IndicatorContext';
 import { CommandToast } from './CommandToast';
 import { VoiceCommandHelper } from './VoiceCommandHelper';
 import StructuredResponse from './StructuredResponse';
+import { DebugWidget } from './DebugWidget';
+import { TimeRange } from '../types/dashboard';
 import './TradingDashboardSimple.css';
 
 interface StockData {
@@ -95,7 +99,30 @@ const PanelDivider: React.FC<{
   );
 };
 
+// Helper function to convert TimeRange to number of days
+const timeframeToDays = (timeframe: TimeRange): number => {
+  const map: Record<TimeRange, number> = {
+    // Intraday (all map to 1 day of data)
+    '10S': 1, '30S': 1, '1m': 1, '3m': 1, '5m': 1,
+    '10m': 1, '15m': 1, '30m': 1,
+    // Hours (2-7 days for sufficient context)
+    '1H': 2, '2H': 3, '3H': 3, '4H': 5, '6H': 5, '8H': 7, '12H': 7,
+    // Days
+    '1D': 1, '2D': 2, '3D': 3, '5D': 5, '1W': 7,
+    // Months
+    '1M': 30, '6M': 180,
+    // Years - Multi-year support
+    '1Y': 365, '2Y': 730, '3Y': 1095, '5Y': 1825,
+    // Special
+    'YTD': Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24)),
+    'MAX': 3650 // 10 years
+  };
+  return map[timeframe] || 30;
+};
+
 export const TradingDashboardSimple: React.FC = () => {
+  console.log('%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering...', 'background: #4CAF50; color: white; font-size: 16px; font-weight: bold;');
+
   // Removed tab system - using unified interface
   const [isListening, setIsListening] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -106,6 +133,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [stocksData, setStocksData] = useState<StockData[]>([]);
   const [isLoadingStocks, setIsLoadingStocks] = useState(true);
   const [selectedSymbol, setSelectedSymbol] = useState('TSLA');
+  const [selectedTimeframe, setSelectedTimeframe] = useState<TimeRange>('1D');
   const [stockNews, setStockNews] = useState<any[]>([]);
   const [technicalLevels, setTechnicalLevels] = useState<any>({});
   const [detectedPatterns, setDetectedPatterns] = useState<any[]>([]);
@@ -614,35 +642,39 @@ export const TradingDashboardSimple: React.FC = () => {
 
   // Single connect/disconnect handler with debounce
   const handleConnectToggle = async () => {
-    console.log('🎯 handleConnectToggle called, voiceProvider:', voiceProvider, 'isConnected:', currentConversation.isConnected);
-    
+    console.log('🚨 [DASHBOARD] ==================== handleConnectToggle CLICKED ====================');
+    console.log('🚨 [DASHBOARD] voiceProvider:', voiceProvider);
+    console.log('🚨 [DASHBOARD] currentConversation.isConnected:', currentConversation.isConnected);
+    console.log('🚨 [DASHBOARD] currentConversation.provider:', currentConversation.provider);
+
     const now = Date.now();
-    
+
     // Debounce rapid clicks (minimum 1 second between attempts)
     if (now - connectionAttemptTimeRef.current < 1000) {
-      console.log('Debouncing rapid connection attempt');
+      console.log('🚨 [DASHBOARD] DEBOUNCED: Too soon since last attempt');
       return;
     }
-    
+
     connectionAttemptTimeRef.current = now;
-    
+
     if (currentConversation.isConnected) {
-      console.log('Disconnecting...');
+      console.log('🚨 [DASHBOARD] Already connected - DISCONNECTING');
       // Disconnect everything
       stopVoiceRecording();
       currentConversation.stopConversation();
       hasStartedRecordingRef.current = false;
     } else {
-      const providerName = voiceProvider === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI Realtime';
-      console.log(`🚀 Connecting to ${providerName}...`);
-      console.log('📞 About to call startConversation()...');
-      
+      const providerName = voiceProvider === 'elevenlabs' ? 'ElevenLabs' : voiceProvider === 'agent' ? 'Agent Voice' : 'OpenAI Realtime';
+      console.log(`🚨 [DASHBOARD] Not connected - CONNECTING to ${providerName}...`);
+      console.log('🚨 [DASHBOARD] About to call currentConversation.startConversation()...');
+      console.log('🚨 [DASHBOARD] startConversation function:', typeof currentConversation.startConversation);
+
       // Connect (voice recording will auto-start via useEffect when connected)
       try {
         await currentConversation.startConversation();
-        console.log('✅ startConversation() completed');
+        console.log('🚨 [DASHBOARD] ✅ startConversation() COMPLETED');
       } catch (error) {
-        console.error('❌ Failed to connect:', error);
+        console.error('🚨 [DASHBOARD] ❌ Failed to connect:', error);
         alert(`Failed to connect to ${providerName} voice assistant. Please check your connection and try again.`);
       }
     }
@@ -1331,9 +1363,16 @@ export const TradingDashboardSimple: React.FC = () => {
         <main className="main-content">
           {/* Chart Section - Always Visible */}
           <div className="chart-section">
+            {/* Timeframe Selector */}
+            <TimeRangeSelector
+              selected={selectedTimeframe}
+              options={['1D', '5D', '1M', '6M', '1Y', '2Y', '3Y', 'YTD', 'MAX']}
+              onChange={(range) => setSelectedTimeframe(range)}
+            />
             <div className="chart-wrapper">
-              <TradingChart 
-                symbol={selectedSymbol} 
+              <TradingChart
+                symbol={selectedSymbol}
+                days={timeframeToDays(selectedTimeframe)}
                 technicalLevels={technicalLevels}
                 onChartReady={(chart: any) => {
                   chartRef.current = chart;
@@ -1430,9 +1469,23 @@ export const TradingDashboardSimple: React.FC = () => {
 
       
       {/* Floating Voice Action Button */}
-      <button 
+      <button
         className={`voice-fab ${isConversationConnected ? 'active' : ''} ${isConversationConnecting ? 'connecting' : ''}`}
-        onClick={handleConnectToggle}
+        onClick={() => {
+          console.log('🚨 [BUTTON] ==================== MICROPHONE BUTTON CLICKED ====================');
+          console.log('🚨 [BUTTON] Step 1: Click registered');
+          console.log('🚨 [BUTTON] Step 2: Checking handleConnectToggle...');
+          console.log('🚨 [BUTTON] handleConnectToggle type:', typeof handleConnectToggle);
+          console.log('🚨 [BUTTON] handleConnectToggle exists:', !!handleConnectToggle);
+          console.log('🚨 [BUTTON] Step 3: About to call handleConnectToggle()');
+          try {
+            handleConnectToggle();
+            console.log('🚨 [BUTTON] Step 4: handleConnectToggle() completed successfully');
+          } catch (err) {
+            console.error('🚨 [BUTTON] ERROR in handleConnectToggle:', err);
+            console.error('🚨 [BUTTON] Error details:', String(err));
+          }
+        }}
         title={isConversationConnected ? 'Disconnect Voice' : 'Connect Voice'}
         data-testid="voice-fab"
       >
@@ -1440,10 +1493,19 @@ export const TradingDashboardSimple: React.FC = () => {
       </button>
       
       {/* Voice Command Helper - Shows command history and suggestions */}
-      <VoiceCommandHelper 
+      <VoiceCommandHelper
         isVisible={isConversationConnected}
         position="right"
         maxHeight={400}
+      />
+
+      {/* Debug Widget - Real-time diagnostics */}
+      <DebugWidget
+        isConnected={isConversationConnected}
+        isLoading={isConversationConnecting}
+        voiceProvider={voiceProvider}
+        openAIConnected={openAIRealtime.isConnected}
+        agentVoiceConnected={agentVoice.isConnected}
       />
     </div>
   );

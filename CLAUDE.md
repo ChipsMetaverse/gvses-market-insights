@@ -2,6 +2,32 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🚀 VIBE CODING WORKFLOW - ACTIVE
+
+### Automatic MCP Server Usage Pattern
+When working on this project, proactively use the following MCP servers:
+
+1. **LINEAR** - Create issues for all bugs/features automatically
+2. **PERPLEXITY** - Research best practices before implementing
+3. **CONTEXT7** - Get latest docs before using any library
+4. **SEMGREP** - Scan every code change for security
+5. **PLAYWRIGHT** - Generate tests for all new code
+6. **GITHUB** - Create PRs with semantic commits
+7. **MEMORY** - Store and recall all solutions
+
+### Workflow Triggers
+- **Bug mentioned** → Create Linear issue → Research → Fix → Test → PR
+- **Feature requested** → Linear issue → Docs → Implement → Scan → Test → PR
+- **Question asked** → Check Memory → Research → Store answer
+- **Code written** → Semgrep scan → Generate tests → Update Linear
+
+### Always Active Rules
+- ✅ Run Semgrep after ANY code change
+- ✅ Check Context7 before using new libraries
+- ✅ Store solutions in Memory
+- ✅ Update Linear issue status as work progresses
+- ✅ Generate Playwright tests for UI components
+
 ## Project Overview
 
 GVSES AI Market Analysis Assistant - A professional trading dashboard with voice-enabled market insights powered by ElevenLabs Conversational AI and Claude. The application provides real-time market data visualization, technical analysis, and an AI voice assistant for market queries. Built with React TypeScript frontend featuring TradingView Lightweight Charts, FastAPI backend with hybrid MCP/Direct API architecture for optimal performance.
@@ -407,3 +433,51 @@ const { searchResults, isSearching, searchError, hasSearched } = useSymbolSearch
 - Expandable inline news (no modals)
 - Smart symbol relevance filtering
 - Scrollable container with smooth animations
+
+## Voice Relay Configuration
+
+### Enterprise Voice Session Management (Jan 10, 2025)
+The voice relay server now implements enterprise-grade session management with:
+
+#### Session Limits & Control
+- **Concurrent Session Limits**: Configurable max concurrent voice sessions (default: 10)
+- **Session Rejection**: Graceful rejection with proper error messages when at capacity
+- **Thread-Safe Locking**: Prevents race conditions in session creation/deletion
+
+#### Timeout Management
+- **Session Timeout**: Sessions auto-expire after configured time (default: 300s)
+- **Activity Timeout**: Idle sessions cleaned up after inactivity (default: 60s)
+- **Background Cleanup**: Automatic cleanup task runs periodically (default: every 60s)
+
+#### Configuration Variables
+Add these optional environment variables to `backend/.env`:
+```bash
+MAX_CONCURRENT_SESSIONS=10     # Max concurrent voice sessions
+SESSION_TIMEOUT_SECONDS=300     # Session lifetime (5 minutes)
+ACTIVITY_TIMEOUT_SECONDS=60     # Inactivity timeout (1 minute)  
+CLEANUP_INTERVAL_SECONDS=60     # Cleanup frequency
+```
+
+#### Monitoring & Metrics
+The `/health` endpoint now provides comprehensive voice metrics:
+- Active session count and utilization
+- Sessions created, closed, rejected, timed out
+- TTS requests and failures
+- Error counts and uptime
+- Real-time session status
+
+#### Architecture Changes
+- **Removed Deprecated Service**: OpenAIRealtimeService is deprecated and no longer initialized
+- **Relay-Only Architecture**: All voice flows through OpenAIRealtimeRelay for better control
+- **Unified Session Management**: Single source of truth for all voice sessions
+- **Graceful Shutdown**: Proper cleanup of all sessions on server shutdown
+
+#### Testing
+Voice relay session management tests available:
+```bash
+cd backend
+python3 test_voice_relay_simple.py    # Quick functional test
+python3 test_voice_relay_sessions.py  # Comprehensive test suite
+```
+
+These improvements ensure reliable voice sessions at scale with proper resource management and observability.

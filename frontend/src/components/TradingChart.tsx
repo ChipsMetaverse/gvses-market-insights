@@ -6,15 +6,17 @@ import { enhancedChartControl } from '../services/enhancedChartControl'
 import { useIndicatorState } from '../hooks/useIndicatorState'
 import { useIndicatorContext } from '../contexts/IndicatorContext'
 import { useChartSeries } from '../hooks/useChartSeries'
+import { ChartToolbar } from './ChartToolbar'
 import './TradingChart.css'
 
 interface TradingChartProps {
   symbol: string
+  days?: number  // Number of days of historical data to display
   technicalLevels?: any
   onChartReady?: (chart: any) => void
 }
 
-export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingChartProps) {
+export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -150,15 +152,15 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
-    
+
     // Create new abort controller for this request
     abortControllerRef.current = new AbortController()
-    
+
     setIsLoading(true)
     setError(null)
-    
+
     try {
-      const history = await marketDataService.getStockHistory(symbolToFetch, 100)
+      const history = await marketDataService.getStockHistory(symbolToFetch, days)
       
       // Check if component is still mounted and request wasn't aborted
       if (!isMountedRef.current || abortControllerRef.current.signal.aborted) {
@@ -197,7 +199,7 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
         setIsLoading(false)
       }
     }
-  }, [])
+  }, [days])
   
   // Update only the chart data without recreating the chart
   const updateChartData = useCallback(async (symbolToUpdate: string) => {
@@ -427,8 +429,33 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
     updateChartData(symbol).then(() => {
       updateTechnicalLevels()
       setTimeout(() => updateLabelPositionsRef.current(), 200)
+
+      // Capture chart snapshot 500ms after data loads for pattern detection
+      setTimeout(async () => {
+        try {
+          const canvas = chartContainerRef.current?.querySelector('canvas')
+          if (canvas) {
+            const imageBase64 = canvas.toDataURL('image/png').split(',')[1]
+
+            // Send to backend for potential pattern detection
+            await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/agent/chart-snapshot`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                symbol,
+                timeframe: '1D',
+                image_base64: imageBase64,
+                auto_analyze: false // Don't auto-analyze, wait for voice command
+              })
+            })
+            console.log(`Chart snapshot captured for ${symbol}`)
+          }
+        } catch (error) {
+          console.warn('Failed to capture chart snapshot:', error)
+        }
+      }, 500)
     })
-    
+
     // Connect enhanced chart control to indicator system
     enhancedChartControl.initialize(chart, candlestickSeries, indicatorDispatch)
     
@@ -478,7 +505,7 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
       chartRef.current = null
       candlestickSeriesRef.current = null
     }
-  }, [symbol]) // Only recreate chart when symbol changes
+  }, [symbol, days]) // Recreate chart when symbol or days changes
   
   // Subscribe to chart events for label synchronization
   useEffect(() => {
@@ -715,8 +742,37 @@ export function TradingChart({ symbol, technicalLevels, onChartReady }: TradingC
     }
   }, [indicatorState.data, indicatorState.indicators, overlayVisibility, oscillatorSeries]);
   
+  const handleIndicatorToggle = (indicator: string) => {
+    // Toggle indicator visibility based on the indicator id
+    if (indicator === 'ma') {
+      setOverlayVisibilityForIndicator('movingAverages', !overlayVisibility.movingAverages)
+    } else if (indicator === 'bollinger') {
+      setOverlayVisibilityForIndicator('bollinger', !overlayVisibility.bollinger)
+    } else if (indicator === 'rsi') {
+      setOverlayVisibilityForIndicator('rsi', !overlayVisibility.rsi)
+    } else if (indicator === 'macd') {
+      setOverlayVisibilityForIndicator('macd', !overlayVisibility.macd)
+    }
+  }
+
+  const handleDrawingToolSelect = (tool: string) => {
+    console.log('Drawing tool selected:', tool)
+    // Drawing tool functionality can be added later
+  }
+
+  const handleChartTypeChange = (type: string) => {
+    console.log('Chart type changed:', type)
+    // Chart type change functionality can be added later
+  }
+
   return (
     <div className="trading-chart-container">
+      <ChartToolbar
+        onIndicatorToggle={handleIndicatorToggle}
+        onDrawingToolSelect={handleDrawingToolSelect}
+        onChartTypeChange={handleChartTypeChange}
+      />
+
       {isLoading && (
         <div style={{
           position: 'absolute',
