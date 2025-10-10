@@ -27,6 +27,11 @@ from services.chart_snapshot_store import ChartSnapshotStore
 from services.pattern_lifecycle import PatternLifecycleManager
 from services.chart_command_extractor import ChartCommandExtractor
 
+# Import new modular components  
+from core.intent_router import IntentRouter
+from core.market_data import MarketDataHandler
+from core.response_formatter import ResponseFormatter as CoreResponseFormatter
+
 try:
     # Lazy import to avoid circular dependencies when headless service is absent
     from headless_chart_service.src.websocketService import wsService  # type: ignore
@@ -84,6 +89,11 @@ class AgentOrchestrator:
         self.market_service = MarketServiceFactory.get_service()
         self.model = os.getenv("AGENT_MODEL", "gpt-5-mini")  # Fastest available model
         self.temperature = float(os.getenv("AGENT_TEMPERATURE", "0.7"))
+        
+        # Initialize modular components
+        self.intent_router = IntentRouter()
+        self.market_handler = MarketDataHandler(self.market_service)
+        self.core_response_formatter = CoreResponseFormatter()
         
         # Initialize vector retriever for enhanced semantic search
         self.vector_retriever = VectorRetriever()
@@ -1196,7 +1206,7 @@ class AgentOrchestrator:
                         if symbol:
                             return str(symbol)
 
-        return self._extract_symbol_from_query(query)
+        return self.intent_router.extract_symbol(query)
 
     def _extract_symbol_from_query(self, query: str) -> Optional[str]:
         """Fallback symbol extraction from the user query."""
@@ -3227,7 +3237,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 self.last_diag = {
                     "ts": datetime.now().isoformat(),
                     "path": "responses_simple_via_chat",
-                    "intent": self._classify_intent(query),
+                    "intent": self.intent_router.classify_intent(query),
                     "durations": {
                         "llm1": round(chat_llm_dur, 3),
                         "tools": round(tools_dur if assistant_msg.tool_calls else 0.0, 3),
@@ -3428,7 +3438,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
         self.last_diag = {
             "ts": datetime.now().isoformat(),
             "path": "responses_api",
-            "intent": self._classify_intent(query),
+            "intent": self.intent_router.classify_intent(query),
             "durations": {
                 "llm1": None,
                 "tools": None,
@@ -4117,14 +4127,14 @@ Remember to cite sources when using this knowledge and maintain educational tone
         ]
         if any(trigger in ql for trigger in educational_triggers):
             # Check if it's really educational (not just "what is AAPL")
-            symbol = self._extract_symbol_from_query(query)
+            symbol = self.intent_router.extract_symbol(query)
             if not symbol or "difference" in ql or "mean" in ql or "how" in ql:
                 return "educational"
         
         # Company information queries (before price-only)
         company_info_triggers = ("what is", "who is", "tell me about", "explain")
         if any(p in ql for p in company_info_triggers):
-            symbol_in_query = self._extract_symbol_from_query(query)
+            symbol_in_query = self.intent_router.extract_symbol(query)
             if symbol_in_query and not any(term in ql for term in [
                 "price", "quote", "cost", "worth", "value", "trading", "trading at", "how much"
             ]):
@@ -4235,7 +4245,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
         
         # Add chart commands for concepts that benefit from visualization
         if any(term in ql for term in ["support", "resistance", "chart", "show me"]):
-            symbol = self._extract_symbol_from_query(query)
+            symbol = self.intent_router.extract_symbol(query)
             if symbol:
                 response["chart_commands"] = [f"LOAD:{symbol.upper()}"]
                 if "support" in ql:
@@ -4321,7 +4331,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
         except Exception as e:
             logger.error(f"Error processing query with G'sves assistant: {e}")
             # Fall back to regular orchestrator on error
-            return await self._process_query_single_pass(query, conversation_history, self._classify_intent(query), False)
+            return await self._process_query_single_pass(query, conversation_history, self.intent_router.classify_intent(query), False)
 
     async def process_query(
         self,
@@ -4340,10 +4350,10 @@ Remember to cite sources when using this knowledge and maintain educational tone
             }
         
         # Classify intent for fast-path routing
-        intent = self._classify_intent(query)
+        intent = self.intent_router.classify_intent(query)
         logger.info(f"Query: '{query}' → Intent: {intent}")
         try:
-            logger.info(f"Symbol detected: {self._extract_symbol_from_query(query)}")
+            logger.info(f"Symbol detected: {self.intent_router.extract_symbol(query)}")
         except Exception:
             pass
 
@@ -4397,7 +4407,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
         
         # Fast-path for chart-only commands (no LLM needed)
         if intent == "chart-only":
-            symbol = self._extract_symbol_from_query(query)
+            symbol = self.intent_router.extract_symbol(query)
             if symbol:
                 response = {
                     "text": f"Loading {symbol.upper()} chart",
