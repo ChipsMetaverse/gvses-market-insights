@@ -229,10 +229,6 @@ export class OpenAIRealtimeService {
       } else {
         console.warn('⚠️ RealtimeClient instance does not expose updateSession API; skipping configuration');
       }
-        input_audio_transcription: {    // Enable user speech transcription
-          model: 'whisper-1'
-        }
-      });
 
       console.log('✅ Session configured successfully with automatic turn detection');
     } catch (error) {

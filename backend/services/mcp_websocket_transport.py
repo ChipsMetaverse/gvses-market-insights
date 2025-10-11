@@ -56,7 +56,7 @@ class MCPWebSocketTransport:
     
     def __init__(self):
         self.sessions: Dict[str, MCPWebSocketSession] = {}
-        self.mcp_manager = None
+        self.mcp_client = None
         self._initialized = False
         
     async def initialize(self):
@@ -65,13 +65,13 @@ class MCPWebSocketTransport:
             return
             
         try:
-            # Import and get the MCP manager
-            from mcp_client import get_mcp_manager
-            self.mcp_manager = get_mcp_manager()
+            # Import and get the MCP client
+            from mcp_client import get_mcp_client
+            self.mcp_client = get_mcp_client()
             
-            # Ensure MCP manager is initialized
-            if hasattr(self.mcp_manager, 'initialized') and not self.mcp_manager.initialized:
-                await self.mcp_manager.initialize()
+            # Ensure MCP client is initialized
+            if not self.mcp_client._initialized:
+                await self.mcp_client.start()
                 
             self._initialized = True
             logger.info("MCP WebSocket transport initialized successfully")
@@ -233,11 +233,17 @@ class MCPWebSocketTransport:
     async def _handle_list_tools(self, session: MCPWebSocketSession, msg_id: str, params: Dict[str, Any]) -> None:
         """Handle tools/list request by proxying to MCP sidecars."""
         try:
-            if not self.mcp_manager:
-                raise RuntimeError("MCP manager not initialized")
+            if not self.mcp_client:
+                raise RuntimeError("MCP client not initialized")
             
             # Get tools from the market MCP server
-            tools_response = await self.mcp_manager.list_tools()
+            tools_result = await self.mcp_client.list_tools()
+            
+            # Convert MCPClient response to JSON-RPC format
+            if tools_result and "tools" in tools_result:
+                tools_response = {"result": tools_result}
+            else:
+                tools_response = None
             
             if tools_response and "result" in tools_response:
                 # Forward the successful response
@@ -273,8 +279,8 @@ class MCPWebSocketTransport:
     async def _handle_call_tool(self, session: MCPWebSocketSession, msg_id: str, params: Dict[str, Any]) -> None:
         """Handle tools/call request by proxying to MCP sidecars."""
         try:
-            if not self.mcp_manager:
-                raise RuntimeError("MCP manager not initialized")
+            if not self.mcp_client:
+                raise RuntimeError("MCP client not initialized")
             
             tool_name = params.get("name")
             tool_arguments = params.get("arguments", {})
@@ -282,8 +288,14 @@ class MCPWebSocketTransport:
             if not tool_name:
                 raise ValueError("Tool name is required")
             
-            # Call the tool via MCP manager
-            tool_response = await self.mcp_manager.call_tool(tool_name, tool_arguments)
+            # Call the tool via MCP client
+            tool_result = await self.mcp_client.call_tool(tool_name, tool_arguments)
+            
+            # Convert MCPClient response to JSON-RPC format
+            if tool_result:
+                tool_response = {"result": {"content": [{"type": "text", "text": str(tool_result)}]}}
+            else:
+                tool_response = None
             
             if tool_response and "result" in tool_response:
                 # Forward the successful response

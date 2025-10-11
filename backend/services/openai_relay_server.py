@@ -74,8 +74,8 @@ class OpenAIRealtimeRelay:
 
         logger.info(f"🔧 OpenAI Relay Config: max_sessions={self.max_concurrent_sessions}, timeout={self.session_timeout}s")
 
-        # Start cleanup task
-        self.cleanup_task = asyncio.create_task(self._cleanup_expired_sessions())
+        # Initialize cleanup task placeholder (will start when event loop is available)
+        self.cleanup_task = None
 
     async def _cleanup_expired_sessions(self):
         """Background task to clean up expired sessions."""
@@ -157,6 +157,14 @@ class OpenAIRealtimeRelay:
         [DEPRECATED: Use handle_relay_connection_accepted instead]
         """
         await websocket.accept()
+        
+        # Start cleanup task if not already running (lazy initialization)
+        if self.cleanup_task is None:
+            try:
+                self.cleanup_task = asyncio.create_task(self._cleanup_expired_sessions())
+                logger.info("Started cleanup task for expired sessions")
+            except RuntimeError:
+                pass  # Event loop not available, will try again later
         await self.handle_relay_connection_accepted(websocket, session_id)
     
     async def handle_relay_connection_accepted(
@@ -310,13 +318,14 @@ class OpenAIRealtimeRelay:
         """Clean shutdown of the relay server."""
         logger.info("🛑 Shutting down OpenAI Realtime Relay Server")
 
-        # Cancel cleanup task
-        if hasattr(self, 'cleanup_task') and not self.cleanup_task.done():
-            self.cleanup_task.cancel()
-            try:
-                await self.cleanup_task
-            except asyncio.CancelledError:
-                pass
+        # Cancel cleanup task if it was started
+        if getattr(self, "cleanup_task", None):
+            if not self.cleanup_task.done():
+                self.cleanup_task.cancel()
+                try:
+                    await self.cleanup_task
+                except asyncio.CancelledError:
+                    pass
 
         # Clean up all active sessions
         async with self.session_lock:

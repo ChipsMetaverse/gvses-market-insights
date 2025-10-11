@@ -1,9 +1,30 @@
 # GVSES Market Analysis Assistant - Architecture Diagrams
 
-## System Architecture Overview
+## System Architecture Overview with OpenAI Agent Builder Integration
 
 ```mermaid
 graph TB
+    subgraph "OpenAI Agent Builder Workflow"
+        Start[Start Node]
+        IntentClass[Intent Classifier<br/>- market_data<br/>- chart_command<br/>- general_chat]
+        IfElse[If/Else Router<br/>Market Data Branch]
+        MarketAgent[Market Data Agent]
+        Transform[Transform Node]
+        MCPNode[MCP Integration]
+        GsvesAgent[G'sves Agent]
+        EndNode1[End Node 1]
+        EndNode2[End Node 2]
+        
+        Start --> IntentClass
+        IntentClass --> IfElse
+        IfElse -->|market_data| MarketAgent
+        MarketAgent --> Transform
+        Transform --> EndNode1
+        IfElse -->|else| MCPNode
+        MCPNode --> GsvesAgent
+        GsvesAgent --> EndNode2
+    end
+
     subgraph "Frontend (React + TypeScript)"
         App[App.tsx]
         Dashboard[TradingDashboardSimple]
@@ -11,42 +32,55 @@ graph TB
         Toolbar[ChartToolbar]
         TimeRange[TimeRangeSelector]
         VoiceUI[Voice Assistant UI]
+        ChartService[chartToolService]
+        ControlService[chartControlService]
 
         App --> Dashboard
         Dashboard --> Chart
         Dashboard --> VoiceUI
         Chart --> Toolbar
         Chart --> TimeRange
+        VoiceUI --> ChartService
+        ChartService --> ControlService
     end
 
     subgraph "Backend (FastAPI)"
         API[FastAPI Server]
-        MarketService[MarketServiceWrapper]
-        AlpacaService[Alpaca Service]
-        MCPService[MCP Service]
-        ElevenLabsProxy[ElevenLabs Proxy]
+        MarketWrapper[MarketServiceWrapper<br/>Alpaca-first + MCP fallback]
+        AlpacaService[Alpaca Service<br/>300-400ms]
+        MCPService[MCP Service<br/>3-15s fallback]
+        VoiceRelay[OpenAIRealtimeRelay<br/>Triple Provider System]
+        AgentOrch[AgentOrchestrator]
 
-        API --> MarketService
-        MarketService --> AlpacaService
-        MarketService --> MCPService
-        API --> ElevenLabsProxy
+        API --> MarketWrapper
+        MarketWrapper --> AlpacaService
+        MarketWrapper --> MCPService
+        API --> VoiceRelay
+        API --> AgentOrch
     end
 
     subgraph "External APIs"
-        AlpacaAPI[Alpaca Markets API]
+        AlpacaAPI[Alpaca Markets API<br/>Professional Data]
         YahooAPI[Yahoo Finance via MCP]
         CNBCAPI[CNBC News via MCP]
         ElevenLabs[ElevenLabs Conversational AI]
+        OpenAIRT[OpenAI Realtime API]
         Claude[Claude AI]
+        OpenAIBuilder[OpenAI Agent Builder API]
     end
 
     subgraph "MCP Servers"
-        MarketMCP[market-mcp-server<br/>Node.js 22]
+        MarketMCP[market-mcp-server<br/>Node.js 22<br/>35+ tools]
         AlpacaMCP[alpaca-mcp-server<br/>Python]
     end
 
     Dashboard -->|API Calls| API
-    VoiceUI -->|WebSocket| ElevenLabsProxy
+    VoiceUI -->|WebSocket| VoiceRelay
+    
+    IntentClass -->|Classification| API
+    MarketAgent -->|Data Request| MarketWrapper
+    MCPNode -->|Tool Call| MCPService
+    GsvesAgent -->|AI Response| AgentOrch
 
     AlpacaService --> AlpacaAPI
     AlpacaService --> AlpacaMCP
@@ -54,12 +88,19 @@ graph TB
 
     MarketMCP --> YahooAPI
     MarketMCP --> CNBCAPI
-    ElevenLabsProxy --> ElevenLabs
+    
+    VoiceRelay --> ElevenLabs
+    VoiceRelay --> OpenAIRT
+    VoiceRelay --> OpenAIBuilder
+    
     API --> Claude
+    AgentOrch --> OpenAIBuilder
 
-    style Toolbar fill:#e1f5ff
+    style IntentClass fill:#ffebee
+    style MarketWrapper fill:#e8f5e9
+    style VoiceRelay fill:#fff3e0
     style Dashboard fill:#fff4e6
-    style Chart fill:#e8f5e9
+    style Chart fill:#e1f5ff
 ```
 
 ## Frontend Component Architecture
@@ -174,7 +215,172 @@ sequenceDiagram
 | Voice Command Processing | 1-3s | ElevenLabs AI |
 | Chart Render | <100ms | Client-side |
 
+## Voice Command Flow with Agent Builder
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Voice as Voice UI
+    participant Agent as Agent Builder
+    participant Intent as Intent Classifier
+    participant Router as If/Else Router
+    participant Market as Market Agent
+    participant MCP as MCP Node
+    participant API as FastAPI
+    participant Alpaca
+    participant Chart
+
+    User->>Voice: "Show me Tesla stock"
+    Voice->>Agent: Voice Command
+    Agent->>Intent: Classify Intent
+    Intent-->>Agent: {intent: "chart_command", symbol: "TSLA"}
+    
+    Agent->>Router: Route Based on Intent
+    
+    alt Chart Command Path
+        Router->>Market: Get Market Data
+        Market->>API: Request TSLA Data
+        API->>Alpaca: Fetch Quote/History
+        Alpaca-->>API: Data (300-400ms)
+        API-->>Market: Formatted Data
+        Market-->>Chart: Display Chart
+    else General Query Path
+        Router->>MCP: Use MCP Tools
+        MCP->>API: Fallback Query
+        API-->>MCP: Response (3-15s)
+        MCP-->>Voice: AI Response
+    end
+```
+
+## Triple Voice Provider Architecture
+
+```mermaid
+graph LR
+    subgraph "Voice Providers"
+        EL[ElevenLabs<br/>Primary Provider<br/>1-3s response]
+        OAI[OpenAI Realtime<br/>Alternative Provider<br/>Sub-second]
+        IA[Internal Agent<br/>Fallback System]
+    end
+    
+    subgraph "Unified Interface"
+        Relay[OpenAIRealtimeRelay<br/>- Session Management<br/>- Provider Switching<br/>- Error Handling]
+    end
+    
+    subgraph "Features"
+        F1[Session Limits<br/>Max 10 concurrent]
+        F2[Timeout Management<br/>300s session / 60s idle]
+        F3[Background Cleanup<br/>Every 60s]
+    end
+    
+    EL --> Relay
+    OAI --> Relay
+    IA --> Relay
+    
+    Relay --> F1
+    Relay --> F2
+    Relay --> F3
+    
+    style EL fill:#e8f5e9
+    style Relay fill:#fff3e0
+```
+
+## Agent Builder Enhancement Roadmap
+
+```mermaid
+graph TD
+    subgraph "Current State (85% Complete)"
+        C1[✅ Intent Classifier]
+        C2[✅ If/Else Routing]
+        C3[✅ MCP Integration]
+        C4[✅ Transform Nodes]
+        C5[✅ Agent Nodes]
+        C6[✅ End Nodes]
+    end
+    
+    subgraph "Missing Components (15%)"
+        M1[⏳ File Search<br/>Vector DB Integration]
+        M2[⏳ Guardrails<br/>Content Moderation]
+        M3[⏳ While Loops<br/>Retry Logic]
+        M4[⏳ User Approval<br/>Trade Confirmation]
+        M5[⏳ Set State<br/>Variable Management]
+    end
+    
+    subgraph "Benefits When Complete"
+        B1[Visual Workflow Editing]
+        B2[No-Code Modifications]
+        B3[Real-time Testing]
+        B4[Version Control]
+        B5[A/B Testing Flows]
+    end
+    
+    C1 --> B1
+    M1 --> B2
+    M2 --> B3
+    M3 --> B4
+    M4 --> B5
+    
+    style C1 fill:#c8e6c9
+    style C2 fill:#c8e6c9
+    style C3 fill:#c8e6c9
+    style M1 fill:#fff9c4
+    style M2 fill:#fff9c4
+```
+
+## System Integration Points
+
+```mermaid
+graph TB
+    subgraph "Knowledge Base Integration"
+        KB[Knowledge Base<br/>Chart Tools & Indicators]
+        CTR[ChartToolRegistry<br/>Auto-discovery]
+        TSS[Semantic Search<br/>Natural Language]
+        
+        KB --> CTR
+        CTR --> TSS
+    end
+    
+    subgraph "Market Data Pipeline"
+        MDP[Market Data Request]
+        ALP[Alpaca API<br/>300-400ms]
+        MCPF[MCP Fallback<br/>3-15s]
+        
+        MDP --> ALP
+        ALP -->|Failure| MCPF
+    end
+    
+    subgraph "Voice Processing"
+        VC[Voice Command]
+        IC[Intent Classification]
+        CM[Command Mapping]
+        EX[Execution]
+        
+        VC --> IC
+        IC --> CM
+        CM --> EX
+    end
+    
+    TSS --> CM
+    ALP --> EX
+    MCPF --> EX
+    
+    style KB fill:#e1f5ff
+    style ALP fill:#c8e6c9
+    style IC fill:#ffebee
+```
+
 ## Recent Updates
+
+### OpenAI Agent Builder Integration (Oct 11, 2025)
+- **Workflow Created**: Intent Classifier → If/Else → Market Data/MCP branches
+- **85% Complete**: Missing File Search, Guardrails, While loops, User Approval
+- **Integration Points**: Direct connection to MarketServiceWrapper and MCP servers
+- **Future Vision**: Visual workflow editing replacing code-based orchestration
+
+### Deep System Investigation (Oct 11, 2025)
+- **Triple Voice Provider System**: ElevenLabs + OpenAI Realtime + Internal Agent
+- **Performance Metrics Documented**: Alpaca (300-400ms) vs MCP (3-15s)
+- **Security Issue Found**: Hardcoded API key in test_openai_realtime.py
+- **Architecture Validated**: Professional-grade with intelligent fallbacks
 
 ### Knowledge Base → Chart Tools Integration (Oct 2, 2025)
 - **ChartToolRegistry Service**: Auto-registers chart capabilities from knowledge base as callable tools
@@ -208,3 +414,23 @@ User Voice Command → chartToolService.mapVoiceCommandToTool()
 - Flexbox layout with proper spacing
 - Hover and active states
 - Touch-friendly 44px minimum width
+
+## Security & Optimization Recommendations
+
+### Critical Security Issues
+1. **Hardcoded API Key**: Remove from `backend/test_openai_realtime.py`
+2. **Environment Variables**: Ensure all keys in `.env` files only
+3. **API Key Rotation**: Implement regular key rotation policy
+
+### Performance Optimizations
+1. **Redis Caching**: Implement for frequent stock queries
+2. **Circuit Breaker**: Add for Alpaca API failures
+3. **Request Batching**: Combine multiple symbol requests
+4. **WebSocket Pooling**: Reuse connections for efficiency
+
+### Agent Builder Enhancements Needed
+1. **File Search Node**: Connect to vector database for knowledge queries
+2. **Guardrails Node**: Add content moderation for trading commands
+3. **While Loop**: Implement retry logic before fallback
+4. **User Approval**: Require confirmation for trades
+5. **Set State Node**: Manage conversation variables

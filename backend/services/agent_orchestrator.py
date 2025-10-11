@@ -29,8 +29,6 @@ from services.chart_command_extractor import ChartCommandExtractor
 
 # Import new modular components  
 from core.intent_router import IntentRouter
-from core.market_data import MarketDataHandler
-from core.response_formatter import ResponseFormatter as CoreResponseFormatter
 
 try:
     # Lazy import to avoid circular dependencies when headless service is absent
@@ -92,8 +90,6 @@ class AgentOrchestrator:
         
         # Initialize modular components
         self.intent_router = IntentRouter()
-        self.market_handler = MarketDataHandler(self.market_service)
-        self.core_response_formatter = CoreResponseFormatter()
         
         # Initialize vector retriever for enhanced semantic search
         self.vector_retriever = VectorRetriever()
@@ -720,49 +716,34 @@ class AgentOrchestrator:
         symbol = match.group(1).upper()
 
         try:
-            result = await self.market_service.get_stock_price(symbol)
+            price_data = await self.market_service.get_stock_price(symbol)
         except Exception as exc:
             logger.warning(f"Quick price lookup failed for {symbol}: {exc}")
             return None
 
-        if not result or result.get("price") in (None, 0):
+        if not price_data or price_data.get("price") in (None, 0):
             return None
 
-        price = result.get("price")
-        change = result.get("change", 0)
-        change_pct = result.get("change_percent") or result.get("change_pct") or 0
-        previous_close = result.get("previous_close")
-
-        change_text = f"{change:+.2f}" if isinstance(change, (int, float)) else change
-        if isinstance(change_pct, (int, float)):
-            change_pct_text = f" ({change_pct:+.2f}%)"
+        # Format directly without wrapper
+        price = price_data.get("price", 0)
+        change = price_data.get("change", 0)
+        change_pct = price_data.get("change_percent", 0)
+        
+        if price > 0:
+            direction = "up" if change > 0 else "down" if change < 0 else "unchanged"
+            voice_text = f"{symbol} is trading at ${price:.2f}, {direction} ${abs(change):.2f} or {abs(change_pct):.2f} percent"
         else:
-            change_pct_text = ""
+            voice_text = f"{symbol} price data is currently unavailable."
 
-        summary = [f"{symbol} is trading at ${price:.2f} {change_text}{change_pct_text}."]
+        # Preserve original disclaimer and metadata
+        text = f"{voice_text} (No investment advice.)"
 
-        if previous_close and isinstance(previous_close, (int, float)):
-            summary.append(f"Previous close: ${previous_close:.2f}.")
-
-        if result.get("data_source"):
-            summary.append(f"Data source: {result['data_source']}.")
-
-        summary.append("(No investment advice.)")
-
-        text = " ".join(summary)
-
-        logger.info(f"Serving quick price response for {symbol}")
+        logger.info(f"Serving quick price response for {symbol} via market_service")
 
         return {
             "text": text,
             "tools_used": ["get_stock_price"],
-            "data": {
-                "symbol": symbol,
-                "price": price,
-                "change": change,
-                "change_percent": change_pct,
-                "data_source": result.get("data_source"),
-            },
+            "data": price_data,
             "timestamp": datetime.now().isoformat(),
             "model": "static-price",
             "cached": False,
@@ -2468,7 +2449,6 @@ class AgentOrchestrator:
                 result = await self.market_service.get_stock_price(arguments["symbol"])
             elif tool_name == "get_company_info":
                 symbol = str(arguments.get("symbol", "")).upper()
-                # Leverage existing market service to get basic facts quickly
                 quote = await self.market_service.get_stock_price(symbol)
                 # Build a lightweight company info structure from available fields
                 company_info = {
@@ -2484,7 +2464,6 @@ class AgentOrchestrator:
                 limit = arguments.get("limit", 5)
                 result = await self.market_service.get_stock_news(arguments["symbol"], limit)
             elif tool_name == "get_market_overview":
-                # Get real market overview data
                 result = await self.market_service.get_market_overview()
             elif tool_name == "get_stock_history":
                 days = arguments.get("days", 30)
