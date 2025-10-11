@@ -1673,6 +1673,7 @@ async def mcp_http_endpoint(
     Supports authentication via Fly.io API token in Authorization header or query parameter.
     
     OpenAI Agent Builder format: https://your-domain.com/api/mcp
+    Production deployment: Oct 11, 2025 - v2.0
     """
     try:
         # Import the MCP transport layer
