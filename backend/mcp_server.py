@@ -532,6 +532,22 @@ async def health_check():
         }
     }
     
+    # Add MCP WebSocket transport status
+    try:
+        from services.mcp_websocket_transport import get_mcp_transport
+        transport = get_mcp_transport()
+        response["mcp_websocket"] = {
+            "available": True,
+            "initialized": transport._initialized,
+            "active_sessions": transport.get_session_count(),
+            "mcp_manager_connected": transport.mcp_manager is not None
+        }
+    except Exception as e:
+        response["mcp_websocket"] = {
+            "available": False,
+            "error": str(e)
+        }
+    
     # Add version info
     response["version"] = "2.0.0"  # Major update with all features
     response["agent_version"] = "1.5.0"  # Agent orchestrator version
@@ -1591,6 +1607,77 @@ async def generate_tts(request: TTSRequest):
     except Exception as e:
         logger.error(f"TTS generation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/mcp")
+async def mcp_websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(None)):
+    """
+    MCP WebSocket Endpoint for OpenAI Agent Builder
+    ==============================================
+    Provides WebSocket access to MCP tools using JSON-RPC 2.0 protocol.
+    Requires authentication via Fly.io API token in query parameter.
+    """
+    try:
+        # Import the MCP transport layer
+        from services.mcp_websocket_transport import get_mcp_transport
+        transport = get_mcp_transport()
+        
+        # Accept WebSocket connection
+        await websocket.accept()
+        
+        # Handle connection with authentication
+        query_params = {"token": token} if token else {}
+        session_id = await transport.handle_connection(websocket, query_params)
+        
+        logger.info(f"MCP WebSocket connected: session {session_id}")
+        
+        # Message handling loop
+        try:
+            while True:
+                # Receive message from client
+                message = await websocket.receive_text()
+                await transport.handle_message(session_id, message)
+                
+        except WebSocketDisconnect:
+            logger.info(f"MCP WebSocket disconnected: session {session_id}")
+        finally:
+            # Clean up session
+            await transport.disconnect_session(session_id)
+            
+    except ValueError as e:
+        # Authentication or validation error
+        logger.warning(f"MCP WebSocket authentication failed: {e}")
+        try:
+            await websocket.close(code=4001, reason=str(e))
+        except:
+            pass
+    except Exception as e:
+        logger.error(f"MCP WebSocket error: {e}")
+        try:
+            await websocket.close(code=1011, reason=str(e))
+        except:
+            pass
+
+
+@app.get("/mcp/status")
+async def mcp_status():
+    """Get MCP WebSocket transport status."""
+    try:
+        from services.mcp_websocket_transport import get_mcp_transport
+        transport = get_mcp_transport()
+        
+        session_info = transport.get_session_info()
+        
+        return {
+            "status": "operational",
+            "transport_initialized": transport._initialized,
+            "mcp_manager_available": transport.mcp_manager is not None,
+            "timestamp": datetime.utcnow().isoformat(),
+            **session_info
+        }
+    except Exception as e:
+        logger.error(f"Error getting MCP status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get MCP status")
 
 
 @app.websocket("/realtime-relay/{session_id}")
