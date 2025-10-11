@@ -1659,6 +1659,237 @@ async def mcp_websocket_endpoint(websocket: WebSocket, token: Optional[str] = Qu
             pass
 
 
+@app.post("/api/mcp")
+@app.post("/mcp/http")
+async def mcp_http_endpoint(
+    request: Request,
+    token: Optional[str] = Header(None, alias="Authorization"),
+    query_token: Optional[str] = Query(None, alias="token")
+):
+    """
+    HTTP MCP Endpoint for OpenAI Agent Builder
+    ==========================================
+    Provides HTTP access to MCP tools using JSON-RPC 2.0 protocol.
+    Supports authentication via Fly.io API token in Authorization header or query parameter.
+    
+    OpenAI Agent Builder format: https://your-domain.com/api/mcp
+    """
+    try:
+        # Import the MCP transport layer
+        from services.mcp_websocket_transport import get_mcp_transport
+        transport = get_mcp_transport()
+        await transport.initialize()
+        
+        # Extract token from header or query parameter
+        auth_token = None
+        if token and token.startswith("Bearer "):
+            auth_token = token[7:]  # Remove "Bearer " prefix
+        elif token:
+            auth_token = token
+        elif query_token:
+            auth_token = query_token
+        
+        # Validate authentication token
+        if not transport.validate_token(auth_token):
+            raise HTTPException(
+                status_code=401, 
+                detail="Invalid or missing authentication token"
+            )
+        
+        # Parse JSON-RPC request
+        try:
+            json_body = await request.json()
+        except json.JSONDecodeError:
+            return {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32700,
+                    "message": "Parse error"
+                },
+                "id": None
+            }
+        
+        # Validate JSON-RPC format
+        if json_body.get("jsonrpc") != "2.0":
+            return {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32600,
+                    "message": "Invalid Request - missing jsonrpc version"
+                },
+                "id": json_body.get("id")
+            }
+        
+        method = json_body.get("method")
+        msg_id = json_body.get("id")
+        params = json_body.get("params", {})
+        
+        # Handle different MCP methods
+        if method == "initialize":
+            return await _handle_http_initialize(transport, msg_id, params)
+        elif method == "tools/list":
+            return await _handle_http_list_tools(transport, msg_id, params)
+        elif method == "tools/call":
+            return await _handle_http_call_tool(transport, msg_id, params)
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32601,
+                    "message": "Method not found",
+                    "data": f"Unknown method: {method}"
+                },
+                "id": msg_id
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in HTTP MCP endpoint: {e}")
+        return {
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32603,
+                "message": "Internal error",
+                "data": str(e)
+            },
+            "id": json_body.get("id") if 'json_body' in locals() else None
+        }
+
+
+async def _handle_http_initialize(transport, msg_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle HTTP MCP initialize request."""
+    try:
+        return {
+            "jsonrpc": "2.0",
+            "result": {
+                "protocolVersion": "2024-11-01",
+                "capabilities": {
+                    "tools": {},
+                    "streaming": False,  # HTTP doesn't support streaming
+                    "experimental": {}
+                },
+                "serverInfo": {
+                    "name": "gvses-market-mcp-server",
+                    "version": "1.0.0",
+                    "transport": "http"
+                }
+            },
+            "id": msg_id
+        }
+    except Exception as e:
+        logger.error(f"Error in HTTP initialize handler: {e}")
+        return {
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32603,
+                "message": "Internal error during initialization",
+                "data": str(e)
+            },
+            "id": msg_id
+        }
+
+
+async def _handle_http_list_tools(transport, msg_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle HTTP tools/list request by proxying to MCP sidecars."""
+    try:
+        if not transport.mcp_client:
+            raise RuntimeError("MCP client not initialized")
+        
+        # Get tools from the market MCP server
+        tools_result = await transport.mcp_client.list_tools()
+        
+        # Convert MCPClient response to JSON-RPC format
+        if tools_result and "tools" in tools_result:
+            tools_response = {"result": tools_result}
+        else:
+            tools_response = None
+        
+        if tools_response and "result" in tools_response:
+            return {
+                "jsonrpc": "2.0",
+                "result": tools_response["result"],
+                "id": msg_id
+            }
+        else:
+            # Return empty tools list if MCP server unavailable
+            return {
+                "jsonrpc": "2.0",
+                "result": {"tools": []},
+                "id": msg_id
+            }
+        
+    except Exception as e:
+        logger.error(f"Error listing tools via HTTP: {e}")
+        return {
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32603,
+                "message": "Internal error listing tools",
+                "data": str(e)
+            },
+            "id": msg_id
+        }
+
+
+async def _handle_http_call_tool(transport, msg_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle HTTP tools/call request by proxying to MCP sidecars."""
+    try:
+        if not transport.mcp_client:
+            raise RuntimeError("MCP client not initialized")
+        
+        tool_name = params.get("name")
+        tool_arguments = params.get("arguments", {})
+        
+        if not tool_name:
+            return {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32602,
+                    "message": "Invalid params - tool name is required"
+                },
+                "id": msg_id
+            }
+        
+        # Call the tool via MCP client
+        tool_result = await transport.mcp_client.call_tool(tool_name, tool_arguments)
+        
+        # Convert MCPClient response to JSON-RPC format
+        if tool_result:
+            tool_response = {"result": {"content": [{"type": "text", "text": str(tool_result)}]}}
+        else:
+            tool_response = None
+        
+        if tool_response and "result" in tool_response:
+            return {
+                "jsonrpc": "2.0",
+                "result": tool_response["result"],
+                "id": msg_id
+            }
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32603,
+                    "message": "Tool execution failed",
+                    "data": tool_response
+                },
+                "id": msg_id
+            }
+        
+    except Exception as e:
+        logger.error(f"Error calling tool via HTTP: {e}")
+        return {
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32603,
+                "message": "Internal error calling tool",
+                "data": str(e)
+            },
+            "id": msg_id
+        }
+
+
 @app.get("/mcp/status")
 async def mcp_status():
     """Get MCP WebSocket transport status."""
@@ -1671,7 +1902,7 @@ async def mcp_status():
         return {
             "status": "operational",
             "transport_initialized": transport._initialized,
-            "mcp_manager_available": transport.mcp_manager is not None,
+            "mcp_manager_available": transport.mcp_client is not None,
             "timestamp": datetime.utcnow().isoformat(),
             **session_info
         }

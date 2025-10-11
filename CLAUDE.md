@@ -165,6 +165,12 @@ All endpoints support both MCP and Direct modes transparently:
 - `GET /api/enhanced/historical-data` - Intelligent routing
 - `GET /api/enhanced/compare-sources` - Debug tool for data comparison
 
+### MCP Integration (Oct 11, 2025)
+- `POST /api/mcp` - **NEW**: HTTP MCP endpoint for OpenAI Agent Builder integration
+- `POST /mcp/http` - Alternative HTTP MCP endpoint
+- `WS /mcp` - WebSocket MCP endpoint for real-time streaming
+- `GET /mcp/status` - MCP transport status and active sessions
+
 ### Voice & AI
 - `GET /elevenlabs/signed-url` - WebSocket URL for voice streaming
 - `POST /ask` - Text-only Claude fallback
@@ -387,6 +393,16 @@ const { searchResults, isSearching, searchError, hasSearched } = useSymbolSearch
 - **Chart Navigation**: Voice-controlled symbol switching
 
 ## Recent Updates
+
+### HTTP MCP Integration for OpenAI Agent Builder (Oct 11, 2025)
+- **HTTP MCP Endpoint**: New `POST /api/mcp` endpoint for OpenAI Agent Builder integration
+- **Dual Transport Architecture**: Both WebSocket (`/mcp`) and HTTP (`/api/mcp`) access to MCP tools
+- **JSON-RPC 2.0 Compliant**: Full standards compliance for maximum compatibility
+- **35+ Market Data Tools**: Access to comprehensive market analysis via HTTP
+- **Authentication Support**: Bearer token and query parameter authentication methods
+- **Agent Builder Ready**: Direct integration with OpenAI Agent Builder interface
+- **Test Suite**: Comprehensive testing with `test_mcp_http_endpoint.py` and `test_mcp_dual_transport.py`
+- **Documentation**: Complete integration guide in `MCP_HTTP_INTEGRATION.md`
 
 ### Alpaca Symbol Search Integration (Sep 3, 2025)
 - **Semantic Voice Commands**: "show me Microsoft" now correctly resolves to MSFT via Alpaca API
