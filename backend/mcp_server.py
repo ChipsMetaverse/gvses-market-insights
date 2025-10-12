@@ -3,6 +3,8 @@ Enhanced Voice Assistant MCP Server
 ====================================
 Implements an MCP server with voice capabilities, WebSocket support,
 and Supabase integration for conversation persistence.
+
+Production deployment: Oct 11, 2025 - v2.0.2 - MCP HTTP endpoint enabled
 """
 
 from __future__ import annotations
