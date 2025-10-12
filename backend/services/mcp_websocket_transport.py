@@ -332,6 +332,109 @@ class MCPWebSocketTransport:
             }
             await session.send_message(error_response)
     
+    async def handle_request(self, rpc_request: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle HTTP MCP request (JSON-RPC 2.0 format).
+        This method provides HTTP access to the same MCP functionality available via WebSocket.
+        """
+        try:
+            method = rpc_request.get("method")
+            params = rpc_request.get("params", {})
+            msg_id = rpc_request.get("id", "http-request")
+            
+            # Initialize transport if needed
+            if not self._initialized:
+                await self.initialize()
+            
+            if method == "initialize":
+                # Return initialization response
+                return {
+                    "jsonrpc": "2.0",
+                    "result": {
+                        "serverInfo": {
+                            "name": "GVSES Market MCP Server",
+                            "version": "2.0.1"
+                        },
+                        "capabilities": {
+                            "tools": {"listChanged": False}
+                        }
+                    },
+                    "id": msg_id
+                }
+            
+            elif method == "tools/list":
+                # List available tools
+                if self.mcp_client:
+                    tools_response = await self.mcp_client.list_tools()
+                    return {
+                        "jsonrpc": "2.0",
+                        "result": tools_response.get("result", {"tools": []}),
+                        "id": msg_id
+                    }
+                else:
+                    return {
+                        "jsonrpc": "2.0",
+                        "result": {"tools": []},
+                        "id": msg_id
+                    }
+            
+            elif method == "tools/call":
+                # Call a tool
+                tool_name = params.get("name")
+                tool_arguments = params.get("arguments", {})
+                
+                if not tool_name:
+                    return {
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32602,
+                            "message": "Invalid params: tool name is required"
+                        },
+                        "id": msg_id
+                    }
+                
+                if self.mcp_client:
+                    tool_result = await self.mcp_client.call_tool(tool_name, tool_arguments)
+                    return {
+                        "jsonrpc": "2.0",
+                        "result": {
+                            "content": [{"type": "text", "text": str(tool_result)}]
+                        },
+                        "id": msg_id
+                    }
+                else:
+                    return {
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32603,
+                            "message": "MCP client not available"
+                        },
+                        "id": msg_id
+                    }
+            
+            else:
+                # Method not supported
+                return {
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32601,
+                        "message": f"Method not found: {method}"
+                    },
+                    "id": msg_id
+                }
+                
+        except Exception as e:
+            logger.error(f"Error handling HTTP MCP request: {e}")
+            return {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": str(e)
+                },
+                "id": rpc_request.get("id", "http-request")
+            }
+    
     async def disconnect_session(self, session_id: str) -> None:
         """Handle WebSocket disconnection."""
         if session_id in self.sessions:
