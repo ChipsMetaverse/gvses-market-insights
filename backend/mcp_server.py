@@ -82,7 +82,7 @@ else:
     logger.warning("Supabase credentials not found - some features may not work")
 
 # Global market data service instance
-market_service = MarketServiceFactory.create_service()
+market_service = MarketServiceFactory.get_service()
 
 # Voice session management
 active_voice_sessions = {}
