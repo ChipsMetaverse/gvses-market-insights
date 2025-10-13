@@ -1,7 +1,7 @@
 {
   "name": "claude-voice-assistant-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@elevenlabs/client": "^0.2.0",
-    "openai-realtime-api": "^1.0.8",
+    "@openai/chatkit-react": "^1.1.1",
     "@radix-ui/react-progress": "^1.1.7",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-slot": "^1.2.3",
@@ -26,6 +26,7 @@
     "clsx": "^2.1.1",
     "lightweight-charts": "^5.0.8",
     "lucide-react": "^0.541.0",
+    "openai-realtime-api": "^1.0.8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
