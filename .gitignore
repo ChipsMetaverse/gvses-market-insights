@@ -57,6 +57,10 @@ dist-ssr/
 .env.development.local
 .env.test.local
 .env.production.local
+backend/.env.production
+frontend/.env.production
+# Allow .example files
+!**/.env*.example
 
 # IDE
 .vscode/
@@ -116,3 +120,111 @@ lt.log
 
 # Fly.io
 fly.toml.bak
+
+# Test and investigation artifacts
+test_*.py
+test_*.js
+test_*.sh
+test_*.cjs
+investigate_*.py
+investigate_*.js
+explore_*.py
+fix_*.py
+deploy_*.py
+verify_*.py
+comprehensive_*.py
+
+# Investigation and report docs
+AGENTS_SDK_MIGRATION.md
+AGENT_BUILDER_INVESTIGATION_COMPLETE.md
+AGENT_BUILDER_PERFORMANCE_REPORT.md
+AGENT_SDK_INVESTIGATION_RESULTS.md
+BACKEND_LOGGING_GUIDE.md
+BROWSER_TEST_QUICK_START.md
+CHART_ANALYSIS_PANEL_TEST_REPORT.md
+CHART_NOT_LOADING_FIX.md
+CHART_SYNC_FIX_SUMMARY.md
+CHATKIT_INITIALIZATION_FIX.md
+CHATKIT_INTEGRATION_COMPLETE.md
+CHATKIT_INTEGRATION_SUMMARY.md
+COMPANY_INFO_FIX_SUMMARY.md
+DATA_PERSISTENCE_COMPLETE.md
+DRAWING_TOOLS_IMPLEMENTATION.md
+DRAWING_TOOLS_STATUS.md
+ENHANCED_TRADING_ASSISTANT_PLAN.md
+IDEAL_AGENT_ANALYSIS.md
+INITIALIZATION_FIXED.md
+INTEGRATION_SUMMARY.md
+INVESTIGATION_COMPLETE.md
+MANUAL_TEST_GUIDE.md
+PHASE2_COMPLETE.md
+PHASE2_REALTIME_SDK_COMPLETE.md
+PHASE2_SUMMARY.md
+PRODUCTION_NETWORK_ANALYSIS_REPORT.md
+PRODUCTION_VERIFICATION_REPORT.md
+RAG_AND_TOOLS_SUMMARY.md
+READY_TO_TEST.md
+SDK_INPUT_RESPONSE_FLOW.md
+SDK_SYSTEM_PROMPTS.md
+SDK_TOOL_USAGE_ANALYSIS.md
+VOICE_FUNCTIONALITY_VERIFICATION_REPORT.md
+idealagent_updated.md
+log.md
+progress.md
+research.md
+setup_supabase.md
+
+# Screenshots and images
+*.png
+*.jpg
+*.jpeg
+agent_builder_screenshots/
+voice_test_screenshots/
+production_investigation/
+production_test_artifacts/
+
+# Playwright test artifacts
+.playwright-mcp/
+.playwright-production/
+frontend/playwright-report/
+frontend/test-results/
+playwright-report/
+
+# Test results and outputs
+*_results*.json
+*_test_*.json
+audio_processor_logs_*.json
+console_inspection_report.json
+comprehensive_test_results.json
+localhost_polling_test_result.json
+production_analysis_results.json
+production_verification_results*.json
+
+# Widget files
+*.widget
+
+# Utility scripts
+manage_logs.sh
+console_error_inspector.js
+debug-with-puppeteer.js
+upload_video.py
+
+# Supabase migrations (if not part of main app)
+supabase/
+
+# Additional test/utility files
+focused_voice_verification.py
+quick_localhost_test.py
+setup_supabase_tables.py
+test-console-errors.js
+backend/analyze.md
+backend/chart_control_api.py
+backend/fly.toml
+backend/sse-server.js
+backend/websocket-relay-unified-updated.ts
+frontend/tests/*.spec.ts
+market-mcp-server/AGENT_BUILDER_CONFIGURATION.md
+market-mcp-server/configure_agent_builder.py
+market-mcp-server/sse-server-old.js
+market-mcp-server/take_screenshot.py
+market-mcp-server/agent_builder_screenshot*.png

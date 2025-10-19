@@ -8,8 +8,10 @@ Hybrid factory that provides BOTH Direct API and MCP services for optimal perfor
 
 import logging
 import os
-from typing import Any, Optional
+from typing import Any, Optional, Dict, List
 import asyncio
+from datetime import datetime, timezone, timedelta
+from services.database_service import get_database_service
 
 logger = logging.getLogger(__name__)
 
@@ -125,10 +127,32 @@ class MarketServiceWrapper:
         return quote
     
     async def get_stock_history(self, symbol: str, days: int = 50) -> dict:
-        """Get stock history - includes crypto symbol mapping and intelligent routing."""
+        """Get stock history - includes caching, crypto symbol mapping and intelligent routing."""
         
         # Map crypto symbols to proper format
         mapped_symbol, asset_type = self._map_crypto_symbol(symbol)
+        
+        # Check cache first
+        try:
+            db_service = get_database_service()
+            cached_candles = await db_service.get_market_candles(
+                symbol=symbol.upper(),
+                timeframe="1d",
+                start_time=datetime.now(timezone.utc) - timedelta(days=days),
+                limit=days * 2  # Get extra in case of weekends/holidays
+            )
+            
+            if cached_candles and len(cached_candles) >= days * 0.7:  # At least 70% of expected data
+                logger.info(f"Using cached data for {symbol}: {len(cached_candles)} candles")
+                return {
+                    "symbol": symbol.upper(),
+                    "candles": cached_candles,
+                    "period": f"{days}D",
+                    "data_source": "cache",
+                    "cached": True
+                }
+        except Exception as e:
+            logger.warning(f"Cache lookup failed: {e}")
         
         # Try Alpaca first for chart data (professional-grade) - but only for stocks
         if asset_type == 'stock':
@@ -139,6 +163,9 @@ class MarketServiceWrapper:
                 if ALPACA_AVAILABLE:
                     logger.info(f"Using Alpaca for {mapped_symbol} chart data")
                     candles = await get_ohlcv_from_alpaca(mapped_symbol, days)
+                    
+                    # Cache the data asynchronously
+                    asyncio.create_task(self._cache_candles(symbol.upper(), "1d", candles, "alpaca"))
                     
                     return {
                         "symbol": symbol.upper(),
@@ -170,6 +197,10 @@ class MarketServiceWrapper:
             range_str = "5Y"
         
         candles = await self._get_ohlcv(mapped_symbol, range_str)
+        
+        # Cache the data asynchronously
+        asyncio.create_task(self._cache_candles(symbol.upper(), "1d", candles, "yahoo_mcp"))
+        
         result = {
             "symbol": symbol.upper(),
             "candles": candles,
@@ -186,11 +217,39 @@ class MarketServiceWrapper:
         return result
     
     async def get_stock_news(self, symbol: str, limit: int = 10) -> dict:
-        """Get stock news via MCP (includes CNBC and Yahoo)."""
+        """Get stock news via MCP (includes CNBC and Yahoo) with caching."""
+        
+        # Check cache first
+        try:
+            db_service = get_database_service()
+            cached_news = await db_service.get_market_news(
+                symbol=symbol.upper(),
+                days=1,  # Get news from last day
+                limit=limit
+            )
+            
+            if cached_news and len(cached_news) >= limit * 0.5:  # At least 50% of requested articles
+                logger.info(f"Using cached news for {symbol}: {len(cached_news)} articles")
+                return {
+                    "symbol": symbol.upper(),
+                    "articles": cached_news,
+                    "total": len(cached_news),
+                    "data_sources": ["Cache"],
+                    "data_source": "cache",
+                    "cached": True
+                }
+        except Exception as e:
+            logger.warning(f"News cache lookup failed: {e}")
+        
+        # Fetch fresh news
         news = await self._get_news(symbol, limit)
         
         # Handle the "items" field from get_related_news
         articles = news.get("articles", news.get("news", news.get("items", [])))
+        
+        # Cache the news asynchronously
+        if articles:
+            asyncio.create_task(self._cache_news(articles, symbol.upper()))
         
         # Ensure consistent format
         return {
@@ -397,11 +456,8 @@ class MarketServiceWrapper:
                     # Try to get movers from MCP
                     movers = {}
                     try:
-                        from mcp_client import get_mcp_client
-                        client = get_mcp_client()
-                        
-                        if not client._initialized:
-                            await client.start()
+                        from .direct_mcp_client import get_direct_mcp_client
+                        client = get_direct_mcp_client()
                         
                         # Get CNBC pre-market movers
                         cnbc_movers = await client.call_tool("get_cnbc_movers", {})
@@ -423,11 +479,8 @@ class MarketServiceWrapper:
         # Fallback to MCP market overview
         try:
             logger.info("Using MCP for market overview (Yahoo Finance)")
-            from mcp_client import get_mcp_client
-            client = get_mcp_client()
-            
-            if not client._initialized:
-                await client.start()
+            from .direct_mcp_client import get_direct_mcp_client
+            client = get_direct_mcp_client()
             
             # Get comprehensive market overview from MCP
             overview = await client.call_tool("get_market_overview", {})
@@ -441,6 +494,24 @@ class MarketServiceWrapper:
         
         # Return error if both methods fail
         raise ValueError("Unable to fetch market overview from any source")
+    
+    async def _cache_candles(self, symbol: str, timeframe: str, candles: List[Dict], source: str):
+        """Helper method to cache candles asynchronously"""
+        try:
+            db_service = get_database_service()
+            count = await db_service.save_market_candles(symbol, timeframe, candles, source)
+            logger.info(f"Cached {count} candles for {symbol} from {source}")
+        except Exception as e:
+            logger.warning(f"Failed to cache candles for {symbol}: {e}")
+    
+    async def _cache_news(self, articles: List[Dict], symbol: Optional[str] = None):
+        """Helper method to cache news asynchronously"""
+        try:
+            db_service = get_database_service()
+            count = await db_service.save_market_news(articles, symbol)
+            logger.info(f"Cached {count} news articles for {symbol or 'general'}")
+        except Exception as e:
+            logger.warning(f"Failed to cache news: {e}")
 
 
 class HybridMarketService:

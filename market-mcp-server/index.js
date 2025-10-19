@@ -484,6 +484,105 @@ class MarketMCPServer {
               duration: { type: 'number', description: 'Stream duration in seconds' }
             }
           }
+        },
+
+        // Chart Control Tools
+        {
+          name: 'change_chart_symbol',
+          description: 'Change the symbol displayed on the trading chart',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              symbol: { type: 'string', description: 'Stock ticker symbol to display (e.g., AAPL, TSLA)' }
+            },
+            required: ['symbol']
+          }
+        },
+
+        {
+          name: 'set_chart_timeframe',
+          description: 'Set the timeframe for chart data display',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              timeframe: { 
+                type: 'string', 
+                enum: ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M'],
+                description: 'Chart timeframe (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1M)' 
+              }
+            },
+            required: ['timeframe']
+          }
+        },
+
+        {
+          name: 'toggle_chart_indicator',
+          description: 'Toggle technical indicators on/off on the chart',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              indicator: { 
+                type: 'string',
+                enum: ['sma', 'ema', 'bollinger', 'rsi', 'macd', 'volume'],
+                description: 'Technical indicator to toggle'
+              },
+              enabled: { type: 'boolean', description: 'Whether to show or hide the indicator' },
+              period: { type: 'number', description: 'Period for the indicator (optional, default varies by indicator)' }
+            },
+            required: ['indicator', 'enabled']
+          }
+        },
+
+        {
+          name: 'highlight_chart_pattern',
+          description: 'Highlight chart patterns or levels on the trading chart',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              pattern: {
+                type: 'string',
+                enum: ['support', 'resistance', 'trendline', 'fibonacci', 'channel'],
+                description: 'Chart pattern or level type to highlight'
+              },
+              price: { type: 'number', description: 'Price level to highlight (for support/resistance)' },
+              startTime: { type: 'string', description: 'Start time for pattern (ISO string)' },
+              endTime: { type: 'string', description: 'End time for pattern (ISO string)' }
+            },
+            required: ['pattern']
+          }
+        },
+
+        {
+          name: 'capture_chart_snapshot',
+          description: 'Capture a screenshot of the current chart state',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              width: { type: 'number', description: 'Screenshot width in pixels (default: 1200)' },
+              height: { type: 'number', description: 'Screenshot height in pixels (default: 800)' },
+              format: { type: 'string', enum: ['png', 'jpeg'], description: 'Image format (default: png)' }
+            }
+          }
+        },
+
+        {
+          name: 'set_chart_style',
+          description: 'Change the visual style of the trading chart',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              chartType: {
+                type: 'string',
+                enum: ['candlestick', 'line', 'area', 'bars'],
+                description: 'Chart display type'
+              },
+              theme: {
+                type: 'string',
+                enum: ['light', 'dark'],
+                description: 'Chart color theme'
+              }
+            }
+          }
         }
       ]
     }));
@@ -633,6 +732,31 @@ class MarketMCPServer {
             
           case 'stream_price_alerts':
             result = await this.streamPriceAlerts(args);
+            break;
+
+          // Chart Control Tools
+          case 'change_chart_symbol':
+            result = await this.changeChartSymbol(args);
+            break;
+
+          case 'set_chart_timeframe':
+            result = await this.setChartTimeframe(args);
+            break;
+
+          case 'toggle_chart_indicator':
+            result = await this.toggleChartIndicator(args);
+            break;
+
+          case 'highlight_chart_pattern':
+            result = await this.highlightChartPattern(args);
+            break;
+
+          case 'capture_chart_snapshot':
+            result = await this.captureChartSnapshot(args);
+            break;
+
+          case 'set_chart_style':
+            result = await this.setChartStyle(args);
             break;
             
           default:
@@ -2130,6 +2254,222 @@ class MarketMCPServer {
       message: 'Advanced pattern recognition would require specialized algorithms',
       timestamp: new Date().toISOString()
     };
+  }
+
+  // Chart Control Methods
+  async changeChartSymbol(args) {
+    const { symbol } = args;
+    
+    try {
+      // Call the Chart Control API to change symbol (production URL for MCP integration)
+      const backendUrl = process.env.BACKEND_URL || 'https://gvses-ai-market-assistant.fly.dev';
+      const response = await fetch(`${backendUrl}/api/chart/change-symbol`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: symbol.toUpperCase() })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Chart service error: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return {
+        action: 'change_symbol',
+        symbol: symbol.toUpperCase(),
+        status: 'success',
+        message: `Chart symbol changed to ${symbol.toUpperCase()}`,
+        timestamp: new Date().toISOString(),
+        ...result
+      };
+    } catch (error) {
+      return {
+        action: 'change_symbol',
+        symbol: symbol.toUpperCase(),
+        status: 'error',
+        message: `Failed to change chart symbol: ${error.message}`,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  async setChartTimeframe(args) {
+    const { timeframe } = args;
+    
+    try {
+      const backendUrl = process.env.BACKEND_URL || 'https://gvses-ai-market-assistant.fly.dev';
+      const response = await fetch(`${backendUrl}/api/chart/set-timeframe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timeframe })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Chart service error: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return {
+        action: 'set_timeframe',
+        timeframe,
+        status: 'success',
+        message: `Chart timeframe set to ${timeframe}`,
+        timestamp: new Date().toISOString(),
+        ...result
+      };
+    } catch (error) {
+      return {
+        action: 'set_timeframe',
+        timeframe,
+        status: 'error',
+        message: `Failed to set chart timeframe: ${error.message}`,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  async toggleChartIndicator(args) {
+    const { indicator, enabled, period } = args;
+    
+    try {
+      const backendUrl = process.env.BACKEND_URL || 'https://gvses-ai-market-assistant.fly.dev';
+      const response = await fetch(`${backendUrl}/api/chart/toggle-indicator`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ indicator, enabled })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Chart service error: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return {
+        action: 'toggle_indicator',
+        indicator,
+        enabled,
+        period,
+        status: 'success',
+        message: `${indicator.toUpperCase()} indicator ${enabled ? 'enabled' : 'disabled'}`,
+        timestamp: new Date().toISOString(),
+        ...result
+      };
+    } catch (error) {
+      return {
+        action: 'toggle_indicator',
+        indicator,
+        enabled,
+        status: 'error',
+        message: `Failed to toggle indicator: ${error.message}`,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  async highlightChartPattern(args) {
+    const { pattern, price, startTime, endTime } = args;
+    
+    try {
+      const response = await fetch('http://localhost:3001/api/chart/highlight-pattern', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pattern, price, startTime, endTime })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Chart service error: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return {
+        action: 'highlight_pattern',
+        pattern,
+        price,
+        status: 'success',
+        message: `${pattern} pattern highlighted on chart`,
+        timestamp: new Date().toISOString(),
+        ...result
+      };
+    } catch (error) {
+      return {
+        action: 'highlight_pattern',
+        pattern,
+        status: 'error',
+        message: `Failed to highlight pattern: ${error.message}`,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  async captureChartSnapshot(args) {
+    const { width = 1200, height = 800, format = 'png' } = args;
+    
+    try {
+      const backendUrl = process.env.BACKEND_URL || 'https://gvses-ai-market-assistant.fly.dev';
+      const response = await fetch(`${backendUrl}/api/chart/capture-snapshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ include_data: args.include_data || false })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Chart service error: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return {
+        action: 'capture_snapshot',
+        dimensions: { width, height },
+        format,
+        status: 'success',
+        message: 'Chart snapshot captured successfully',
+        timestamp: new Date().toISOString(),
+        ...result
+      };
+    } catch (error) {
+      return {
+        action: 'capture_snapshot',
+        status: 'error',
+        message: `Failed to capture chart snapshot: ${error.message}`,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  async setChartStyle(args) {
+    const { chartType, theme } = args;
+    
+    try {
+      const response = await fetch('http://localhost:3001/api/chart/set-style', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chartType, theme })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Chart service error: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return {
+        action: 'set_style',
+        chartType,
+        theme,
+        status: 'success',
+        message: `Chart style updated: ${chartType || 'unchanged'} ${theme ? `in ${theme} theme` : ''}`,
+        timestamp: new Date().toISOString(),
+        ...result
+      };
+    } catch (error) {
+      return {
+        action: 'set_style',
+        chartType,
+        theme,
+        status: 'error',
+        message: `Failed to set chart style: ${error.message}`,
+        timestamp: new Date().toISOString()
+      };
+    }
   }
   
   async run() {

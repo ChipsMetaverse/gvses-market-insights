@@ -11,7 +11,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from mcp_client import get_mcp_client
+from .direct_mcp_client import get_direct_mcp_client
 
 logger = logging.getLogger(__name__)
 
@@ -21,20 +21,30 @@ async def get_related_news(symbol: str, limit: int = 6) -> dict:
     
     try:
         # Get real news from MCP server  
-        client = get_mcp_client()
-        # First try to get stock-specific news, then general market news
+        client = get_direct_mcp_client()
+        # Get market news (MCP server handles symbol-specific news internally)
         result = await client.call_tool("get_market_news", {
-            "category": "stocks", 
-            "limit": limit,
-            "includeCNBC": True
+            "limit": limit
         })
         
         logger.info(f"MCP news result type: {type(result)}")
+        logger.info(f"MCP raw result keys: {result.keys() if isinstance(result, dict) else 'not dict'}")
         
-        # Handle different response formats
+        # Handle MCP response format: result.result.content[0].text contains JSON string
         news_items = []
-        if result:
-            if isinstance(result, dict) and "articles" in result:
+        if result and isinstance(result, dict):
+            # Extract the actual data from MCP response structure
+            if "result" in result and "content" in result["result"]:
+                content = result["result"]["content"]
+                if content and len(content) > 0 and "text" in content[0]:
+                    import json
+                    json_text = content[0]["text"]
+                    logger.info(f"Parsing JSON text: {json_text[:200]}...")
+                    news_data = json.loads(json_text)
+                    news_items = news_data.get("articles", [])
+                    logger.info(f"Extracted {len(news_items)} news articles")
+            # Fallback for direct format
+            elif "articles" in result:
                 news_items = result["articles"]
             elif isinstance(result, list):
                 news_items = result
@@ -121,27 +131,37 @@ async def get_related_news(symbol: str, limit: int = 6) -> dict:
                 elif "fund" in title_lower or "institution" in title_lower:
                     image_category = "institutional"
                 
+                published_at = news_item.get("publishedAt", news_item.get("published_at", datetime.now().isoformat()))
+                description = news_item.get("description", news_item.get("summary", ""))
+                url = news_item.get("url", news_item.get("link", "#"))
+                
                 items.append({
+                    # Standard format (for dashboard)
                     "id": f"{symbol}-news-{i+1}",
                     "title": news_item.get("title", ""),
                     "source": news_item.get("source", news_item.get("publisher", "Unknown")),
-                    "published_at": news_item.get("publishedAt", news_item.get("published_at", datetime.now().isoformat())),
-                    "url": news_item.get("url", news_item.get("link", "#")),
+                    "published_at": published_at,
+                    "url": url,
                     "image_url": news_item.get("image", news_item.get("urlToImage", image_urls.get(image_category, image_urls["default"]))),
-                    "description": news_item.get("description", news_item.get("summary", "")),
-                    "tickers": news_item.get("tickers", [symbol])
+                    "description": description,
+                    "tickers": news_item.get("tickers", [symbol]),
+                    # Frontend-compatible aliases
+                    "link": url,
+                    "published": published_at,
+                    "summary": description,
+                    "time": news_item.get("time", "")
                 })
             
-            return {"items": items}
+            return {"articles": items, "items": items}  # Return both for compatibility
         else:
             # No news available - return empty list instead of fake news
             logger.info(f"No news available for {symbol}")
-            return {"items": []}
+            return {"articles": [], "items": []}
             
     except Exception as e:
         logger.error(f"Failed to fetch real news for {symbol}: {e}")
         # Return empty news list instead of fake data
-        return {"items": []}
+        return {"articles": [], "items": []}
 
 
 async def fetch_news_from_provider(symbol: str, limit: int = 6) -> List[Dict[str, Any]]:

@@ -16,8 +16,8 @@ async def test_responses_api():
     
     query = "Give me entry points for swing trades on AAPL tomorrow"
     
-    # Convert messages to Responses API format
-    messages = [
+    # Convert messages to proper Responses API format
+    input_items = [
         {
             "role": "user",
             "content": [
@@ -45,12 +45,14 @@ Question: {query}"""
         }
     ]
     
-    # Use same parameters as in agent_orchestrator
+    # Use same parameters as in agent_orchestrator (consistent format)
     response = await client.responses.create(
-        model="gpt-5-mini",
-        input=messages,
-        tools=[],
-        max_output_tokens=1500
+        model="gpt-4o-mini",  # Match production model
+        input=input_items,    # Use 'input' parameter with proper format
+        tools=[],             # Empty tools for this test
+        max_output_tokens=1500,
+        temperature=0.3,      # Match production temperature
+        store=True           # Enable conversation storage
     )
     
     print("Response type:", type(response))

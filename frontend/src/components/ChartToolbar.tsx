@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import './ChartToolbar.css'
 
 export interface ChartToolbarProps {
@@ -18,6 +18,12 @@ export function ChartToolbar({
   const [chartType, setChartType] = useState('candlestick')
   const [showIndicators, setShowIndicators] = useState(false)
   const [showDrawingTools, setShowDrawingTools] = useState(false)
+  
+  // Refs for auto-hide functionality
+  const drawingToolsRef = useRef<HTMLDivElement>(null)
+  const indicatorsRef = useRef<HTMLDivElement>(null)
+  const drawingButtonRef = useRef<HTMLButtonElement>(null)
+  const indicatorsButtonRef = useRef<HTMLButtonElement>(null)
 
   const drawingTools = [
     { id: 'trendline', icon: '📈', label: 'Trend Line' },
@@ -55,6 +61,57 @@ export function ChartToolbar({
     onChartTypeChange?.(typeId)
   }
 
+  // Auto-hide functionality
+  useEffect(() => {
+    const handleMouseLeave = (panelType: 'drawing' | 'indicators') => {
+      return (event: MouseEvent) => {
+        const currentTarget = event.currentTarget as HTMLElement
+        const relatedTarget = event.relatedTarget as HTMLElement
+        
+        // Don't hide if mouse moved to the related button or is still within the panel
+        if (panelType === 'drawing') {
+          if (relatedTarget && (
+            drawingButtonRef.current?.contains(relatedTarget) ||
+            currentTarget.contains(relatedTarget)
+          )) {
+            return
+          }
+          setShowDrawingTools(false)
+        } else if (panelType === 'indicators') {
+          if (relatedTarget && (
+            indicatorsButtonRef.current?.contains(relatedTarget) ||
+            currentTarget.contains(relatedTarget)
+          )) {
+            return
+          }
+          setShowIndicators(false)
+        }
+      }
+    }
+
+    // Attach mouse leave events
+    const drawingPanel = drawingToolsRef.current
+    const indicatorsPanel = indicatorsRef.current
+    const cleanupFunctions: (() => void)[] = []
+    
+    if (drawingPanel && showDrawingTools) {
+      const drawingLeaveHandler = handleMouseLeave('drawing')
+      drawingPanel.addEventListener('mouseleave', drawingLeaveHandler)
+      cleanupFunctions.push(() => drawingPanel.removeEventListener('mouseleave', drawingLeaveHandler))
+    }
+    
+    if (indicatorsPanel && showIndicators) {
+      const indicatorsLeaveHandler = handleMouseLeave('indicators')
+      indicatorsPanel.addEventListener('mouseleave', indicatorsLeaveHandler)
+      cleanupFunctions.push(() => indicatorsPanel.removeEventListener('mouseleave', indicatorsLeaveHandler))
+    }
+
+    // Return cleanup function that removes all event listeners
+    return () => {
+      cleanupFunctions.forEach(cleanup => cleanup())
+    }
+  }, [showDrawingTools, showIndicators])
+
   return (
     <div className="chart-toolbar">
       {/* Chart Type Selector */}
@@ -85,6 +142,7 @@ export function ChartToolbar({
       {/* Drawing Tools */}
       <div className="toolbar-section">
         <button
+          ref={drawingButtonRef}
           className={`toolbar-button ${showDrawingTools ? 'active' : ''}`}
           onClick={() => setShowDrawingTools(!showDrawingTools)}
           title="Drawing Tools"
@@ -93,7 +151,7 @@ export function ChartToolbar({
           <span className="button-label">Draw</span>
         </button>
         {showDrawingTools && (
-          <div className="toolbar-dropdown-panel drawing-tools-panel">
+          <div ref={drawingToolsRef} className="toolbar-dropdown-panel drawing-tools-panel">
             <div className="panel-header">Drawing Tools</div>
             <div className="tool-grid">
               {drawingTools.map(tool => (
@@ -117,6 +175,7 @@ export function ChartToolbar({
       {/* Indicators */}
       <div className="toolbar-section">
         <button
+          ref={indicatorsButtonRef}
           className={`toolbar-button ${showIndicators ? 'active' : ''}`}
           onClick={() => setShowIndicators(!showIndicators)}
           title="Indicators"
@@ -125,7 +184,7 @@ export function ChartToolbar({
           <span className="button-label">Indicators</span>
         </button>
         {showIndicators && (
-          <div className="toolbar-dropdown-panel indicators-panel">
+          <div ref={indicatorsRef} className="toolbar-dropdown-panel indicators-panel">
             <div className="panel-header">Technical Indicators</div>
             <div className="indicator-list">
               {indicators.map(indicator => (

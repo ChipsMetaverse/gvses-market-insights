@@ -368,9 +368,184 @@ graph TB
     style IC fill:#ffebee
 ```
 
+## Comprehensive Testing Flow (Oct 16, 2025)
+
+```mermaid
+graph TB
+    subgraph "Testing Strategy - 4 Phase Approach"
+        Phase1[Phase 1: Voice Pipeline Debug<br/>- Microphone permission timeout<br/>- React state synchronization<br/>- Chat UI modernization]
+        Phase2[Phase 2: Backend Data Pipeline<br/>- MCP news service empty data<br/>- Nested JSON parsing fixes<br/>- Chart Analysis Panel loading]
+        Phase3[Phase 3: UI/UX Enhancements<br/>- Auto-hide Draw/Indicators panels<br/>- Mouse leave detection<br/>- Interaction preservation]
+        Phase4[Phase 4: End-to-End Validation<br/>- Voice infrastructure testing<br/>- Market data integration<br/>- Component interaction verification]
+        
+        Phase1 --> Phase2
+        Phase2 --> Phase3  
+        Phase3 --> Phase4
+    end
+
+    subgraph "Testing Tools & Artifacts"
+        PlaywrightMCP[Playwright MCP Server<br/>Browser automation]
+        PythonTests[Python Test Suite<br/>Backend API validation]
+        Screenshots[Screenshot Documentation<br/>Before/after evidence]
+        TestReports[Comprehensive Reports<br/>JSON + Markdown output]
+        
+        Phase4 --> PlaywrightMCP
+        Phase4 --> PythonTests
+        PlaywrightMCP --> Screenshots
+        PythonTests --> TestReports
+    end
+
+    style Phase1 fill:#ffebee
+    style Phase2 fill:#e8f5e9
+    style Phase3 fill:#fff3e0
+    style Phase4 fill:#e3f2fd
+```
+
+## Component Failure Patterns & Debugging
+
+```mermaid
+graph LR
+    subgraph "Voice Pipeline Failures"
+        VF1[Microphone Permission<br/>getUserMedia() hanging<br/>Solution: Timeout wrapper]
+        VF2[State Synchronization<br/>OpenAI connected but UI shows disconnected<br/>Solution: Async callback delays]
+        VF3[Chat UI Poor UX<br/>Dark overlays instead of bubbles<br/>Solution: Modern CSS with data-role]
+        VF4[TTS Audio Missing<br/>Text responses without audio<br/>Solution: Connection retry mechanism]
+    end
+
+    subgraph "Backend Data Failures"
+        BF1[MCP News Empty<br/>0 articles returned<br/>Solution: Nested JSON parsing]
+        BF2[Historical Data Missing<br/>OHLCV data unavailable<br/>Solution: result.result.content[0].text]
+        BF3[Chart Analysis Blank<br/>Panel shows placeholder data<br/>Solution: MCP response structure fix]
+    end
+
+    subgraph "Testing Resolution Flow"
+        TR1[Identify Symptom<br/>UI behavior or API response]
+        TR2[Trace Root Cause<br/>Network/parsing/state issue]
+        TR3[Implement Fix<br/>Targeted solution]
+        TR4[Verify End-to-End<br/>Component + integration test]
+        
+        TR1 --> TR2
+        TR2 --> TR3
+        TR3 --> TR4
+    end
+
+    VF1 --> TR1
+    BF1 --> TR1
+    TR4 --> Documentation[Update Architecture Docs]
+
+    style VF1 fill:#ffcdd2
+    style BF1 fill:#ffcdd2
+    style TR4 fill:#c8e6c9
+```
+
+## Testing Infrastructure Architecture
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant TestAgent as Test Agent
+    participant PlaywrightMCP as Playwright MCP
+    participant Browser as Browser (localhost:5174)
+    participant BackendAPI as Backend API
+    participant TestReports as Test Reports
+    
+    Dev->>TestAgent: Request comprehensive testing
+    TestAgent->>PlaywrightMCP: Launch browser automation
+    PlaywrightMCP->>Browser: Navigate & interact
+    Browser->>BackendAPI: API calls during test
+    BackendAPI-->>Browser: Response data
+    Browser-->>PlaywrightMCP: UI state capture
+    PlaywrightMCP-->>TestAgent: Screenshots + logs
+    TestAgent->>TestReports: Generate documentation
+    TestReports-->>Dev: Comprehensive report with evidence
+
+    Note over TestAgent,TestReports: All tests generate:<br/>- Screenshots<br/>- JSON results<br/>- Markdown reports<br/>- Performance metrics
+```
+
+## Testing Templates for Future Debugging
+
+### Component Failure Testing Checklist
+
+```mermaid
+graph TD
+    subgraph "Pre-Test Setup"
+        S1[✅ Backend running on :8000]
+        S2[✅ Frontend running on :5174] 
+        S3[✅ MCP servers operational]
+        S4[✅ API keys configured]
+    end
+    
+    subgraph "Test Execution Pattern"
+        T1[Manual UI Inspection<br/>Check visible symptoms]
+        T2[Browser Console Analysis<br/>JavaScript errors & network]
+        T3[Backend Logs Review<br/>API responses & MCP parsing]
+        T4[Component-Specific Testing<br/>Isolated functionality]
+        T5[Integration Testing<br/>End-to-end workflows]
+        
+        T1 --> T2
+        T2 --> T3
+        T3 --> T4
+        T4 --> T5
+    end
+    
+    subgraph "Documentation Requirements"
+        D1[Before/After Screenshots]
+        D2[Error Messages & Logs]
+        D3[Performance Metrics]
+        D4[Root Cause Analysis]
+        D5[Solution Implementation]
+        
+        T5 --> D1
+        D1 --> D2
+        D2 --> D3
+        D3 --> D4
+        D4 --> D5
+    end
+    
+    style S1 fill:#c8e6c9
+    style T1 fill:#fff3e0
+    style D1 fill:#e3f2fd
+```
+
+### Common Debugging Commands
+
+```bash
+# Backend Health Check
+curl http://localhost:8000/health
+
+# Test Specific Endpoints
+curl "http://localhost:8000/api/stock-price?symbol=TSLA"
+curl "http://localhost:8000/api/stock-news?symbol=TSLA"
+
+# Frontend Build Status  
+cd frontend && npm run build
+
+# MCP Server Status
+cd market-mcp-server && npm test
+
+# Voice Pipeline Testing
+python backend/test_voice_relay_sessions.py
+```
+
+### Test Artifact Standards
+
+| Test Phase | Required Artifacts | Purpose |
+|------------|-------------------|---------|
+| **Phase 1: Voice** | getUserMedia logs, connection state screenshots, audio processor test results | Verify voice pipeline setup |
+| **Phase 2: Backend** | API response samples, MCP parsing logs, backend health metrics | Validate data flow |  
+| **Phase 3: UI/UX** | Before/after screenshots, interaction recordings, CSS validation | Document UI improvements |
+| **Phase 4: Integration** | End-to-end test results, performance metrics, comprehensive reports | Verify complete system |```
+
 ## Recent Updates
 
-### OpenAI Agent Builder Integration (Oct 11, 2025)
+### Voice Pipeline Debugging & Testing (Oct 16, 2025)
+- **4-Phase Testing Strategy**: Systematic debugging approach from voice connection to end-to-end validation
+- **Critical Fixes Applied**: Microphone permission timeout, MCP parsing, React state sync, auto-hide UI
+- **Testing Infrastructure**: Playwright MCP + Python backend validation + comprehensive documentation
+- **All Components Verified**: Voice TTS pipeline, market data integration, chart controls, UI interactions
+- **Ready for Production**: Complete voice-enabled trading dashboard with intelligent fallbacks
+
+### OpenAI Agent Builder Integration (Oct 11, 2025)  
 - **Workflow Created**: Intent Classifier → If/Else → Market Data/MCP branches
 - **85% Complete**: Missing File Search, Guardrails, While loops, User Approval
 - **Integration Points**: Direct connection to MarketServiceWrapper and MCP servers

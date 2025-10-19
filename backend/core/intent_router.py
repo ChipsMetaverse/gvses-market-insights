@@ -3,7 +3,7 @@ Simplified Intent Router for Voice Trading Assistant
 Extracted from agent_orchestrator.py for cleaner architecture
 """
 
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 import re
 
 
@@ -13,7 +13,7 @@ class IntentRouter:
     def __init__(self):
         self.intent_patterns = self._initialize_patterns()
     
-    def _initialize_patterns(self) -> Dict[str, list]:
+    def _initialize_patterns(self) -> Dict[str, List[str]]:
         """Initialize intent detection patterns."""
         return {
             "educational": [
@@ -38,6 +38,11 @@ class IntentRouter:
                 "technical", "analysis", "pattern", "support", 
                 "resistance", "trend", "swing", "entry", "exit"
             ],
+            "trading-plan": [
+                "what should i trade", "trading plan", "what to trade",
+                "trade next week", "trade today", "trade tomorrow",
+                "watchlist", "trading ideas", "trade recommendations"
+            ],
             "company-info": [
                 "what is", "who is", "tell me about", "explain"
             ]
@@ -48,14 +53,20 @@ class IntentRouter:
         Classify the intent of a user query.
         
         Args:
-            query: User's input query
+            query: User's input query (original case)
             
         Returns:
             Intent classification string
         """
         query_lower = query.lower()
         
-        # Check educational queries first (highest priority)
+        # Check company info queries FIRST (before educational)
+        # "What is PLTR?" should be company-info, not educational
+        # Pass original query for symbol extraction (needs uppercase)
+        if self._is_company_info(query, query_lower):
+            return "company-info"
+        
+        # Check educational queries (after company-info to avoid conflicts)
         if self._is_educational(query_lower):
             return "educational"
         
@@ -75,9 +86,9 @@ class IntentRouter:
         if any(term in query_lower for term in self.intent_patterns["technical"]):
             return "technical"
         
-        # Company information
-        if self._is_company_info(query_lower):
-            return "company-info"
+        # Trading plan/watchlist
+        if any(term in query_lower for term in self.intent_patterns["trading-plan"]):
+            return "trading-plan"
         
         # Default to general query
         return "general"
@@ -97,11 +108,19 @@ class IntentRouter:
         """Check if query is requesting a chart display."""
         return any(term in query for term in self.intent_patterns["chart-only"])
     
-    def _is_company_info(self, query: str) -> bool:
-        """Check if query is asking for company information."""
-        has_info_trigger = any(p in query for p in self.intent_patterns["company-info"])
-        no_price_terms = not any(term in query for term in ["price", "quote", "cost", "trading"])
-        return has_info_trigger and no_price_terms
+    def _is_company_info(self, query_original: str, query_lower: str) -> bool:
+        """
+        Check if query is asking for company information.
+        
+        Args:
+            query_original: Original query with original case (for symbol extraction)
+            query_lower: Lowercase query (for pattern matching)
+        """
+        has_info_trigger = any(p in query_lower for p in self.intent_patterns["company-info"])
+        no_price_terms = not any(term in query_lower for term in ["price", "quote", "cost", "trading"])
+        has_symbol = self.extract_symbol(query_original) is not None
+        # Must have info trigger, no price terms, AND a stock symbol to be company-info
+        return has_info_trigger and no_price_terms and has_symbol
     
     def extract_symbol(self, query: str) -> Optional[str]:
         """

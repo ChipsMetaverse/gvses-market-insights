@@ -7,6 +7,7 @@ import { useIndicatorState } from '../hooks/useIndicatorState'
 import { useIndicatorContext } from '../contexts/IndicatorContext'
 import { useChartSeries } from '../hooks/useChartSeries'
 import { ChartToolbar } from './ChartToolbar'
+import { DrawingPrimitive } from '../services/DrawingPrimitive'
 import './TradingChart.css'
 
 interface TradingChartProps {
@@ -20,12 +21,17 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const drawingPrimitiveRef = useRef<DrawingPrimitive | null>(null)
   const oscillatorChartRef = useRef<IChartApi | null>(null)
   const oscillatorContainerRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [levelPositions, setLevelPositions] = useState<{ sell_high?: number; buy_low?: number; btd?: number }>({})
   const [isChartReady, setIsChartReady] = useState(false)
+  
+  // Drawing mode state
+  const [drawingMode, setDrawingMode] = useState<string | null>(null)
+  const [drawingStartPoint, setDrawingStartPoint] = useState<{ time: any; price: number } | null>(null)
 
   // Indicator state and series management
   const { state: indicatorState, actions: indicatorActions } = useIndicatorState()
@@ -416,8 +422,13 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
       wickUpColor: '#22c55e',
     })
     
+    // Store references but don't attach primitive yet
     chartRef.current = chart
     candlestickSeriesRef.current = candlestickSeries
+    
+    // Initialize drawing primitive but don't attach yet
+    const drawingPrimitive = new DrawingPrimitive()
+    drawingPrimitiveRef.current = drawingPrimitive
     
     // Mark chart as ready for event subscriptions
     setIsChartReady(true)
@@ -427,6 +438,16 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
     
     // Load initial data
     updateChartData(symbol).then(() => {
+      // NOW attach the drawing primitive after data is loaded
+      console.log('[TradingChart] Attaching DrawingPrimitive after data load')
+      candlestickSeries.attachPrimitive(drawingPrimitive)
+      
+      // Connect drawing primitive to enhanced chart control
+      enhancedChartControl.setDrawingPrimitive(drawingPrimitive)
+      
+      // Force a chart update to ensure primitive is rendered
+      chart.applyOptions({})
+      
       updateTechnicalLevels()
       setTimeout(() => updateLabelPositionsRef.current(), 200)
 
@@ -438,7 +459,7 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
             const imageBase64 = canvas.toDataURL('image/png').split(',')[1]
 
             // Send to backend for potential pattern detection
-            await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/agent/chart-snapshot`, {
+            await fetch(`${import.meta.env.VITE_API_URL || window.location.origin}/api/agent/chart-snapshot`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -462,6 +483,8 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
     // Expose to window for agent access
     ;(window as any).enhancedChartControl = enhancedChartControl
     ;(window as any).enhancedChartControlReady = true
+    ;(window as any).chartRef = chart
+    ;(window as any).candlestickSeriesRef = candlestickSeries
     
     // Notify parent that chart is ready
     if (onChartReady && !isChartDisposedRef.current) {
@@ -757,7 +780,72 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
 
   const handleDrawingToolSelect = (tool: string) => {
     console.log('Drawing tool selected:', tool)
-    // Drawing tool functionality can be added later
+    setDrawingMode(tool)
+    setDrawingStartPoint(null)
+    
+    // Unsubscribe previous click handler if any
+    if (chartRef.current) {
+      chartRef.current.unsubscribeClick(() => {})
+    }
+    
+    // Setup click handler for the selected tool
+    if (tool && chartRef.current) {
+      chartRef.current.subscribeClick((params: any) => {
+        if (!params.time || params.seriesPrice === undefined) return
+        
+        const clickPoint = { 
+          time: params.time, 
+          price: params.seriesPrice(candlestickSeriesRef.current) || params.price 
+        }
+        
+        switch (tool) {
+          case 'trendline':
+            if (!drawingStartPoint) {
+              setDrawingStartPoint(clickPoint)
+            } else {
+              // Complete the trendline
+              if (drawingPrimitiveRef.current) {
+                drawingPrimitiveRef.current.addTrendline(
+                  drawingStartPoint.price,
+                  drawingStartPoint.time,
+                  clickPoint.price,
+                  clickPoint.time
+                )
+              }
+              setDrawingStartPoint(null)
+              setDrawingMode(null)
+            }
+            break
+            
+          case 'horizontal':
+            // Add horizontal line immediately
+            if (drawingPrimitiveRef.current) {
+              drawingPrimitiveRef.current.addHorizontalLine(clickPoint.price, 'Horizontal')
+            }
+            break
+            
+          case 'fibonacci':
+            if (!drawingStartPoint) {
+              setDrawingStartPoint(clickPoint)
+            } else {
+              // Complete the fibonacci
+              if (drawingPrimitiveRef.current) {
+                const highPrice = Math.max(drawingStartPoint.price, clickPoint.price)
+                const lowPrice = Math.min(drawingStartPoint.price, clickPoint.price)
+                drawingPrimitiveRef.current.addFibonacci(
+                  highPrice,
+                  lowPrice,
+                  drawingStartPoint.time,
+                  clickPoint.time
+                )
+              }
+              setDrawingStartPoint(null)
+              setDrawingMode(null)
+            }
+            break
+        }
+      })
+    }
   }
 
   const handleChartTypeChange = (type: string) => {

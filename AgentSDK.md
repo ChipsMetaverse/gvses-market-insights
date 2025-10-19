@@ -267,4 +267,225 @@ Documentation
 
 Documentation for the Agents SDK lives [OpenAI Developers](https://developers.openai.com). Use quickstarts, guides, apps, and demos all in one place, under the [agents topic](https://developers.openai.com).
 
-Was this page useful?
+
+
+AGENTSDK/
+
+import { hostedMcpTool, fileSearchTool, Agent, AgentInputItem, Runner } from "@openai/agents";
+import { z } from "zod";
+
+
+// Tool definitions
+const mcp = hostedMcpTool({
+  serverLabel: "Chart_Control_MCP_Server",
+  allowedTools: [
+    "get_stock_quote",
+    "get_stock_history",
+    "get_market_overview",
+    "get_market_news"
+  ],
+  authorization: "REDACTED",
+  requireApproval: "always",
+  serverDescription: "GVSES trading platform chart control tools for symbol changes, timeframes, and technical indicators",
+  serverUrl: "https://gvses-mcp-sse-server.fly.dev/sse"
+})
+const fileSearch = fileSearchTool([
+  "vs_68ea9cceeb0881918c3a64a886d7aa79"
+])
+const mcp1 = hostedMcpTool({
+  serverLabel: "GVSES_Market_Data_Server",
+  allowedTools: [
+    "get_stock_quote",
+    "get_stock_history",
+    "get_market_overview",
+    "get_market_news"
+  ],
+  requireApproval: "never",
+  serverDescription: "Real-time stock quotes, market data, and financial news via Yahoo Finance and CNBC",
+  serverUrl: "https://gvses-mcp-sse-server.fly.dev/sse"
+})
+const IntentClassifierSchema = z.object({ intent: z.string(), symbol: z.string(), confidence: z.string() });
+const intentClassifier = new Agent({
+  name: "Intent Classifier",
+  instructions: `You are an intent classifier for the GVSES Market Analysis Assistant.
+Analyze the user message and classify it into one of these categories:
+1. \"market_data\" - Stock prices, earnings, financial data  2. \"chart_command\" - Show/display chart requests  3. \"educational\" - Trading education and how-to questions  4. \"technical\" - Technical analysis and indicators  5. \"news\" - Market news and headlines  6. \"company-info\" - Company details and business information  7. \"general_chat\" - Greetings and general conversation
+Extract any stock symbol mentioned (TSLA, AAPL, etc.) or set to null if none found.
+Set confidence level based on how clear the intent is: \"high\", \"medium\", or \"low\".
+The JSON schema will enforce the proper response format.
+Input: {{user_message}}  Output: classification_result`,
+  model: "gpt-4.1",
+  outputType: IntentClassifierSchema,
+  modelSettings: {
+    temperature: 1,
+    topP: 1,
+    maxTokens: 2048,
+    store: true
+  }
+});
+
+const agent = new Agent({
+  name: "Agent",
+  instructions: `You are a professional chart analysis assistant for the GVSES
+  trading platform. When users request charts or technical analysis:
+
+  **Chart Display Commands:**
+  - When users say \"show me [SYMBOL]\", \"display [COMPANY]\", or \"chart
+  [TICKER]\"
+  - Generate clear, actionable chart descriptions with key levels
+  - Focus on technical analysis and price action
+
+  **Chart Analysis Process:**
+  1. Get current stock price and basic data
+  2. Retrieve historical price data for context
+  3. Calculate technical indicators when relevant
+  4. Identify key support/resistance levels
+  5. Provide chart pattern analysis
+
+  **Response Format:**
+  - Start with current price and key metrics
+  - Describe recent price action and trends
+  - Highlight important technical levels
+  - Include volume analysis if significant
+  - End with actionable insights for traders
+
+  **Technical Focus:**
+  - Support and resistance levels
+  - Moving averages and trend direction
+  - Chart patterns (flags, triangles, breakouts)
+  - Volume confirmation
+  - Key price levels to watch
+
+  Keep responses focused on actionable chart analysis that helps
+  traders make informed decisions.
+`,
+  model: "gpt-5",
+  tools: [
+    mcp
+  ],
+  modelSettings: {
+    reasoning: {
+      effort: "low",
+      summary: "auto"
+    },
+    store: true
+  }
+});
+
+const gSves = new Agent({
+  name: "G'sves",
+  instructions: "",
+  model: "gpt-5",
+  tools: [
+    fileSearch,
+    mcp1
+  ],
+  modelSettings: {
+    reasoning: {
+      effort: "low",
+      summary: "auto"
+    },
+    store: true
+  }
+});
+
+type WorkflowInput = { input_as_text: string };
+
+
+// Main code entrypoint
+export const runWorkflow = async (workflow: WorkflowInput) => {
+  const state = {
+
+  };
+  const conversationHistory: AgentInputItem[] = [
+    {
+      role: "user",
+      content: [
+        {
+          type: "input_text",
+          text: workflow.input_as_text
+        }
+      ]
+    }
+  ];
+  const runner = new Runner({
+    traceMetadata: {
+      __trace_source__: "agent-builder",
+      workflow_id: "wf_68e5c49989448190bafbdad788a4747005aa1bda218ab736"
+    }
+  });
+  const intentClassifierResultTemp = await runner.run(
+    intentClassifier,
+    [
+      ...conversationHistory
+    ]
+  );
+  conversationHistory.push(...intentClassifierResultTemp.newItems.map((item) => item.rawItem));
+
+  if (!intentClassifierResultTemp.finalOutput) {
+      throw new Error("Agent result is undefined");
+  }
+
+  const intentClassifierResult = {
+    output_text: JSON.stringify(intentClassifierResultTemp.finalOutput),
+    output_parsed: intentClassifierResultTemp.finalOutput
+  };
+  const transformResult = {
+    intent: "input.output_parsed.intent"
+  };
+  if (transformResult.intent == "educational") {
+
+  } else if (transformResult.intent in ["market_data", "chart_command"]) {
+    const agentResultTemp = await runner.run(
+      agent,
+      [
+        ...conversationHistory
+      ]
+    );
+    conversationHistory.push(...agentResultTemp.newItems.map((item) => item.rawItem));
+
+    if (!agentResultTemp.finalOutput) {
+        throw new Error("Agent result is undefined");
+    }
+
+    const agentResult = {
+      output_text: agentResultTemp.finalOutput ?? ""
+    };
+    const gSvesResultTemp = await runner.run(
+      gSves,
+      [
+        ...conversationHistory
+      ]
+    );
+    conversationHistory.push(...gSvesResultTemp.newItems.map((item) => item.rawItem));
+
+    if (!gSvesResultTemp.finalOutput) {
+        throw new Error("Agent result is undefined");
+    }
+
+    const gSvesResult = {
+      output_text: gSvesResultTemp.finalOutput ?? ""
+    };
+    return gSvesResult;
+  } else {
+    const gSvesResultTemp = await runner.run(
+      gSves,
+      [
+        ...conversationHistory
+      ]
+    );
+    conversationHistory.push(...gSvesResultTemp.newItems.map((item) => item.rawItem));
+
+    if (!gSvesResultTemp.finalOutput) {
+        throw new Error("Agent result is undefined");
+    }
+
+    const gSvesResult = {
+      output_text: gSvesResultTemp.finalOutput ?? ""
+    };
+    return gSvesResult;
+  }
+}
+
+
+\AGENTSDK

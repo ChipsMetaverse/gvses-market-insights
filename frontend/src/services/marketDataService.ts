@@ -23,7 +23,7 @@ type ApiWindow = Window & {
   __API_URL__?: string;
 };
 
-const DEFAULT_FALLBACK_URL = 'http://localhost:8000';
+const DEFAULT_FALLBACK_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
 
 function resolveApiUrl(): string {
   const globalScope = globalThis as ApiGlobal;

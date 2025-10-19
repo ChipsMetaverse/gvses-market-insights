@@ -6,6 +6,7 @@
 
 import { IChartApi, ISeriesApi, SeriesType, LineSeries } from 'lightweight-charts';
 import { chartControlService } from './chartControlService';
+import { DrawingPrimitive } from './DrawingPrimitive';
 
 type ParsedDrawingCommand =
   | { action: 'pattern_level'; patternId: string; levelType: string; price: number }
@@ -35,6 +36,7 @@ class EnhancedChartControl {
   private indicatorDispatch: any = null;
   private drawingsMap: Map<string, any> = new Map();
   private annotationsMap: Map<string, ISeriesApi<SeriesType>> = new Map();
+  private drawingPrimitive: DrawingPrimitive | null = null;
   
   private overlayControls: {
     setOverlayVisibility?: (indicator: string, enabled: boolean) => void;
@@ -80,6 +82,13 @@ class EnhancedChartControl {
    */
   getChartRef(): IChartApi | null {
     return this.chartRef;
+  }
+
+  /**
+   * Set the DrawingPrimitive for drawing tools support
+   */
+  setDrawingPrimitive(primitive: DrawingPrimitive) {
+    this.drawingPrimitive = primitive;
   }
 
   setOverlayControls(controls: {
@@ -208,7 +217,24 @@ class EnhancedChartControl {
     }
     
     try {
-      // Using v5 API with addSeries
+      // Use DrawingPrimitive if available (persistent drawings)
+      if (this.drawingPrimitive) {
+        console.log('[Enhanced Chart] Using DrawingPrimitive for trendline', {
+          startTime, startPrice, endTime, endPrice, label
+        });
+        
+        const id = this.drawingPrimitive.addTrendline(
+          startPrice,
+          startTime as any, // Time type conversion
+          endPrice,
+          endTime as any // Time type conversion
+        );
+        
+        return `Drew ${label ? label + ' ' : ''}trend line from $${startPrice.toFixed(2)} to $${endPrice.toFixed(2)} (ID: ${id})`;
+      }
+      
+      // Fallback to old v5 API (non-persistent)
+      console.warn('[Enhanced Chart] DrawingPrimitive not available, using fallback v5 API');
       const trendSeries = this.chartRef.addSeries(LineSeries, {
         color,
         lineWidth: 2,
@@ -225,7 +251,7 @@ class EnhancedChartControl {
       const id = `trend_${Date.now()}`;
       this.annotationsMap.set(id, trendSeries);
       
-      return `Drew ${label ? label + ' ' : ''}trend line from $${startPrice.toFixed(2)} to $${endPrice.toFixed(2)}`;
+      return `Drew ${label ? label + ' ' : ''}trend line from $${startPrice.toFixed(2)} to $${endPrice.toFixed(2)} (fallback)`;
     } catch (error) {
       console.error('Error drawing trend line:', error);
       return 'Failed to draw trend line';
@@ -772,59 +798,104 @@ class EnhancedChartControl {
           this.clearDrawings();
           return `Cleared drawings for ${drawing.patternId}`;
 
-        case 'clear_all':
-          this.clearDrawings();
-          return 'Cleared all pattern drawings';
 
-        case 'fibonacci':
-          // Calculate and draw Fibonacci levels
-          const fibLevels = [
-            { level: 0, price: drawing.low },
-            { level: 0.236, price: drawing.low + (drawing.high - drawing.low) * 0.236 },
-            { level: 0.382, price: drawing.low + (drawing.high - drawing.low) * 0.382 },
-            { level: 0.5, price: drawing.low + (drawing.high - drawing.low) * 0.5 },
-            { level: 0.618, price: drawing.low + (drawing.high - drawing.low) * 0.618 },
-            { level: 0.786, price: drawing.low + (drawing.high - drawing.low) * 0.786 },
-            { level: 1, price: drawing.high }
-          ];
-          
-          fibLevels.forEach(fib => {
-            this.highlightLevel(
-              parseFloat(fib.price.toFixed(2)),
-              'pivot',
-              `Fib ${(fib.level * 100).toFixed(1)}%`
-            );
-          });
-          return `Fibonacci levels from ${drawing.low} to ${drawing.high}`;
-          
         case 'trendline':
-          this.drawTrendLine(
-            drawing.startTime,
-            drawing.startPrice,
-            drawing.endTime,
-            drawing.endPrice
-          );
+          // Use DrawingPrimitive if available, fallback to old method
+          if (this.drawingPrimitive) {
+            // Convert Unix timestamps to chart time format
+            // For recent timestamps, convert to chart-relative time
+            const now = Math.floor(Date.now() / 1000);
+            let startTime = drawing.startTime;
+            let endTime = drawing.endTime;
+            
+            // If the timestamps are too old (more than 2 years), use relative time
+            if (now - drawing.startTime > 2 * 365 * 24 * 60 * 60) {
+              console.log('[Enhanced Chart] Converting old timestamps to relative time');
+              // Use last 7 days for the trendline
+              endTime = now;
+              startTime = now - (7 * 24 * 60 * 60); // 7 days ago
+            }
+            
+            console.log('[Enhanced Chart] Adding trendline with times:', { startTime, endTime, startPrice: drawing.startPrice, endPrice: drawing.endPrice });
+            
+            this.drawingPrimitive.addTrendline(
+              drawing.startPrice,
+              startTime as any, // Time type conversion
+              drawing.endPrice,
+              endTime as any // Time type conversion
+            );
+          } else {
+            this.drawTrendLine(
+              drawing.startTime,
+              drawing.startPrice,
+              drawing.endTime,
+              drawing.endPrice
+            );
+          }
           return 'Trend line drawn';
 
         case 'support':
-          this.highlightLevel(drawing.price, 'support');
+          // Use DrawingPrimitive if available
+          if (this.drawingPrimitive) {
+            this.drawingPrimitive.addHorizontalLine(drawing.price, 'Support', '#4CAF50');
+          } else {
+            this.highlightLevel(drawing.price, 'support');
+          }
           return `Support level at ${drawing.price}`;
 
         case 'resistance':
-          this.highlightLevel(drawing.price, 'resistance');
+          // Use DrawingPrimitive if available
+          if (this.drawingPrimitive) {
+            this.drawingPrimitive.addHorizontalLine(drawing.price, 'Resistance', '#ef4444');
+          } else {
+            this.highlightLevel(drawing.price, 'resistance');
+          }
           return `Resistance level at ${drawing.price}`;
+          
+        case 'fibonacci':
+          // Use DrawingPrimitive if available
+          if (this.drawingPrimitive && 'high' in drawing && 'low' in drawing) {
+            const currentTime = Date.now();
+            const startTime = currentTime - (7 * 24 * 60 * 60 * 1000); // 7 days ago
+            this.drawingPrimitive.addFibonacci(
+              (drawing as any).high,
+              (drawing as any).low,
+              startTime as any, // Time type conversion
+              currentTime as any // Time type conversion
+            );
+            return `Fibonacci levels added from ${(drawing as any).high} to ${(drawing as any).low}`;
+          }
+          return null;
 
         case 'entry':
-          this.highlightLevel(drawing.price, 'pivot', 'Entry');
+          if (this.drawingPrimitive) {
+            this.drawingPrimitive.addHorizontalLine(drawing.price, 'Entry', '#2196F3');
+          } else {
+            this.highlightLevel(drawing.price, 'pivot', 'Entry');
+          }
           return `Entry level at ${drawing.price}`;
 
         case 'target':
-          this.highlightLevel(drawing.price, 'pivot', 'Target');
+          if (this.drawingPrimitive) {
+            this.drawingPrimitive.addHorizontalLine(drawing.price, 'Target', '#22c55e');
+          } else {
+            this.highlightLevel(drawing.price, 'pivot', 'Target');
+          }
           return `Target level at ${drawing.price}`;
 
         case 'stoploss':
-          this.highlightLevel(drawing.price, 'pivot', 'Stop');
+          if (this.drawingPrimitive) {
+            this.drawingPrimitive.addHorizontalLine(drawing.price, 'Stop Loss', '#ef4444');
+          } else {
+            this.highlightLevel(drawing.price, 'pivot', 'Stop');
+          }
           return `Stop loss at ${drawing.price}`;
+          
+        case 'clear_all':
+          if (this.drawingPrimitive) {
+            this.drawingPrimitive.clearAllDrawings();
+          }
+          return 'All drawings cleared';
           
         default:
           return null;

@@ -264,11 +264,25 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
       // CRITICAL FIX: Check the OpenAI service's actual connection state, not React state
       const actuallyConnected = openAIServiceRef.current?.isConnected() || false;
       console.log('🚨 [TTS CHECK] source:', source, 'hasRef:', !!openAIServiceRef.current, 'reactState:', isConnected, 'actualConnection:', actuallyConnected);
+      
       if (source === 'voice' && openAIServiceRef.current && actuallyConnected) {
         console.log('[AGENT VOICE] 🔊 Sending to TTS:', agentResponse.text.substring(0, 100));
 
         // Send to Realtime API for TTS
         openAIServiceRef.current.sendTextMessage(agentResponse.text);
+      } else if (source === 'voice' && openAIServiceRef.current && !actuallyConnected) {
+        // Handle race condition: sometimes connection succeeds but state hasn't updated yet
+        console.log('⏳ [TTS CHECK] Connection state may be updating, retrying in 100ms...');
+        setTimeout(() => {
+          const retryConnected = openAIServiceRef.current?.isConnected() || false;
+          console.log('🔄 [TTS RETRY] actualConnection after delay:', retryConnected);
+          if (retryConnected) {
+            console.log('[AGENT VOICE] 🔊 Sending to TTS (retry):', agentResponse.text.substring(0, 100));
+            openAIServiceRef.current?.sendTextMessage(agentResponse.text);
+          } else {
+            console.log('🚨 [TTS RETRY] Still not connected after retry');
+          }
+        }, 100);
       } else {
         console.log('🚨 [TTS CHECK] TTS SKIPPED - Condition not met');
         console.log('🚨 [TTS CHECK] Reason - source:', source, 'hasRef:', !!openAIServiceRef.current, 'actuallyConnected:', actuallyConnected);
@@ -293,12 +307,20 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
         onConnected: () => {
           console.log('🚨 [AGENT VOICE HOOK] onConnected callback FIRED');
           console.log('🚨 [AGENT VOICE HOOK] About to call setIsConnected(true)');
+          
+          // Force state update with React's batching
           setIsConnected(true);
-          console.log('🚨 [AGENT VOICE HOOK] setIsConnected(true) CALLED');
           setIsLoading(false);
-          console.log('🚨 [AGENT VOICE HOOK] About to call onConnectionChange callback');
-          callbacksRef.current.onConnectionChange?.(true);
-          console.log('🚨 [AGENT VOICE HOOK] onConnected callback COMPLETED');
+          setError(null);
+          
+          console.log('🚨 [AGENT VOICE HOOK] React state updates called');
+          
+          // Use setTimeout to ensure React state has updated before calling external callback
+          setTimeout(() => {
+            console.log('🚨 [AGENT VOICE HOOK] Delayed callback execution - state should be synchronized');
+            callbacksRef.current.onConnectionChange?.(true);
+            console.log('🚨 [AGENT VOICE HOOK] onConnected callback COMPLETED');
+          }, 0);
         },
         onDisconnected: () => {
           console.log('Agent Voice: OpenAI disconnected');

@@ -8,7 +8,7 @@ Dynamically generates tool schemas from the market MCP server.
 import logging
 import asyncio
 from typing import Dict, List, Any, Optional
-from mcp_client import get_mcp_client
+from .direct_mcp_client import get_direct_mcp_client
 from services.chart_tool_registry import get_chart_tool_registry
 
 logger = logging.getLogger(__name__)
@@ -33,10 +33,9 @@ class OpenAIToolMapper:
             
         try:
             logger.info("Initializing OpenAI tool mapper...")
-            self.mcp_client = get_mcp_client()
+            self.mcp_client = get_direct_mcp_client()
             
-            if not self.mcp_client._initialized:
-                await self.mcp_client.start()
+            # Direct client is ready to use, no initialization needed
             
             # Load and convert all available tools
             await self._load_mcp_tools()

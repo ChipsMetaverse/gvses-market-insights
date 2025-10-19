@@ -35,6 +35,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy built frontend from builder stage
+RUN rm -rf /usr/share/nginx/html/*
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html/
 
 # Setup market-mcp-server (production dependencies only)

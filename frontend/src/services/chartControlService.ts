@@ -688,8 +688,9 @@ class ChartControlService {
           commands.push(drawingCommand);
         } else {
           // Handle other command types
-          if (cmd.startsWith('CHART:')) {
-            const symbol = cmd.substring(6);
+          if (cmd.startsWith('CHART:') || cmd.startsWith('LOAD:')) {
+            // Support both CHART: and LOAD: prefixes for symbol changes
+            const symbol = cmd.startsWith('CHART:') ? cmd.substring(6) : cmd.substring(5);
             commands.push({
               type: 'symbol',
               value: symbol,

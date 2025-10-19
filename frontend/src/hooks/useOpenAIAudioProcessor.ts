@@ -1,7 +1,9 @@
 /**
- * OpenAI Audio Processor Hook
+ * OpenAI Audio Processor Hook (Hybrid Modern/Legacy)
  * Handles microphone capture and audio processing for OpenAI Realtime API
  * Captures audio in PCM16 format at 24kHz sample rate as required by OpenAI
+ * 
+ * Uses AudioWorkletNode (modern) with fallback to ScriptProcessorNode (deprecated but stable)
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -19,6 +21,8 @@ export const useOpenAIAudioProcessor = (options: UseOpenAIAudioProcessorOptions)
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const processorNodeRef = useRef<ScriptProcessorNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const [usingModernAPI, setUsingModernAPI] = useState(false);
 
   // Store callbacks in refs to prevent re-creating startRecording/stopRecording
   const callbacksRef = useRef({ onAudioData, onError });
@@ -39,16 +43,47 @@ export const useOpenAIAudioProcessor = (options: UseOpenAIAudioProcessorOptions)
     try {
       console.log('🎤 [AUDIO PROCESSOR] About to call getUserMedia()...');
 
-      // Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 24000, // OpenAI requires 24kHz
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
+      // Create a timeout wrapper for getUserMedia to prevent hanging
+      const getUserMediaWithTimeout = (constraints: MediaStreamConstraints, timeoutMs: number = 10000) => {
+        return new Promise<MediaStream>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('getUserMedia timeout - microphone permission request took too long'));
+          }, timeoutMs);
+
+          navigator.mediaDevices.getUserMedia(constraints)
+            .then((stream) => {
+              clearTimeout(timeout);
+              resolve(stream);
+            })
+            .catch((error) => {
+              clearTimeout(timeout);
+              reject(error);
+            });
+        });
+      };
+
+      // First try with optimized constraints, fallback to basic if needed
+      let stream: MediaStream;
+      try {
+        console.log('🎤 [AUDIO PROCESSOR] Trying optimized audio constraints...');
+        stream = await getUserMediaWithTimeout({
+          audio: {
+            channelCount: 1,
+            sampleRate: 24000, // OpenAI requires 24kHz
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        }, 8000); // 8 second timeout
+      } catch (optimalError) {
+        console.log('⚠️ [AUDIO PROCESSOR] Optimized constraints failed, trying basic constraints...');
+        console.log('⚠️ [AUDIO PROCESSOR] Error:', optimalError);
+        
+        // Fallback to basic audio constraints
+        stream = await getUserMediaWithTimeout({
+          audio: true // Basic audio with default settings
+        }, 5000); // 5 second timeout
+      }
 
       console.log('✅ [AUDIO PROCESSOR] getUserMedia() completed successfully!');
       console.log('✅ [AUDIO PROCESSOR] Stream obtained:', stream);
@@ -70,33 +105,74 @@ export const useOpenAIAudioProcessor = (options: UseOpenAIAudioProcessorOptions)
       const sourceNode = audioContext.createMediaStreamSource(stream);
       sourceNodeRef.current = sourceNode;
 
-      // Create ScriptProcessor for audio processing
-      // Buffer size 4096 = ~170ms chunks at 24kHz
-      const processorNode = audioContext.createScriptProcessor(4096, 1, 1);
-      processorNodeRef.current = processorNode;
+      // Try modern AudioWorkletNode first, fallback to legacy ScriptProcessorNode
+      let processingSetupSuccess = false;
 
-      // Process audio data
-      processorNode.onaudioprocess = (event) => {
-        const inputData = event.inputBuffer.getChannelData(0); // Float32Array
+      try {
+        // Attempt to use modern AudioWorkletNode
+        console.log('🔬 [AUDIO PROCESSOR] Attempting modern AudioWorkletNode...');
+        await audioContext.audioWorklet.addModule('/audio-processor-worklet.js');
+        
+        const workletNode = new AudioWorkletNode(audioContext, 'openai-audio-processor');
+        workletNodeRef.current = workletNode;
+        
+        // Listen for processed audio data from the worklet
+        workletNode.port.onmessage = (event) => {
+          if (event.data.type === 'audioData') {
+            const pcmData = event.data.data as Int16Array;
+            callbacksRef.current.onAudioData(pcmData);
+          }
+        };
+        
+        // Connect modern audio graph
+        sourceNode.connect(workletNode);
+        workletNode.connect(audioContext.destination);
+        
+        setUsingModernAPI(true);
+        processingSetupSuccess = true;
+        console.log('✅ [AUDIO PROCESSOR] Using modern AudioWorkletNode');
+        
+      } catch (workletError) {
+        console.warn('⚠️ [AUDIO PROCESSOR] AudioWorkletNode failed, falling back to ScriptProcessor:', workletError);
+        
+        // Fallback to legacy ScriptProcessorNode
+        const processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+        processorNodeRef.current = processorNode;
 
-        // Convert Float32 to Int16 PCM (required by OpenAI)
-        const pcmData = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          // Clamp to [-1, 1] and convert to Int16 range
-          const s = Math.max(-1, Math.min(1, inputData[i]));
-          pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
+        // Process audio data (legacy method)
+        processorNode.onaudioprocess = (event) => {
+          const inputData = event.inputBuffer.getChannelData(0); // Float32Array
 
-        // Send to OpenAI via callback
-        callbacksRef.current.onAudioData(pcmData);
-      };
+          // Convert Float32 to Int16 PCM (required by OpenAI)
+          const pcmData = new Int16Array(inputData.length);
+          for (let i = 0; i < inputData.length; i++) {
+            // Clamp to [-1, 1] and convert to Int16 range
+            const s = Math.max(-1, Math.min(1, inputData[i]));
+            pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          }
 
-      // Connect audio graph
-      sourceNode.connect(processorNode);
-      processorNode.connect(audioContext.destination);
+          // Send to OpenAI via callback
+          callbacksRef.current.onAudioData(pcmData);
+        };
+
+        // Connect legacy audio graph
+        sourceNode.connect(processorNode);
+        processorNode.connect(audioContext.destination);
+        
+        setUsingModernAPI(false);
+        processingSetupSuccess = true;
+        console.log('⚠️ [AUDIO PROCESSOR] Using legacy ScriptProcessorNode (deprecated)');
+      }
+      
+      if (!processingSetupSuccess) {
+        throw new Error('Failed to set up audio processing (both modern and legacy methods failed)');
+      }
 
       setIsRecording(true);
-      console.log('🎙️ Recording started, sending audio to OpenAI...');
+      
+      // Determine which API was actually used based on what was initialized
+      const actualAPI = workletNodeRef.current ? 'AudioWorkletNode' : 'ScriptProcessorNode (deprecated)';
+      console.log(`🎙️ Recording started using ${actualAPI}, sending audio to OpenAI...`);
 
     } catch (error) {
       console.error('❌ Failed to start microphone recording:', error);
@@ -109,7 +185,13 @@ export const useOpenAIAudioProcessor = (options: UseOpenAIAudioProcessorOptions)
   const stopRecording = useCallback(() => {
     console.log('🛑 Stopping microphone recording...');
 
-    // Disconnect and clean up processor
+    // Disconnect and clean up processor (modern or legacy)
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current.port.onmessage = null;
+      workletNodeRef.current = null;
+    }
+    
     if (processorNodeRef.current) {
       processorNodeRef.current.disconnect();
       processorNodeRef.current.onaudioprocess = null;

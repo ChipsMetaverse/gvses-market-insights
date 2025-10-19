@@ -3,7 +3,7 @@
  * Standardized API URL handling across the application
  */
 
-const DEFAULT_FALLBACK_URL = 'http://localhost:8000';
+const DEFAULT_FALLBACK_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', 'host.docker.internal']);
 
 const normalizeUrlForEnvironment = (url: string | null | undefined): string | null => {

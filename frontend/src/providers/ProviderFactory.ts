@@ -12,6 +12,7 @@ import {
 import { ElevenLabsProvider } from './ElevenLabsProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 import { OpenAIRealtimeProvider } from './OpenAIRealtimeProvider';
+import { RealtimeSDKProvider } from './RealtimeSDKProvider';
 
 // Provider registry type
 type ProviderConstructor = new (config: ProviderConfig) => BaseProvider;
@@ -37,6 +38,7 @@ export class ProviderFactory implements IProviderFactory {
     this.registerProvider('elevenlabs', ElevenLabsProvider);
     this.registerProvider('openai', OpenAIProvider);
     this.registerProvider('openai-realtime', OpenAIRealtimeProvider);
+    this.registerProvider('realtime-sdk', RealtimeSDKProvider);
 
     // Register default configurations
     this.registerProviderConfig({
@@ -64,6 +66,18 @@ export class ProviderFactory implements IProviderFactory {
       type: 'openai-realtime',
       name: 'OpenAI Realtime Voice',
       capabilities: OpenAIRealtimeProvider.getDefaultCapabilities(),
+      settings: {
+        audioFormat: 'pcm',
+        sampleRate: 24000,
+        channels: 1,
+        voice: 'alloy'
+      }
+    });
+
+    this.registerProviderConfig({
+      type: 'realtime-sdk',
+      name: 'OpenAI Realtime + Agents SDK',
+      capabilities: RealtimeSDKProvider.getDefaultCapabilities(),
       settings: {
         audioFormat: 'pcm',
         sampleRate: 24000,
@@ -165,6 +179,22 @@ export class ProviderFactory implements IProviderFactory {
     };
   }
 
+  createRealtimeSDKConfig(model?: string, voice?: string): ProviderConfig {
+    return {
+      type: 'realtime-sdk',
+      name: 'OpenAI Realtime + Agents SDK',
+      model: model || 'gpt-realtime-2025-08-28',
+      voice: voice || 'alloy',
+      capabilities: RealtimeSDKProvider.getDefaultCapabilities(),
+      settings: {
+        audioFormat: 'pcm',
+        sampleRate: 24000,
+        channels: 1,
+        turnDetection: 'server_vad'
+      }
+    };
+  }
+
   createClaudeConfig(apiKey: string, model?: string): ProviderConfig {
     return {
       type: 'claude',
@@ -223,6 +253,11 @@ export class ProviderFactory implements IProviderFactory {
         if (!config.apiUrl) {
           errors.push('OpenAI Realtime API URL is required');
         }
+        break;
+      
+      case 'realtime-sdk':
+        // RealtimeSDK connects directly to OpenAI, no additional validation needed
+        // API key is handled via environment variables
         break;
       
       case 'claude':

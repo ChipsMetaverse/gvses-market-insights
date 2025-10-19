@@ -74,14 +74,49 @@ interface ChartSnapshot {
 class AgentOrchestratorService {
   private baseUrl: string;
   private sessionId: string;
+  private sdkRolloutPercentage: number;
 
   constructor() {
     this.baseUrl = getApiUrl();
     this.sessionId = this.generateSessionId();
+    // Get SDK rollout percentage from environment variable (0-100)
+    this.sdkRolloutPercentage = parseInt(import.meta.env.VITE_AGENTS_SDK_PERCENTAGE || '0', 10);
+    
+    console.log(`[AGENT ORCHESTRATOR] SDK rollout percentage: ${this.sdkRolloutPercentage}%`);
   }
 
   private generateSessionId(): string {
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Determine whether to use the SDK endpoint based on rollout percentage
+   */
+  private shouldUseSDK(): boolean {
+    if (this.sdkRolloutPercentage <= 0) return false;
+    if (this.sdkRolloutPercentage >= 100) return true;
+    
+    // Use deterministic random based on session ID for consistency
+    const hash = this.sessionId.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    
+    const randomPercent = Math.abs(hash) % 100;
+    const useSDK = randomPercent < this.sdkRolloutPercentage;
+    
+    console.log(`[AGENT ORCHESTRATOR] A/B Test: ${useSDK ? 'SDK' : 'Current'} (${randomPercent} < ${this.sdkRolloutPercentage})`);
+    return useSDK;
+  }
+
+  /**
+   * Get the appropriate endpoint based on A/B testing
+   */
+  private getOrchestratorEndpoint(): string {
+    const useSDK = this.shouldUseSDK();
+    const endpoint = useSDK ? '/api/agent/sdk-orchestrate' : '/api/agent/orchestrate';
+    console.log(`[AGENT ORCHESTRATOR] Using endpoint: ${endpoint}`);
+    return endpoint;
   }
 
   /**
@@ -91,6 +126,7 @@ class AgentOrchestratorService {
     query: string,
     conversationHistory?: Array<{ role: string; content: string }>
   ): Promise<AgentResponse> {
+    const endpoint = this.getOrchestratorEndpoint();
     const payload: AgentQuery = {
       query,
       conversation_history: conversationHistory,
@@ -98,14 +134,15 @@ class AgentOrchestratorService {
       session_id: this.sessionId
     };
 
-    console.log('[AGENT ORCHESTRATOR SERVICE] 🌐 Making HTTP request to /api/agent/orchestrate');
+    console.log(`[AGENT ORCHESTRATOR SERVICE] 🌐 Making HTTP request to ${endpoint}`);
     console.log('[AGENT ORCHESTRATOR SERVICE] 📨 Request payload:', {
       query: payload.query,
       historyLength: payload.conversation_history?.length || 0,
-      sessionId: payload.session_id
+      sessionId: payload.session_id,
+      endpoint: endpoint
     });
 
-    const response = await fetch(`${this.baseUrl}/api/agent/orchestrate`, {
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -130,8 +167,15 @@ class AgentOrchestratorService {
       hasText: !!data.text,
       textLength: data.text?.length || 0,
       textPreview: data.text?.substring(0, 100),
-      toolsUsed: data.tools_used
+      toolsUsed: data.tools_used,
+      endpoint: endpoint,
+      model: data.model
     });
+
+    // Add metadata to track which endpoint was used
+    if (!data.data) data.data = {};
+    data.data.endpoint_used = endpoint;
+    data.data.sdk_enabled = endpoint.includes('sdk-orchestrate');
 
     return data;
   }

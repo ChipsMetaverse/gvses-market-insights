@@ -37,7 +37,7 @@ class ChartToolService {
   private cacheTimestamp: number | null
 
   constructor() {
-    this.baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    this.baseUrl = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')
     this.toolsCache = new Map()
     this.cacheTimestamp = null
   }

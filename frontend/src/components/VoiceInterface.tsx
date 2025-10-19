@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Volume2 } from 'lucide-react'
-import { VoiceClient } from '@/components/voice/VoiceClient'
-import { VoiceConnectionState, VoiceTranscript } from '@/types/voice'
 
 interface VoiceInterfaceProps {
   isListening: boolean
@@ -23,78 +21,21 @@ const voiceCommands = [
 ]
 
 export function VoiceInterface({ isListening, currentSymbol, onVoiceToggle }: VoiceInterfaceProps) {
-  const [transcripts, setTranscripts] = useState<VoiceTranscript[]>([])
-  const [connectionState, setConnectionState] = useState<VoiceConnectionState>('disconnected')
   const [aiAnalysis, setAiAnalysis] = useState<string>('')
-
-  // Handle transcript updates from VoiceClient
-  const handleTranscriptUpdate = useCallback((newTranscripts: VoiceTranscript[]) => {
-    setTranscripts(newTranscripts)
-    
-    // Update AI analysis with the latest assistant response
-    const lastAssistantMessage = newTranscripts
-      .filter(t => t.role === 'assistant')
-      .slice(-1)[0]
-    
-    if (lastAssistantMessage) {
-      setAiAnalysis(lastAssistantMessage.content)
-    }
-  }, [])
-
-  // Handle connection state changes
-  const handleConnectionStateChange = useCallback((state: VoiceConnectionState) => {
-    setConnectionState(state)
-    
-    // Update parent component's listening state after render
-    setTimeout(() => {
-      if (state === 'listening' && !isListening) {
-        onVoiceToggle()
-      } else if (state !== 'listening' && isListening) {
-        onVoiceToggle()
-      }
-    }, 0)
-  }, [])
-
-  // Sync listening state with connection state
-  useEffect(() => {
-    if (connectionState === 'listening' && !isListening) {
-      onVoiceToggle()
-    } else if (connectionState !== 'listening' && isListening) {
-      onVoiceToggle()
-    }
-  }, [connectionState, isListening, onVoiceToggle])
-
-  // Handle errors
-  const handleError = useCallback((error: string) => {
-    console.error('Voice interface error:', error)
-    setAiAnalysis(`Error: ${error}`)
-  }, [])
 
   // Default AI analysis based on current symbol
   useEffect(() => {
-    if (!aiAnalysis) {
-      setAiAnalysis(
-        `I can see a bullish flag pattern forming on the ${currentSymbol} chart. The price is consolidating near the ST level with decreasing volume, suggesting a potential breakout.`
-      )
-    }
-  }, [currentSymbol, aiAnalysis])
+    setAiAnalysis(
+      `I can see a bullish flag pattern forming on the ${currentSymbol} chart. The price is consolidating near the ST level with decreasing volume, suggesting a potential breakout.`
+    )
+  }, [currentSymbol])
 
   // Get connection status indicator
   const getConnectionStatus = () => {
-    switch (connectionState) {
-      case 'connected':
-        return { text: 'Connected', color: 'text-green-600' }
-      case 'connecting':
-        return { text: 'Connecting...', color: 'text-yellow-600' }
-      case 'listening':
-        return { text: 'Listening...', color: 'text-blue-600' }
-      case 'processing':
-        return { text: 'Processing...', color: 'text-purple-600' }
-      case 'error':
-        return { text: 'Error', color: 'text-red-600' }
-      default:
-        return { text: 'Disconnected', color: 'text-gray-600' }
+    if (isListening) {
+      return { text: 'Listening...', color: 'text-blue-600' }
     }
+    return { text: 'Disconnected', color: 'text-gray-600' }
   }
 
   const status = getConnectionStatus()
@@ -104,12 +45,18 @@ export function VoiceInterface({ isListening, currentSymbol, onVoiceToggle }: Vo
       {/* Voice Interface */}
       <div className="grid grid-cols-2 gap-6">
         <div className="text-center">
-          <VoiceClient
-            className="flex flex-col items-center"
-            onTranscriptUpdate={handleTranscriptUpdate}
-            onConnectionStateChange={handleConnectionStateChange}
-            onError={handleError}
-          />
+          <div className="flex flex-col items-center">
+            <button
+              onClick={onVoiceToggle}
+              className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-colors ${
+                isListening 
+                  ? 'bg-red-500 border-red-500 text-white' 
+                  : 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Volume2 className="w-6 h-6" />
+            </button>
+          </div>
           <div className="mt-3">
             <h3 className="text-lg font-light text-black">Control the chart</h3>
             <p className={`text-sm mt-1 ${status.color}`}>

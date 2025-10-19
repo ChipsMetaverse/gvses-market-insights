@@ -185,7 +185,7 @@ class AgentOrchestrator:
             "get_market_overview": 3.0,    # Multiple symbols
             "get_options_strategies": 2.0,  # Calculation-based
             "analyze_options_greeks": 1.0,  # Mock data, fast
-            "generate_daily_watchlist": 3.0,  # Multiple stocks
+            "generate_daily_watchlist": 30.0,  # Comprehensive data for 5 stocks (15+ API calls)
             "review_trades": 2.0           # Historical review
         }
         # Vision-based chart analysis can take longer
@@ -1177,7 +1177,8 @@ class AgentOrchestrator:
                 "get_comprehensive_stock_data",
                 "get_stock_price",
                 "get_stock_history",
-                "get_stock_news"
+                "get_stock_news",
+                "get_company_info"  # FIX: Include company info tool for chart sync
             ]
             for key in candidate_keys:
                 if key in tool_results:
@@ -2589,40 +2590,120 @@ Return JSON with detected patterns, confidence levels, and key support/resistanc
                         "timeframe": timeframe
                     }
             elif tool_name == "generate_daily_watchlist":
-                # Generate a watchlist with mock data (can be enhanced with real market scanning)
+                # Enhanced watchlist with REAL data
                 from datetime import timedelta
                 focus = arguments.get("focus", "mixed")
                 limit = arguments.get("limit", 5)
                 
-                # Mock watchlist data
-                watchlist_stocks = [
-                    {"symbol": "NVDA", "price": 875.20, "change_pct": 3.5, 
-                     "catalyst": "AI conference keynote tomorrow", 
-                     "setup": "Breakout above 870 resistance", 
-                     "entry": 878.00, "stop": 865.00, "target": 900.00},
-                    {"symbol": "TSLA", "price": 250.30, "change_pct": 2.1,
-                     "catalyst": "Delivery numbers next week",
-                     "setup": "Bouncing off 50-day MA support",
-                     "entry": 252.00, "stop": 245.00, "target": 265.00},
-                    {"symbol": "AAPL", "price": 195.50, "change_pct": -0.8,
-                     "catalyst": "iPhone sales data release",
-                     "setup": "Testing 200-day MA as support",
-                     "entry": 194.00, "stop": 190.00, "target": 202.00},
-                    {"symbol": "AMD", "price": 145.75, "change_pct": 4.2,
-                     "catalyst": "New chip announcement",
-                     "setup": "Momentum breakout pattern",
-                     "entry": 147.00, "stop": 142.00, "target": 155.00},
-                    {"symbol": "SPY", "price": 475.30, "change_pct": 0.5,
-                     "catalyst": "Fed minutes release",
-                     "setup": "Range-bound consolidation",
-                     "entry": 474.00, "stop": 470.00, "target": 480.00}
-                ]
+                # Get market overview for context
+                overview_data = await self._execute_tool("get_market_overview", {})
                 
-                result = {
-                    "generated_at": datetime.now().isoformat(),
-                    "focus": focus,
-                    "market_conditions": "Bullish momentum with selective opportunities",
-                    "stocks": watchlist_stocks[:limit]
+                # Try to get real market movers first
+                top_gainers = overview_data.get("top_gainers", [])[:limit]
+                
+                # If no movers available (market closed/after hours), use curated high-volume stocks
+                # These are liquid, institutional-grade stocks with reliable data 24/7
+                if not top_gainers or len(top_gainers) == 0:
+                    curated_symbols = {
+                        "momentum": ["NVDA", "TSLA", "AMD", "PLTR", "COIN"],
+                        "value": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
+                        "mixed": ["SPY", "NVDA", "AAPL", "TSLA", "MSFT"]
+                    }
+                    symbols_to_scan = curated_symbols.get(focus, curated_symbols["mixed"])[:limit]
+                    logger.info(f"Using curated watchlist ({focus}): {symbols_to_scan}")
+                else:
+                    symbols_to_scan = [g.get("symbol") for g in top_gainers if g.get("symbol")]
+                    logger.info(f"Using market movers: {symbols_to_scan}")
+                
+                # Fetch REAL data for each symbol
+                enhanced_stocks = []
+                for symbol in symbols_to_scan:
+                    if not symbol:
+                        continue
+                    
+                    try:
+                        # Fetch comprehensive data for each stock
+                        # Note: This works 24/7 - returns last closing prices when market is closed
+                        price_data = await self._execute_tool("get_stock_price", {"symbol": symbol})
+                        history_data = await self._execute_tool("get_stock_history", {"symbol": symbol, "days": 90})
+                        news_data = await self._execute_tool("get_stock_news", {"symbol": symbol, "limit": 3})
+                        
+                        # Calculate technical levels from history
+                        closes = [candle.get("close", 0) for candle in history_data.get("candles", [])]
+                        if not closes or len(closes) < 20:
+                            logger.warning(f"Insufficient price history for {symbol}, skipping")
+                            continue
+                        
+                        recent_high = max(closes[-20:])  # 20-day high
+                        recent_low = min(closes[-20:])  # 20-day low
+                        current_price = price_data.get("price")
+                        
+                        # Validate we have real data
+                        if not current_price or current_price <= 0:
+                            logger.warning(f"Invalid price data for {symbol}: {current_price}")
+                            continue
+                        
+                        # Calculate entry/stop/target with real data
+                        support = recent_low * 0.99  # 1% below recent low
+                        resistance = recent_high * 1.01  # 1% above recent high
+                        entry = current_price * 1.01  # 1% above current (for breakout entry)
+                        stop = support
+                        target = resistance
+                        
+                        # Validate risk/reward makes sense
+                        if entry <= stop or (entry - stop) < 0.01:
+                            logger.warning(f"Invalid risk/reward for {symbol}, entry={entry}, stop={stop}")
+                            continue
+                        
+                        # Get latest catalyst from news (real headlines, not mock)
+                        articles = news_data.get("articles", [])
+                        catalyst = articles[0].get("title", "Technical momentum play")[:80] if articles else "Technical momentum play"
+                        
+                        # Calculate price position in range
+                        price_pct_of_range = int((current_price - recent_low) / (recent_high - recent_low) * 100) if (recent_high - recent_low) > 0 else 50
+                        
+                        enhanced_stocks.append({
+                            "symbol": symbol,
+                            "price": current_price,
+                            "change_pct": price_data.get("change_pct", 0),
+                            "52w_high": price_data.get("52_week_high", 0),
+                            "52w_low": price_data.get("52_week_low", 0),
+                            "volume": price_data.get("volume", 0),
+                            "avg_volume": price_data.get("avg_volume", 0),
+                            "catalyst": catalyst,
+                            "setup": f"Price at {price_pct_of_range}% of 20-day range (${recent_low:.2f}-${recent_high:.2f})",
+                            "entry": round(entry, 2),
+                            "stop": round(stop, 2),
+                            "target": round(target, 2),
+                            "risk_reward": round((target - entry) / (entry - stop), 2),
+                            "technical_score": price_pct_of_range  # Higher = closer to resistance
+                        })
+                    except Exception as e:
+                        logger.warning(f"Failed to enhance {symbol}: {e}")
+                        continue
+                
+                # If we couldn't get real data, return error instead of mock data
+                if not enhanced_stocks:
+                    error_msg = "Unable to fetch real market data. Please check your data connection or try again later."
+                    logger.error(f"Watchlist generation failed: no real data available")
+                    result = {
+                        "error": error_msg,
+                        "generated_at": datetime.now().isoformat(),
+                        "focus": focus,
+                        "market_conditions": "Data unavailable",
+                        "stocks": [],
+                        "data_source": "error"
+                    }
+                else:
+                    # Success - return real data
+                    market_status = overview_data.get("market_status", "Active")
+                    result = {
+                        "generated_at": datetime.now().isoformat(),
+                        "focus": focus,
+                        "market_conditions": f"{market_status} - Real market data (last update: {datetime.now().strftime('%Y-%m-%d %H:%M')})",
+                        "stocks": enhanced_stocks[:limit],
+                        "data_source": "real",
+                        "note": "Prices reflect last trading session" if market_status != "open" else "Live prices"
                 }
             elif tool_name == "weekly_trade_review":
                 # Generate mock weekly trade review
@@ -2933,19 +3014,27 @@ Return JSON with detected patterns, confidence levels, and key support/resistanc
         """Build the system prompt for the agent, including any retrieved knowledge."""
         base_prompt = """You are G'sves, expert market analyst specializing in swing trading and technical analysis.
 
+TRADING LEVELS TERMINOLOGY:
+Always use these specific terms when discussing price levels:
+- **Buy The Dip (BTD)**: Most aggressive entry point, typically at 61.8% Fibonacci retracement or 200-day MA
+- **Buy Low**: Conservative entry at 50-day MA or consolidation zones (swing trade entry)
+- **Sell High**: Exit/profit-taking level near resistance or RSI >70 (NOT an entry point)
+When asked about BTD, Buy Low, or Sell High levels, ALWAYS provide specific price levels with technical reasoning.
+
 GENERAL & COMPANY INFO REQUESTS:
-When the user asks general questions (e.g., "what is PLTR?", "tell me about Microsoft", or non-trading topics),
-respond with a concise, educational explanation first. For company queries:
-- Name and what the company does (1-2 sentences)
-- Industry/sector if known
-- Notable products or positioning
-Avoid trading recommendations unless explicitly asked. Keep tone educational; no investment advice.
+When the user asks about a company (e.g., "what is PLTR?", "tell me about Microsoft", "what is Tesla"):
+- ALWAYS call the get_company_info tool first to retrieve current, accurate company information
+- Use the tool results to provide a concise, educational explanation
+- Include: company name, business description, industry/sector, notable products
+- After explaining the company, you may briefly mention if real-time price data would be helpful
+Keep tone educational; avoid trading recommendations unless explicitly asked. No investment advice.
 
 SWING TRADE ANALYSIS:
 When asked about swing trades, entry points, or technical setups, provide SPECIFIC structured data:
-- Entry levels with exact prices (e.g., "Enter at $245.50 on breakout above resistance")
-- Stop loss levels (e.g., "Stop at $242.00 below support")
-- Target levels (e.g., "Target 1: $250, Target 2: $255")
+- BTD Level: Most aggressive entry (e.g., "BTD at $238.00 at 200-day MA")
+- Buy Low Level: Conservative entry (e.g., "Buy Low at $242.00 at 50-day MA")
+- Sell High Level: Exit target (e.g., "Sell High at $255.00 near resistance")
+- Stop loss levels (e.g., "Stop at $235.00 below BTD support")
 - Risk/reward ratios
 - Key support/resistance zones
 - Volume and momentum indicators
@@ -2954,9 +3043,10 @@ Include this JSON structure in your response when providing swing trade analysis
 ```json
 {
   "swing_trade": {
-    "entry_points": [245.50, 244.00],
-    "stop_loss": 242.00,
-    "targets": [250.00, 255.00, 260.00],
+    "btd_level": 238.00,
+    "buy_low_level": 242.00,
+    "sell_high_level": 255.00,
+    "stop_loss": 235.00,
     "risk_reward": 2.5,
     "support_levels": [242.00, 238.00, 235.00],
     "resistance_levels": [248.00, 252.00, 258.00]
@@ -2972,11 +3062,83 @@ For support/resistance or technical queries:
 - Highlight any chart patterns (flags, triangles, etc.)
 - Provide RSI, MACD readings if relevant
 
+TRADING PLAN & WATCHLIST REQUESTS:
+When asked for trading plans, watchlists, or "what to trade next week/today", provide COMPREHENSIVE institutional-grade analysis:
+
+REQUIRED TOOLS TO CALL (in parallel):
+1. generate_daily_watchlist - Get top trading ideas with catalysts
+2. get_market_overview - Current market conditions and indices
+3. For EACH stock in watchlist, call:
+   - get_comprehensive_stock_data - Fundamentals + technicals
+   - get_stock_history - Price action and trends
+   - get_stock_news - Latest catalysts and sentiment
+
+COMPREHENSIVE ANALYSIS MUST INCLUDE:
+- **Market Context**: Indices performance, VIX, sector rotation, breadth
+- **Individual Stock Analysis**: For each recommendation provide:
+  * Current price with 52-week range context
+  * Technical setup: Support/resistance, trend, pattern, momentum (RSI/MACD)
+  * Entry price with exact reasoning (e.g., "breakout above $245.50 resistance")
+  * Stop loss with exact level (e.g., "$242.00 below support zone")
+  * Multiple price targets (T1, T2, T3) with timeframes
+  * Risk/reward ratio (minimum 2:1)
+  * Catalysts driving the trade (earnings, product launch, sector momentum)
+  * Position sizing recommendation (% of portfolio)
+  * Timeframe (day trade, swing, position)
+- **Portfolio Construction**: Sector diversification, correlation analysis, overall risk
+- **Risk Management**: Max portfolio heat, hedging strategies, volatility considerations
+- **Options Strategies**: If volatility is high, suggest protective puts or collar strategies
+
+RESPONSE FORMAT:
+```
+# Market Overview
+[Indices, VIX, market breadth, dominant themes]
+
+# High-Conviction Trades (Ranked by Risk/Reward)
+
+## 1. SYMBOL - Company Name
+**Price**: $XXX.XX (52w: $LOW - $HIGH)
+**Setup**: [Pattern + Technical confluence]
+**Catalyst**: [Specific event/driver]
+
+Entry: $XXX.XX (on breakout above resistance)
+Stop: $XXX.XX (below support, risk $X.XX per share)
+Targets: T1: $XXX (1:1.5), T2: $XXX (1:2.5), T3: $XXX (1:4)
+Risk/Reward: 1:2.8
+Position Size: 3-5% of portfolio
+Timeframe: 5-10 trading days
+
+**Technical**: RSI 58 (neutral), MACD bullish cross, volume surge
+**Fundamental**: Strong sector momentum, institutional accumulation
+**News**: [Recent catalyst from news feed]
+
+---
+
+# Portfolio Strategy
+- Diversification: X% tech, Y% cyclicals, Z% defensive
+- Total portfolio heat: <10%
+- Hedging: Consider SPY puts if market extends >5%
+
+# Risk Warnings
+[Specific risks for each trade + macro risks]
+```
+
 TOOL USAGE:
-- Call get_stock_price and get_stock_history for price/chart data
-- Call get_comprehensive_stock_data for detailed technicals
-- Analyze the data to provide SPECIFIC trade setups, not generic summaries
-- Base your analysis on the actual data returned by the tools
+- For trading plan queries, EXECUTE THIS SEQUENCE:
+  Step 1: Call generate_daily_watchlist + get_market_overview in parallel
+  Step 2: For EACH stock from watchlist, call these 3 tools in parallel:
+    - get_comprehensive_stock_data (technicals + fundamentals)
+    - get_stock_history (price action + trends)
+    - get_stock_news (catalysts + sentiment)
+  Step 3: Synthesize all data into comprehensive trade analysis
+  
+- For company info questions ("what is X?"), ALWAYS call get_company_info first
+- For price queries, call get_stock_price and get_stock_history for price/chart data
+- For market overview ("market conditions"), call get_market_overview
+- CRITICAL: Trading plans require 7+ tool calls minimum (1 watchlist + 1 overview + 15 for 5 stocks)
+- Analyze ALL tool data to provide SPECIFIC trade setups with exact prices
+- Base EVERY recommendation on actual tool data, never generic advice
+- Calculate risk/reward ratios from real support/resistance levels in the data
 
 RESPONSE FORMAT:
 - Start with the specific answer to the question (entry points, levels, etc.)
@@ -3154,7 +3316,8 @@ Remember to cite sources when using this knowledge and maintain educational tone
             logger.warning("Responses API not available in client; falling back to chat completions")
             return await self._process_query_chat(query, conversation_history, stream=False)
 
-        response_messages = self._convert_messages_for_responses(messages)
+        # Convert messages to proper Responses API input format
+        input_items = self._convert_messages_for_responses(messages)
 
         # Check if this is a simple query that doesn't need complex reasoning
         ql = query.lower()
@@ -3253,32 +3416,23 @@ Remember to cite sources when using this knowledge and maintain educational tone
             # Use the actual Responses API
             t_llm1_start = time.monotonic()
             
-            # Build input for Responses API
-            input_content = response_messages if len(response_messages) > 1 else query
+            # Build input for Responses API (use input_items, not query string)
+            input_content = input_items if len(input_items) > 1 else [{"role": "user", "content": [{"type": "input_text", "text": query}]}]
             
             # Prepare parameters for Responses API
             params = {
                 "model": "gpt-4o-mini",  # Use a model that supports Responses API
                 "input": input_content,
                 "instructions": self._build_system_prompt(retrieved_knowledge),
+                "max_output_tokens": 1500,  # Add token limit
+                "temperature": 0.3,  # Add temperature for consistency
+                "store": True  # Enable conversation storage
             }
             
-            # Add tools if needed (check if native tools are available)
-            tool_schemas = self._get_tool_schemas()
+            # Add tools using proper Responses API format (flattened, not nested)
+            tool_schemas = self._get_tool_schemas(for_responses_api=True)
             if tool_schemas:
-                # Convert to Responses API format (internally-tagged)
-                responses_tools = []
-                for tool in tool_schemas:
-                    if tool.get("type") == "function":
-                        func = tool.get("function", {})
-                        responses_tools.append({
-                            "type": "function",
-                            "name": func.get("name"),
-                            "description": func.get("description"),
-                            "parameters": func.get("parameters")
-                        })
-                if responses_tools:
-                    params["tools"] = responses_tools
+                params["tools"] = tool_schemas
             
             # Use the actual client.responses.create()
             response = await self.client.responses.create(**params)
@@ -3301,8 +3455,26 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 "timestamp": datetime.now().isoformat()
             }
 
-        # Extract text from the response using our fixed method
-        response_text = self._extract_response_text(response)
+        # Extract text using proper Responses API format
+        response_text = ""
+        if hasattr(response, 'output') and isinstance(response.output, list):
+            for output_item in response.output:
+                # Skip reasoning items
+                if hasattr(output_item, 'type') and output_item.type == 'reasoning':
+                    continue
+                
+                # Extract text from message items
+                if hasattr(output_item, 'type') and output_item.type == 'message':
+                    if hasattr(output_item, 'content') and isinstance(output_item.content, list):
+                        for content_item in output_item.content:
+                            if hasattr(content_item, 'type') and content_item.type == 'output_text':
+                                if hasattr(content_item, 'text'):
+                                    response_text += content_item.text
+        
+        # Fallback to existing method if new extraction fails
+        if not response_text:
+            response_text = self._extract_response_text(response)
+            logger.warning("Using fallback response text extraction method")
         
         # Check for tool calls in the output
         tool_results: Dict[str, Any] = {}
@@ -3504,8 +3676,8 @@ Remember to cite sources when using this knowledge and maintain educational tone
         
         try:
             # Single LLM call with tools
-            # Use gpt-4o-mini for educational queries (gpt-5-mini has issues with empty responses)
-            model = "gpt-4o-mini" if intent == "educational" else ("gpt-5-mini" if intent in ["price-only", "news"] else self.model)
+            # Use gpt-4o-mini for educational/general queries (gpt-5-mini has issues with empty responses)
+            model = "gpt-4o-mini" if intent in ["educational", "general"] else ("gpt-5-mini" if intent in ["price-only", "news"] else self.model)
             # Increased tokens for complex queries like planning (was 800, now 1500)
             max_tokens = 400 if intent in ["price-only", "news"] else 1500  # More tokens for complex responses
             
@@ -4231,31 +4403,63 @@ Remember to cite sources when using this knowledge and maintain educational tone
         logger.info(f"Processing query with G'sves assistant: {query[:50]}...")
 
         try:
-            # Build messages for the assistant
-            messages = []
+            # Build input for the assistant (Responses API uses 'input', not 'messages')
+            input_items = []
             if conversation_history:
-                messages.extend(conversation_history[-10:])  # Keep last 10 messages
-            messages.append({"role": "user", "content": query})
+                # Convert conversation history to proper input format
+                for msg in conversation_history[-10:]:  # Keep last 10 messages
+                    role = msg.get("role")
+                    content = msg.get("content")
+                    if role == "user":
+                        input_items.append({"role": role, "content": [{"type": "input_text", "text": content}]})
+                    elif role == "assistant":
+                        input_items.append({"role": role, "content": [{"type": "output_text", "text": content}]})
+            
+            input_items.append({"role": "user", "content": [{"type": "input_text", "text": query}]})
 
-            # Get tool schemas for Responses API format
+            # Get tool schemas for Responses API format (flattened)
             tools = self._get_tool_schemas(for_responses_api=True)
 
-            # Call Responses API with G'sves assistant
+            # Call Responses API with G'sves assistant (corrected parameters)
             response = await self.client.responses.create(
                 model="gpt-4o",
                 assistant_id=self.gvses_assistant_id,
-                messages=messages,
+                input=input_items,  # Use 'input' instead of 'messages'
                 tools=tools,
-                store=True  # Enable multi-turn conversations
+                store=True,  # Enable multi-turn conversations
+                max_output_tokens=1500,  # Add token limit for better control
+                temperature=0.3  # Add temperature for consistency
             )
 
-            # Extract response text
-            response_text = response.output_text if hasattr(response, 'output_text') else str(response)
-
-            # Track which tools were used
+            # Extract response text using proper Responses API format
+            response_text = ""
             tools_used = []
-            if hasattr(response, 'tool_calls') and response.tool_calls:
-                tools_used = [tool.function.name for tool in response.tool_calls]
+            tool_calls = []
+            
+            if hasattr(response, 'output') and isinstance(response.output, list):
+                for output_item in response.output:
+                    # Skip reasoning items
+                    if hasattr(output_item, 'type') and output_item.type == 'reasoning':
+                        continue
+                    
+                    # Extract text from message items
+                    if hasattr(output_item, 'type') and output_item.type == 'message':
+                        if hasattr(output_item, 'content') and isinstance(output_item.content, list):
+                            for content_item in output_item.content:
+                                if hasattr(content_item, 'type') and content_item.type == 'output_text':
+                                    if hasattr(content_item, 'text'):
+                                        response_text += content_item.text
+                    
+                    # Extract function calls
+                    elif hasattr(output_item, 'type') and output_item.type == 'function_call':
+                        tool_calls.append(output_item)
+                        if hasattr(output_item, 'name'):
+                            tools_used.append(output_item.name)
+            
+            # Fallback extraction if standard method fails
+            if not response_text:
+                response_text = str(response)
+                logger.warning("Using fallback response text extraction for G'sves assistant")
 
             return {
                 "text": response_text,

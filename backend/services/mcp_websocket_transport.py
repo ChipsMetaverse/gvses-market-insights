@@ -65,16 +65,13 @@ class MCPWebSocketTransport:
             return
             
         try:
-            # Import and get the MCP client
-            from mcp_client import get_mcp_client
-            self.mcp_client = get_mcp_client()
+            # Import and get the direct MCP client (replaces problematic subprocess wrapper)
+            from .direct_mcp_client import get_direct_mcp_client
+            self.mcp_client = get_direct_mcp_client()
             
-            # Ensure MCP client is initialized
-            if not self.mcp_client._initialized:
-                await self.mcp_client.start()
-                
+            # Direct client doesn't need initialization - ready to use
             self._initialized = True
-            logger.info("MCP WebSocket transport initialized successfully")
+            logger.info("MCP WebSocket transport initialized successfully with direct client")
             
         except Exception as e:
             logger.error(f"Failed to initialize MCP WebSocket transport: {e}")

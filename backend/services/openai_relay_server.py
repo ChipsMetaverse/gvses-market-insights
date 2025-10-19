@@ -77,6 +77,19 @@ class OpenAIRealtimeRelay:
         # Initialize cleanup task placeholder (will start when event loop is available)
         self.cleanup_task = None
 
+    async def initialize(self):
+        """Initialize the OpenAI Realtime Relay service"""
+        try:
+            # Start the cleanup task if not already running
+            if self.cleanup_task is None or self.cleanup_task.done():
+                self.cleanup_task = asyncio.create_task(self._cleanup_expired_sessions())
+                logger.info("🔄 OpenAI Relay cleanup task started")
+            
+            logger.info("✅ OpenAI Realtime Relay initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize OpenAI Realtime Relay: {e}")
+            raise
+
     async def _cleanup_expired_sessions(self):
         """Background task to clean up expired sessions."""
         while True:
@@ -156,7 +169,16 @@ class OpenAIRealtimeRelay:
         This follows the official relay server pattern.
         [DEPRECATED: Use handle_relay_connection_accepted instead]
         """
-        await websocket.accept()
+        # Handle WebSocket subprotocols for OpenAI RealtimeClient compatibility
+        # The RealtimeClient sends: ["realtime", "openai-insecure-api-key.*", "openai-beta.realtime-v1"]
+        subprotocol = None
+        if websocket.headers.get("sec-websocket-protocol"):
+            # Accept the first protocol in the list (typically "realtime")
+            protocols = websocket.headers["sec-websocket-protocol"].split(", ")
+            subprotocol = protocols[0] if protocols else None
+            logger.info(f"🔌 WebSocket subprotocol negotiation for session {session_id}: {subprotocol}")
+        
+        await websocket.accept(subprotocol=subprotocol)
         
         # Start cleanup task if not already running (lazy initialization)
         if self.cleanup_task is None:
@@ -474,14 +496,22 @@ All intelligence and tool execution is handled by the separate agent system."""
                     if data.get("type") == "session.created" and not self.active_sessions[session_id]["session_configured"]:
                         logger.info(f"📡 Received session.created for session {session_id}, configuring...")
                         # Forward session.created to frontend first
-                        await frontend_ws.send_json(data)
+                        try:
+                            await frontend_ws.send_json(data)
+                        except Exception as send_error:
+                            logger.error(f"Failed to send session.created to frontend {session_id}: {type(send_error).__name__}: {send_error}")
+                            break  # Exit the relay loop if frontend is disconnected
                         # Then configure the session
                         await self._configure_session(openai_ws)
                         self.active_sessions[session_id]["session_configured"] = True
                         logger.info(f"✅ Session configured for {session_id}")
                     else:
                         # Forward all other messages normally
-                        await frontend_ws.send_json(data)
+                        try:
+                            await frontend_ws.send_json(data)
+                        except Exception as send_error:
+                            logger.error(f"Failed to send message to frontend {session_id}: {type(send_error).__name__}: {send_error}")
+                            break  # Exit the relay loop if frontend is disconnected
 
                     # Update activity timestamp
                     async with self.session_lock:
@@ -490,13 +520,19 @@ All intelligence and tool execution is handled by the separate agent system."""
 
                 elif isinstance(message, bytes):
                     # Binary audio data from OpenAI
-                    await frontend_ws.send_bytes(message)
+                    try:
+                        await frontend_ws.send_bytes(message)
+                    except Exception as send_error:
+                        logger.error(f"Failed to send audio to frontend {session_id}: {type(send_error).__name__}: {send_error}")
+                        break  # Exit the relay loop if frontend is disconnected
 
         except websockets.exceptions.ConnectionClosed as e:
             # Log close code and reason for debugging
             logger.info(f"🔌 OpenAI WebSocket closed for session {session_id} - Code: {e.code}, Reason: {e.reason}")
         except Exception as e:
-            logger.error(f"Error relaying OpenAI to frontend for session {session_id}: {e}")
+            logger.error(f"Error relaying OpenAI to frontend for session {session_id}: {type(e).__name__}: {e}")
+            logger.error(f"Frontend WebSocket state: {getattr(frontend_ws, 'client_state', 'unknown')}")
+            logger.error(f"OpenAI WebSocket state: {getattr(openai_ws, 'closed', 'unknown')}")
     
     # REMOVED: _handle_function_call method
     # Tools are NOT handled by Realtime API - voice interface only
@@ -579,6 +615,58 @@ All intelligence and tool execution is handled by the separate agent system."""
                 self.metrics["tts_failures"] += 1
                 self.metrics["errors"] += 1
             return {"success": False, "error": str(e)}
+
+    async def proxy_request(self, request, path: str):
+        """Proxy HTTP requests to OpenAI API with proper authentication"""
+        import httpx
+        from fastapi import HTTPException
+        from fastapi.responses import StreamingResponse
+        
+        try:
+            # Build the full OpenAI API URL
+            openai_base_url = "https://api.openai.com/v1"
+            target_url = f"{openai_base_url}/{path}"
+            
+            # Get request body if present
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+            
+            # Prepare headers
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "GVSES-Voice-Assistant/1.0"
+            }
+            
+            # Add OpenAI beta headers for realtime API
+            if "realtime" in path:
+                headers["OpenAI-Beta"] = "realtime=v1"
+            
+            # Make the request to OpenAI
+            async with httpx.AsyncClient() as client:
+                response = await client.request(
+                    method=request.method,
+                    url=target_url,
+                    headers=headers,
+                    content=body,
+                    params=dict(request.query_params),
+                    timeout=30.0
+                )
+            
+            # Return the response
+            if response.headers.get("content-type", "").startswith("application/json"):
+                return response.json()
+            else:
+                return StreamingResponse(
+                    iter([response.content]),
+                    status_code=response.status_code,
+                    headers=dict(response.headers)
+                )
+                
+        except Exception as e:
+            logger.error(f"Proxy request failed for path {path}: {e}")
+            raise HTTPException(status_code=500, detail=f"Proxy request failed: {str(e)}")
     
     async def get_metrics(self) -> Dict[str, Any]:
         """Get current metrics."""

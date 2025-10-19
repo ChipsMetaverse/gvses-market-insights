@@ -14,6 +14,8 @@ interface DebugWidgetProps {
   voiceProvider: string;
   openAIConnected?: boolean;
   agentVoiceConnected?: boolean;
+  realtimeSDKConnected?: boolean;
+  isBetaMode?: boolean;
 }
 
 export const DebugWidget: React.FC<DebugWidgetProps> = ({
@@ -21,7 +23,9 @@ export const DebugWidget: React.FC<DebugWidgetProps> = ({
   isLoading,
   voiceProvider,
   openAIConnected,
-  agentVoiceConnected
+  agentVoiceConnected,
+  realtimeSDKConnected,
+  isBetaMode
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [logs, setLogs] = useState<DebugLog[]>([]);
@@ -152,7 +156,10 @@ export const DebugWidget: React.FC<DebugWidgetProps> = ({
             <div className="status-grid">
               <div className="status-item">
                 <span className="status-label">Provider:</span>
-                <span className="status-value">{voiceProvider}</span>
+                <span className="status-value">
+                  {voiceProvider}
+                  {isBetaMode && <span style={{color: '#ff6b35', fontSize: '0.8em', marginLeft: '4px'}}>🧪 BETA</span>}
+                </span>
               </div>
               <div className="status-item">
                 <span className="status-label">Connected:</span>
@@ -179,6 +186,15 @@ export const DebugWidget: React.FC<DebugWidgetProps> = ({
                     </span>
                   </div>
                 </>
+              )}
+              {voiceProvider === 'realtime-sdk' && (
+                <div className="status-item">
+                  <span className="status-label">Realtime SDK:</span>
+                  <span className={`status-value ${realtimeSDKConnected ? 'connected' : 'disconnected'}`}>
+                    {realtimeSDKConnected ? '✅ Connected' : '❌ Disconnected'}
+                    <span style={{color: '#00ff88', fontSize: '0.8em', marginLeft: '4px'}}>Direct OpenAI + Agents SDK</span>
+                  </span>
+                </div>
               )}
             </div>
 

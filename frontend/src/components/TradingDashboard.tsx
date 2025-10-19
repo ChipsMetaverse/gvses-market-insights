@@ -7,7 +7,6 @@ import { TradingChart } from './TradingChart'
 import { EnhancedMarketInsights } from './EnhancedMarketInsights'
 import { ChartAnalysis } from './ChartAnalysis'
 import { VoiceInterface } from './VoiceInterface'
-import { EnhancedVoiceClient } from '@/components/voice/EnhancedVoiceClient'
 import { getMultipleMarketData, getCachedMarketData } from '@/services/marketDataService.browser'
 import { LiveStreamingBadge } from '@/components/ui/live-streaming-badge'
 import { StreamingStatusIndicator } from '@/components/ui/streaming-status-indicator'
@@ -213,30 +212,12 @@ export function TradingDashboard() {
             <TradingChart symbol={currentSymbol} onChartReady={handleChartReady} />
           </div>
 
-          {/* Voice Interface - Using the enhanced VoiceClient */}
+          {/* Voice Interface */}
           <div className="bg-gray-50 rounded-lg p-6">
-            <EnhancedVoiceClient 
-              className="w-full"
-              onTranscriptUpdate={(transcripts) => {
-                // Check if latest transcript mentions a stock symbol
-                const lastTranscript = transcripts[transcripts.length - 1];
-                if (lastTranscript && lastTranscript.role === 'assistant') {
-                  // Extract symbol from assistant response if mentioned
-                  const symbols = ['TSLA', 'AAPL', 'NVDA', 'SPY', 'BTC', 'ETH'];
-                  for (const symbol of symbols) {
-                    if (lastTranscript.content.includes(symbol)) {
-                      handleVoiceMarketData(symbol);
-                      break;
-                    }
-                  }
-                }
-              }}
-              onError={(error) => {
-                console.error('Voice error:', error);
-              }}
-              onConnectionStateChange={(state) => {
-                console.log('Voice connection state:', state);
-              }}
+            <VoiceInterface
+              isListening={isListening}
+              currentSymbol={currentSymbol}
+              onVoiceToggle={handleVoiceToggle}
             />
           </div>
         </div>

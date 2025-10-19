@@ -8,6 +8,7 @@ import random
 import time
 import asyncio
 import logging
+import json
 from dotenv import load_dotenv
 
 # Load environment variables before any other imports that might need them
@@ -18,7 +19,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from mcp_client import get_mcp_client
+from .direct_mcp_client import get_direct_mcp_client
 
 logger = logging.getLogger(__name__)
 
@@ -250,37 +251,46 @@ async def get_quote(symbol: str) -> Dict[str, Any]:
     
     try:
         # Get real data from MCP server
-        client = get_mcp_client()
-        
-        # Ensure client is started
-        if not client._initialized:
-            await client.start()
+        client = get_direct_mcp_client()
         
         result = await client.call_tool("get_stock_quote", {"symbol": symbol})
         
         if result and isinstance(result, dict):
+            # Parse MCP response format: result.result.content[0].text contains JSON string
+            stock_data = result
+            if "result" in result and "content" in result.get("result", {}):
+                # Extract data from MCP response format
+                content = result["result"]["content"]
+                if content and len(content) > 0:
+                    text_content = content[0].get("text", "{}")
+                    try:
+                        stock_data = json.loads(text_content)
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse MCP response text: {text_content[:100]}")
+                        stock_data = result
+            
             # Map MCP response to our format
             quote = {
                 "symbol": symbol.upper(),
-                "company_name": result.get("name", f"{symbol.upper()}"),
-                "exchange": result.get("exchange", "NASDAQ"),
-                "currency": result.get("currency", "USD"),
-                "last": result.get("price", result.get("regularMarketPrice", 0)),
-                "change_abs": result.get("change", 0),
-                "change_pct": result.get("changePercent", 0),
-                "open": result.get("open", result.get("regularMarketOpen", 0)),
-                "high": result.get("dayHigh", result.get("regularMarketDayHigh", 0)),
-                "low": result.get("dayLow", result.get("regularMarketDayLow", 0)),
-                "prev_close": result.get("previousClose", result.get("regularMarketPreviousClose", 0)),
-                "volume": result.get("volume", result.get("regularMarketVolume", 0)),
-                "avg_volume_3m": result.get("averageVolume", 0),
-                "market_cap": result.get("marketCap", 0),
-                "pe_ttm": result.get("peRatio", result.get("trailingPE", 0)),
-                "dividend_yield_pct": result.get("dividendYield", 0),
-                "beta": result.get("beta", 1.0),
-                "week52_high": result.get("fiftyTwoWeekHigh", result.get("yearHigh", 0)),
-                "week52_low": result.get("fiftyTwoWeekLow", result.get("yearLow", 0)),
-                "is_open": result.get("marketState", "REGULAR") == "REGULAR"
+                "company_name": stock_data.get("name", f"{symbol.upper()}"),
+                "exchange": stock_data.get("exchange", "NASDAQ"),
+                "currency": stock_data.get("currency", "USD"),
+                "last": stock_data.get("price", stock_data.get("regularMarketPrice", 0)),
+                "change_abs": stock_data.get("change", 0),
+                "change_pct": stock_data.get("changePercent", 0),
+                "open": stock_data.get("open", stock_data.get("regularMarketOpen", 0)),
+                "high": stock_data.get("dayHigh", stock_data.get("regularMarketDayHigh", 0)),
+                "low": stock_data.get("dayLow", stock_data.get("regularMarketDayLow", 0)),
+                "prev_close": stock_data.get("previousClose", stock_data.get("regularMarketPreviousClose", 0)),
+                "volume": stock_data.get("volume", stock_data.get("regularMarketVolume", 0)),
+                "avg_volume_3m": stock_data.get("averageVolume", 0),
+                "market_cap": stock_data.get("marketCap", 0),
+                "pe_ttm": stock_data.get("peRatio", stock_data.get("trailingPE", stock_data.get("pe", 0))),
+                "dividend_yield_pct": stock_data.get("dividendYield", 0),
+                "beta": stock_data.get("beta", 1.0),
+                "week52_high": stock_data.get("fiftyTwoWeekHigh", stock_data.get("yearHigh", 0)),
+                "week52_low": stock_data.get("fiftyTwoWeekLow", stock_data.get("yearLow", 0)),
+                "is_open": stock_data.get("marketState", "REGULAR") == "REGULAR"
             }
             
             # Ensure change calculations are correct
@@ -401,12 +411,7 @@ async def get_ohlcv(symbol: str, range_str: str) -> List[Dict[str, Any]]:
         period = period_map.get(range_str, "1mo")
         
         # Get real data from MCP server
-        client = get_mcp_client()
-        
-        # Ensure client is started
-        if not client._initialized:
-            logger.info("Initializing MCP client for OHLCV")
-            await client.start()
+        client = get_direct_mcp_client()
         
         # Build parameters - let MCP server use its defaults for interval
         params = {
@@ -421,8 +426,18 @@ async def get_ohlcv(symbol: str, range_str: str) -> List[Dict[str, Any]]:
         if result:
             logger.info(f"MCP result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
         
-        # Parse string result if needed
-        if result and isinstance(result, str):
+        # Handle MCP response format: result.result.content[0].text contains JSON string
+        if result and isinstance(result, dict) and "result" in result and "content" in result["result"]:
+            content = result["result"]["content"]
+            if content and len(content) > 0 and "text" in content[0]:
+                import json
+                json_text = content[0]["text"]
+                logger.info(f"Parsing historical JSON text: {json_text[:200]}...")
+                result = json.loads(json_text)
+                logger.info(f"Extracted historical data with {len(result.get('data', []))} candles")
+        
+        # Parse string result if needed (fallback)
+        elif result and isinstance(result, str):
             try:
                 import json
                 result = json.loads(result)

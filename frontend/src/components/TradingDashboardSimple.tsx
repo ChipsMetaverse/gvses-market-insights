@@ -6,6 +6,8 @@ import { agentOrchestratorService, ChartSnapshot } from '../services/agentOrches
 import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import { useOpenAIRealtimeConversation } from '../hooks/useOpenAIRealtimeConversation';
 import { useAgentVoiceConversation } from '../hooks/useAgentVoiceConversation';
+import { useRealtimeSDKConversation } from '../hooks/useRealtimeSDKConversation';
+import { RealtimeChatKit } from './RealtimeChatKit';
 // import { ProviderSelector } from './ProviderSelector'; // Removed - conflicts with useElevenLabsConversation
 // FIXED: Microphone now requested BEFORE connection (following official OpenAI pattern)
 import { chartControlService } from '../services/chartControlService';
@@ -33,11 +35,11 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
-  provider?: 'agent' | 'elevenlabs' | 'openai';  // Track message source
+  provider?: 'agent' | 'elevenlabs' | 'openai' | 'realtime-sdk' | 'chatkit';  // Track message source
   data?: Record<string, any>;
 }
 
-type ConversationProviderKey = 'agent' | 'elevenlabs' | 'openai';
+type ConversationProviderKey = 'agent' | 'elevenlabs' | 'openai' | 'realtime-sdk' | 'chatkit';
 
 interface ConversationProviderState {
   provider: ConversationProviderKey;
@@ -144,7 +146,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [chartTimeframe, setChartTimeframe] = useState('1D');
-  const [voiceProvider, setVoiceProvider] = useState<ConversationProviderKey>('agent');
+  const [voiceProvider, setVoiceProvider] = useState<ConversationProviderKey>('chatkit');
   
   // Dynamic watchlist with localStorage persistence
   const [watchlist, setWatchlist] = useState<string[]>(() => {
@@ -573,6 +575,131 @@ export const TradingDashboardSimple: React.FC = () => {
     }
   });
 
+  const realtimeSDK = useRealtimeSDKConversation({
+    onMessage: (message) => {
+      const formattedMessage: Message = {
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+        provider: 'realtime-sdk' as any, // Will need to update Message type later
+        data: message.data
+      };
+      
+      setMessages(prev => [...prev, formattedMessage]);
+      
+      if (message.role === 'user') {
+        handleUserTranscript(message.content);
+      } else {
+        handleAgentResponse(message.content);
+      }
+    },
+    onConnectionChange: handleConnectionChange,
+    onError: (error: string) => {
+      console.error('RealtimeSDK error:', error);
+      setToastCommand({ command: `❌ RealtimeSDK: ${error}`, type: 'error' });
+      setTimeout(() => setToastCommand(null), 3000);
+    },
+    onThinking: (thinking: boolean) => {
+      setToastCommand(thinking ? { command: '🤔 AI thinking...', type: 'info' } : null);
+      if (!thinking) {
+        setTimeout(() => setToastCommand(null), 1000);
+      }
+    }
+  });
+
+  // ChatKit conversation (Agent Builder workflow)
+  const [chatKitReady, setChatKitReady] = useState(false);
+  const [chatKitError, setChatKitError] = useState<string | null>(null);
+  const [chatKitControl, setChatKitControl] = useState<any>(null);
+  const [chatKitInitAttempts, setChatKitInitAttempts] = useState(0);
+  const [chatKitInitMessageShown, setChatKitInitMessageShown] = useState(false);
+  const MAX_CHATKIT_INIT_ATTEMPTS = 3;
+
+  const chatKitConfig = useMemo(() => ({
+    api: {
+      async getClientSecret(existing: any) {
+        const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        
+        try {
+          const deviceId = localStorage.getItem('chatkit_device_id') || `device_${Date.now()}`;
+          
+          console.log('🔑 Requesting ChatKit session from backend...');
+          const res = await fetch(`${backendUrl}/api/chatkit/session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              device_id: deviceId,
+              existing_session: existing || null
+            }),
+          });
+          
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`Session failed: ${res.status} - ${errorText}`);
+          }
+          
+          const { client_secret } = await res.json();
+          localStorage.setItem('chatkit_device_id', deviceId);
+          console.log('✅ ChatKit session established with Agent Builder');
+          setChatKitError(null);
+          return client_secret;
+        } catch (err: any) {
+          const errorMsg = err.message || 'ChatKit session failed';
+          console.error('❌ ChatKit session error:', errorMsg);
+          setChatKitError(errorMsg);
+          setChatKitReady(false);
+          throw err;
+        }
+      },
+    },
+    onMessage: (message: any) => {
+      console.log('📨 ChatKit message received:', message);
+      const msg: Message = {
+        id: `chatkit-${Date.now()}`,
+        role: message.role,
+        content: message.content,
+        timestamp: new Date().toISOString(),
+        provider: 'chatkit'
+      };
+      setMessages(prev => [...prev, msg]);
+      
+      // Process chart commands if present
+      if (message.role === 'assistant' && message.content) {
+        handleAgentResponse(message.content);
+      }
+    },
+  }), []);
+
+  // ChatKit is now handled by RealtimeChatKit component
+  // const chatKitHookResult = useChatKit(chatKitConfig) as { control?: any; error?: unknown };
+  
+  // Monitor ChatKit initialization and readiness
+  // Commented out - now handled by RealtimeChatKit component
+  /*
+  useEffect(() => {
+    if (chatKitHookResult?.control) {
+      console.log('✅ ChatKit control available - ready to send messages');
+      setChatKitControl(chatKitHookResult.control);
+      setChatKitReady(true);
+      setChatKitError(null);
+      // Reset initialization tracking on successful connection
+      setChatKitInitAttempts(0);
+      setChatKitInitMessageShown(false);
+    } else if (chatKitHookResult?.error) {
+      const errorMessage = chatKitHookResult.error instanceof Error 
+        ? chatKitHookResult.error.message 
+        : typeof chatKitHookResult.error === 'string'
+          ? chatKitHookResult.error
+          : 'ChatKit initialization failed';
+      console.error('❌ ChatKit hook error:', errorMessage);
+      setChatKitError(errorMessage);
+      setChatKitReady(false);
+      setChatKitControl(null);
+    }
+  }, [chatKitHookResult]);
+  */
+
   const conversationProviders: Record<ConversationProviderKey, ConversationProviderState> = useMemo(() => ({
     agent: {
       provider: 'agent',
@@ -606,7 +733,47 @@ export const TradingDashboardSimple: React.FC = () => {
       sendTextMessage: openAIRealtime.sendTextMessage,
       sendAudioChunk: openAIRealtime.sendAudioChunk,
     },
-  }), [agentVoice.connect, agentVoice.disconnect, agentVoice.isConnected, agentVoice.isLoading, agentVoice.sendTextMessage, messages, elevenLabs.isConnected, elevenLabs.isLoading, elevenLabs.sendAudioChunk, elevenLabs.sendTextMessage, elevenLabs.startConversation, elevenLabs.stopConversation, openAIRealtime.isConnected, openAIRealtime.isLoading, openAIRealtime.sendAudioChunk, openAIRealtime.sendTextMessage, openAIRealtime.startConversation, openAIRealtime.stopConversation]);
+    'realtime-sdk': {
+      provider: 'realtime-sdk',
+      isConnected: realtimeSDK.isConnected,
+      isLoading: realtimeSDK.isLoading,
+      messages: messages.filter(message => message.provider === 'realtime-sdk'),
+      startConversation: () => realtimeSDK.startConversation(),
+      stopConversation: realtimeSDK.stopConversation,
+      sendTextMessage: realtimeSDK.sendTextMessage,
+      sendAudioChunk: () => {}, // Not needed for direct realtime connection
+    },
+    'chatkit': {
+      provider: 'chatkit',
+      isConnected: chatKitReady && !chatKitError,
+      isLoading: !chatKitReady && !chatKitError,
+      messages: messages.filter(message => message.provider === 'chatkit'),
+      startConversation: async () => {
+        console.log('ChatKit session auto-connects on initialization');
+      },
+      stopConversation: () => {
+        console.log('ChatKit session persistent (no explicit disconnect)');
+      },
+      sendTextMessage: async (text: string) => {
+        if (chatKitControl?.sendMessage) {
+          console.log('📤 Sending text to ChatKit Agent Builder:', text);
+          try {
+            await chatKitControl.sendMessage(text);
+            console.log('✅ Message sent to ChatKit Agent Builder');
+          } catch (error) {
+            console.error('❌ ChatKit send error:', error);
+            throw error;
+          }
+        } else {
+          console.error('ChatKit control not available');
+          throw new Error('ChatKit not initialized - control unavailable');
+        }
+      },
+      sendAudioChunk: () => {
+        console.warn('ChatKit: Audio chunks not supported in text mode');
+      },
+    },
+  }), [agentVoice.connect, agentVoice.disconnect, agentVoice.isConnected, agentVoice.isLoading, agentVoice.sendTextMessage, messages, elevenLabs.isConnected, elevenLabs.isLoading, elevenLabs.sendAudioChunk, elevenLabs.sendTextMessage, elevenLabs.startConversation, elevenLabs.stopConversation, openAIRealtime.isConnected, openAIRealtime.isLoading, openAIRealtime.sendAudioChunk, openAIRealtime.sendTextMessage, openAIRealtime.startConversation, openAIRealtime.stopConversation, realtimeSDK.isConnected, realtimeSDK.isLoading, realtimeSDK.sendTextMessage, realtimeSDK.startConversation, realtimeSDK.stopConversation, chatKitReady, chatKitError, chatKitControl]);
 
   const currentConversation = conversationProviders[voiceProvider];
   const isConversationConnected = currentConversation.isConnected;
@@ -664,7 +831,10 @@ export const TradingDashboardSimple: React.FC = () => {
       currentConversation.stopConversation();
       hasStartedRecordingRef.current = false;
     } else {
-      const providerName = voiceProvider === 'elevenlabs' ? 'ElevenLabs' : voiceProvider === 'agent' ? 'Agent Voice' : 'OpenAI Realtime';
+      const providerName = voiceProvider === 'elevenlabs' ? 'ElevenLabs' : 
+                        voiceProvider === 'agent' ? 'Agent Voice' : 
+                        voiceProvider === 'realtime-sdk' ? 'OpenAI Realtime + SDK' :
+                        'OpenAI Realtime';
       console.log(`🚨 [DASHBOARD] Not connected - CONNECTING to ${providerName}...`);
       console.log('🚨 [DASHBOARD] About to call currentConversation.startConversation()...');
       console.log('🚨 [DASHBOARD] startConversation function:', typeof currentConversation.startConversation);
@@ -708,7 +878,7 @@ export const TradingDashboardSimple: React.FC = () => {
   };
 
   // Handle text message sending - route ONLY to active provider
-  const handleSendTextMessage = () => {
+  const handleSendTextMessage = async () => {
     console.log('🎯 handleSendTextMessage called');
     console.log('📝 Input text:', inputText);
     console.log('🔌 Is connected:', currentConversation.isConnected);
@@ -740,7 +910,7 @@ export const TradingDashboardSimple: React.FC = () => {
         role: 'user' as const,
         content: trimmedQuery,
         timestamp: dispatchTimestamp,
-        provider: voiceProvider as 'agent' | 'elevenlabs' | 'openai'
+        provider: voiceProvider as 'agent' | 'elevenlabs' | 'openai' | 'realtime-sdk' | 'chatkit'
       };
 
       // Add to local messages for immediate UI feedback
@@ -753,12 +923,74 @@ export const TradingDashboardSimple: React.FC = () => {
       
       // Route ONLY to the active provider
       switch(voiceProvider) {
+        case 'chatkit':
+          // ChatKit uses Agent Builder workflow on OpenAI's servers
+          console.log('🤖 Sending text to ChatKit Agent Builder');
+          if (chatKitControl?.sendMessage) {
+            try {
+              // Don't use await here as we're not in an async context
+              chatKitControl.sendMessage(messageText);
+              console.log('✅ Message sent to ChatKit Agent Builder');
+              // Reset init state on successful send
+              setChatKitInitMessageShown(false);
+            } catch (error) {
+              console.error('❌ ChatKit send error:', error);
+              const errorMessage: Message = {
+                id: `error-${Date.now()}`,
+                role: 'assistant',
+                content: `Error sending message to Agent Builder: ${error}`,
+                timestamp: new Date().toISOString(),
+                provider: 'chatkit',
+              };
+              setMessages(prev => [...prev, errorMessage]);
+            }
+          } else {
+            console.error('ChatKit not ready - control unavailable');
+            
+            // Increment attempts each time we try to send while ChatKit is not ready
+            setChatKitInitAttempts(prev => prev + 1);
+            
+            // Check if we've exceeded max attempts
+            if (chatKitInitAttempts >= MAX_CHATKIT_INIT_ATTEMPTS) {
+              // After max attempts, show unavailable message
+              const failedMessage: Message = {
+                id: `chatkit-failed-${Date.now()}`,
+                role: 'assistant',
+                content: 'ChatKit is currently unavailable. Please try using voice or another provider.',
+                timestamp: new Date().toISOString(),
+                provider: 'chatkit',
+              };
+              setMessages(prev => [...prev, failedMessage]);
+            } else if (!chatKitInitMessageShown) {
+              // Show initialization message only once
+              const offlineMessage: Message = {
+                id: `offline-init-single`,  // Use fixed ID to prevent duplicates
+                role: 'assistant',
+                content: 'ChatKit Agent Builder is initializing. Please wait a moment...',
+                timestamp: new Date().toISOString(),
+                provider: 'chatkit',
+              };
+              
+              // Check if this message already exists
+              setMessages(prev => {
+                const exists = prev.some(m => m.id === 'offline-init-single');
+                if (!exists) {
+                  setChatKitInitMessageShown(true);
+                  return [...prev, offlineMessage];
+                }
+                return prev;
+              });
+            }
+            // If message already shown and still under limit, just silently fail
+          }
+          break;
+          
         case 'agent':
-          // Agent text should work immediately (no voice connection required)
-          fetch((import.meta.env.VITE_API_URL || window.location.origin) + '/api/agent/orchestrate', {
+          // Agent text using Agents SDK workflow (unified architecture)
+          fetch((import.meta.env.VITE_API_URL || window.location.origin) + '/api/agent/sdk-orchestrate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: messageText })
+            body: JSON.stringify({ query: messageText, conversation_history: [] })
           })
           .then(res => res.json())
           .then(data => {
@@ -1402,68 +1634,90 @@ export const TradingDashboardSimple: React.FC = () => {
 
         {/* Right Panel - Voice Assistant Only */}
         <aside className="voice-panel-right" style={{ width: `${rightPanelWidth}px` }}>
-          {/* Voice Conversation Section */}
-          <div className="voice-conversation-section" style={{ height: '100%' }}>
-            <h2 className="panel-title">VOICE ASSISTANT</h2>
-            <div className="conversation-messages-compact">
-              {unifiedMessages.length === 0 ? (
-                <div className="no-messages-state">
-                  <p>🎤 {isConversationConnected ? 'Listening...' : 'Click mic to start'}</p>
-                </div>
-                ) : (
-                  unifiedMessages.map((msg) => (
-                    <div key={msg.id} className="conversation-message-enhanced">
-                      <div className="message-avatar">
-                        {msg.role === 'user' ? '👤' : '🤖'}
+          {voiceProvider === 'chatkit' ? (
+            // Render RealtimeChatKit when using ChatKit provider - no wrapper needed
+            <RealtimeChatKit 
+              className="h-full w-full"
+              onMessage={(message) => {
+                console.log('ChatKit message:', message);
+                // Add message to messages array
+                const newMessage: Message = {
+                  ...message,
+                  provider: 'chatkit'
+                };
+                setMessages((prev: Message[]) => [...prev, newMessage]);
+              }}
+              onChartCommand={(command) => {
+                console.log('ChatKit chart command:', command);
+                enhancedChartControl.processEnhancedResponse(command).catch(err => {
+                  console.error('Failed to execute ChatKit chart command:', err);
+                });
+              }}
+            />
+          ) : (
+            // Original voice conversation UI for other providers
+            <div className="voice-conversation-section" style={{ height: '100%' }}>
+              <h2 className="panel-title">VOICE ASSISTANT</h2>
+              <div className="conversation-messages-compact">
+                {unifiedMessages.length === 0 ? (
+                  <div className="no-messages-state">
+                    <p>🎤 {isConversationConnected ? 'Listening...' : 'Click mic to start'}</p>
+                  </div>
+                  ) : (
+                    unifiedMessages.map((msg) => (
+                      <div key={msg.id} className="conversation-message-enhanced" data-role={msg.role}>
+                        <div className="message-avatar">
+                          {msg.role === 'user' ? '👤' : '🤖'}
+                        </div>
+                        <div className="message-bubble">
+                          {msg.role === 'assistant' ? (
+                            <StructuredResponse content={msg.content} className="message-text-enhanced" />
+                          ) : (
+                            <div className="message-text-enhanced">{msg.content}</div>
+                          )}
+                          {msg.timestamp && (
+                            <div className="message-timestamp">
+                              {new Date(msg.timestamp).toLocaleTimeString([], { 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="message-bubble">
-                        {msg.role === 'assistant' ? (
-                          <StructuredResponse content={msg.content} className="message-text-enhanced" />
-                        ) : (
-                          <div className="message-text-enhanced">{msg.content}</div>
-                        )}
-                        {msg.timestamp && (
-                          <div className="message-timestamp">
-                            {new Date(msg.timestamp).toLocaleTimeString([], { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+              </div>
+              
+              {/* Text Input Controls */}
+              <div className="voice-input-container">
+                <input
+                  type="text"
+                  className="voice-text-input"
+                  placeholder={isConversationConnected ? "Type a message..." : "Connect to send messages"}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendTextMessage();
+                    }
+                  }}
+                  disabled={false}
+                />
+                <button
+                  className="voice-send-button"
+                  onClick={handleSendTextMessage}
+                  disabled={!inputText.trim()}
+                  title="Send message"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" />
+                  </svg>
+                </button>
+              </div>
             </div>
-            
-            {/* Text Input Controls */}
-            <div className="voice-input-container">
-              <input
-                type="text"
-                className="voice-text-input"
-                placeholder={isConversationConnected ? "Type a message..." : "Connect to send messages"}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendTextMessage();
-                  }
-                }}
-                disabled={false}
-              />
-              <button
-                className="voice-send-button"
-                onClick={handleSendTextMessage}
-                disabled={!inputText.trim()}
-                title="Send message"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" />
-                </svg>
-              </button>
-            </div>
-          </div>
+          )}
         </aside>
       </div>
 
@@ -1506,6 +1760,8 @@ export const TradingDashboardSimple: React.FC = () => {
         voiceProvider={voiceProvider}
         openAIConnected={openAIRealtime.isConnected}
         agentVoiceConnected={agentVoice.isConnected}
+        realtimeSDKConnected={realtimeSDK.isConnected}
+        isBetaMode={voiceProvider === 'realtime-sdk'}
       />
     </div>
   );

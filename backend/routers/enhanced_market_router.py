@@ -13,7 +13,7 @@ import json
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from mcp_client import get_mcp_manager
+from services.direct_mcp_client import get_direct_mcp_client
 
 logger = logging.getLogger(__name__)
 
@@ -36,15 +36,15 @@ async def get_enhanced_market_data(
         Market data with source attribution
     """
     try:
-        manager = get_mcp_manager()
-        await manager.initialize()
+        client = get_direct_mcp_client()
         
-        result = await manager.get_stock_data(symbol, source)
+        # Direct client approach - call specific tool directly
+        result = await client.call_tool("get_stock_quote", {"symbol": symbol})
         
-        if 'error' in result:
-            raise HTTPException(status_code=404, detail=result['error'])
+        if not result:
+            raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
         
-        return result
+        return {"data": result, "source": "yahoo_mcp", "symbol": symbol}
         
     except Exception as e:
         logger.error(f"Error fetching enhanced market data: {e}")
@@ -69,15 +69,16 @@ async def get_enhanced_historical_data(
         Historical data with source attribution
     """
     try:
-        manager = get_mcp_manager()
-        await manager.initialize()
+        client = get_direct_mcp_client()
         
-        result = await manager.get_historical_data(symbol, days, source)
+        # Convert days to period 
+        period = "1mo" if days <= 30 else "3mo" if days <= 90 else "1y"
+        result = await client.call_tool("get_stock_history", {"symbol": symbol, "period": period})
         
-        if 'error' in result:
-            raise HTTPException(status_code=404, detail=result['error'])
+        if not result:
+            raise HTTPException(status_code=404, detail=f"No historical data found for {symbol}")
         
-        return result
+        return {"data": result, "source": "yahoo_mcp", "symbol": symbol, "days": days}
         
     except Exception as e:
         logger.error(f"Error fetching historical data: {e}")
@@ -86,120 +87,64 @@ async def get_enhanced_historical_data(
 
 @router.get("/alpaca-account")
 async def get_alpaca_account():
-    """Get Alpaca account information."""
-    try:
-        manager = get_mcp_manager()
-        await manager.initialize()
-        
-        if 'alpaca' not in manager.servers:
-            raise HTTPException(
-                status_code=503,
-                detail="Alpaca MCP server not available"
-            )
-        
-        result = await manager.call_tool('alpaca', 'get_account', {})
-        
-        if result:
-            return json.loads(result) if isinstance(result, str) else result
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to fetch account information"
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching Alpaca account: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Get Alpaca account information - not available in current MCP server."""
+    raise HTTPException(
+        status_code=503,
+        detail="Alpaca MCP server not available - using Yahoo Finance MCP only"
+    )
 
 
 @router.get("/alpaca-positions")
 async def get_alpaca_positions():
-    """Get all open positions from Alpaca."""
-    try:
-        manager = get_mcp_manager()
-        await manager.initialize()
-        
-        if 'alpaca' not in manager.servers:
-            raise HTTPException(
-                status_code=503,
-                detail="Alpaca MCP server not available"
-            )
-        
-        result = await manager.call_tool('alpaca', 'get_positions', {})
-        
-        if result:
-            return json.loads(result) if isinstance(result, str) else result
-        else:
-            return []
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching positions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Get all open positions from Alpaca - not available in current MCP server."""
+    raise HTTPException(
+        status_code=503,
+        detail="Alpaca MCP server not available - using Yahoo Finance MCP only"
+    )
 
 
 @router.get("/alpaca-orders")
 async def get_alpaca_orders(
     status: str = Query("open", description="Order status: 'open', 'closed', or 'all'")
 ):
-    """Get orders from Alpaca."""
-    try:
-        manager = get_mcp_manager()
-        await manager.initialize()
-        
-        if 'alpaca' not in manager.servers:
-            raise HTTPException(
-                status_code=503,
-                detail="Alpaca MCP server not available"
-            )
-        
-        result = await manager.call_tool('alpaca', 'get_orders', {"status": status})
-        
-        if result:
-            return json.loads(result) if isinstance(result, str) else result
-        else:
-            return []
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching orders: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Get orders from Alpaca - not available in current MCP server."""
+    raise HTTPException(
+        status_code=503,
+        detail="Alpaca MCP server not available - using Yahoo Finance MCP only"
+    )
 
 
 @router.get("/market-status")
 async def get_market_status():
-    """Get current market status from Alpaca."""
+    """Get current market status - simplified version."""
     try:
-        manager = get_mcp_manager()
-        await manager.initialize()
+        # Simple fallback since we don't have Alpaca MCP server
+        from datetime import datetime, timezone
+        import pytz
         
-        if 'alpaca' not in manager.servers:
-            # Fallback to a simple status
-            return {
-                "is_open": False,
-                "message": "Market status unavailable",
-                "source": "fallback"
-            }
+        # Check if markets are typically open (9:30 AM - 4:00 PM ET, Monday-Friday)
+        et_tz = pytz.timezone('America/New_York')
+        now_et = datetime.now(et_tz)
         
-        result = await manager.call_tool('alpaca', 'get_market_status', {})
+        is_weekend = now_et.weekday() >= 5  # Saturday = 5, Sunday = 6
+        hour = now_et.hour
+        minute = now_et.minute
+        time_decimal = hour + minute / 60.0
         
-        if result:
-            status = json.loads(result) if isinstance(result, str) else result
-            status['source'] = 'alpaca'
-            return status
-        else:
-            return {
-                "is_open": False,
-                "message": "Unable to determine market status",
-                "source": "error"
-            }
-            
+        # Market hours: 9:30 AM (9.5) to 4:00 PM (16.0) ET
+        is_market_hours = 9.5 <= time_decimal <= 16.0
+        
+        is_open = not is_weekend and is_market_hours
+        
+        return {
+            "is_open": is_open,
+            "message": f"Market {'open' if is_open else 'closed'} - estimated based on time",
+            "source": "time_estimation",
+            "current_time_et": now_et.strftime("%Y-%m-%d %H:%M:%S ET")
+        }
+        
     except Exception as e:
-        logger.error(f"Error fetching market status: {e}")
+        logger.error(f"Error determining market status: {e}")
         return {
             "is_open": False,
             "message": str(e),
@@ -212,12 +157,10 @@ async def compare_data_sources(
     symbol: str = Query(..., description="Stock ticker symbol")
 ) -> Dict[str, Any]:
     """
-    Compare data from both Yahoo Finance and Alpaca for a symbol.
-    Useful for debugging and data quality assessment.
+    Get data from Yahoo Finance MCP server for comparison.
     """
     try:
-        manager = get_mcp_manager()
-        await manager.initialize()
+        client = get_direct_mcp_client()
         
         comparison = {
             "symbol": symbol.upper(),
@@ -225,21 +168,14 @@ async def compare_data_sources(
         }
         
         # Get data from Yahoo Finance
-        if 'market' in manager.servers:
-            yahoo_result = await manager.call_tool('market', 'get_stock_quote', {'symbol': symbol})
-            if yahoo_result:
-                comparison['sources']['yahoo'] = yahoo_result
-        
-        # Get data from Alpaca
-        if 'alpaca' in manager.servers:
-            alpaca_result = await manager.call_tool('alpaca', 'get_stock_snapshot', {'symbol': symbol})
-            if alpaca_result:
-                comparison['sources']['alpaca'] = json.loads(alpaca_result) if isinstance(alpaca_result, str) else alpaca_result
+        yahoo_result = await client.call_tool("get_stock_quote", {"symbol": symbol})
+        if yahoo_result:
+            comparison['sources']['yahoo_mcp'] = yahoo_result
         
         if not comparison['sources']:
             raise HTTPException(
-                status_code=503,
-                detail="No data sources available"
+                status_code=404,
+                detail=f"No data found for symbol {symbol}"
             )
         
         return comparison
