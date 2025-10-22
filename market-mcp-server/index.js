@@ -2496,7 +2496,7 @@ class MarketMCPServer {
             result = {
               tools: [
                 {
-                  name: 'get_quote',
+                  name: 'get_stock_quote',
                   description: 'Get current stock quote with real-time price, volume, and market data',
                   inputSchema: {
                     type: 'object',
@@ -2520,19 +2520,18 @@ class MarketMCPServer {
                   }
                 },
                 {
-                  name: 'get_stock_news',
-                  description: 'Get latest news articles for a stock',
+                  name: 'get_market_news',
+                  description: 'Get latest market news from CNBC and other sources',
                   inputSchema: {
                     type: 'object',
                     properties: {
-                      symbol: { type: 'string' },
+                      symbol: { type: 'string', description: 'Stock ticker symbol (optional)' },
                       limit: { type: 'number', description: 'Number of articles to return (default: 5)' }
-                    },
-                    required: ['symbol']
+                    }
                   }
                 },
                 {
-                  name: 'calculate_technical_indicators',
+                  name: 'get_technical_indicators',
                   description: 'Calculate technical indicators (RSI, MACD, Bollinger Bands, SMA, EMA)',
                   inputSchema: {
                     type: 'object',
@@ -2555,15 +2554,18 @@ class MarketMCPServer {
             const { name, arguments: args } = request.params;
             
             switch (name) {
+              case 'get_stock_quote':
               case 'get_quote':
                 result = await this.getQuote(args);
                 break;
               case 'get_stock_history':
                 result = await this.getStockHistory(args);
                 break;
+              case 'get_market_news':
               case 'get_stock_news':
                 result = await this.getStockNews(args);
                 break;
+              case 'get_technical_indicators':
               case 'calculate_technical_indicators':
                 result = await this.calculateTechnicalIndicators(args);
                 break;
