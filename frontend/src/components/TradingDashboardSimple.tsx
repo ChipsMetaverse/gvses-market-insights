@@ -102,24 +102,42 @@ const PanelDivider: React.FC<{
 };
 
 // Helper function to convert TimeRange to number of days
+// Two distinct categories:
+// - Intraday (<1D): Recent high-resolution data (1-7 days)
+// - Daily+ (>=1D): Historical long-term data (3+ years)
 const timeframeToDays = (timeframe: TimeRange): number => {
   const map: Record<TimeRange, number> = {
-    // Intraday (all map to 1 day of data)
+    // Intraday - Recent data only (high resolution)
     '10S': 1, '30S': 1, '1m': 1, '3m': 1, '5m': 1,
-    '10m': 1, '15m': 1, '30m': 1,
-    // Hours (2-7 days for sufficient context)
-    '1H': 2, '2H': 3, '3H': 3, '4H': 5, '6H': 5, '8H': 7, '12H': 7,
-    // Days
-    '1D': 1, '2D': 2, '3D': 3, '5D': 5, '1W': 7,
-    // Months
-    '1M': 30, '6M': 180,
-    // Years - Multi-year support
-    '1Y': 365, '2Y': 730, '3Y': 1095, '5Y': 1825,
+    '10m': 7, '15m': 7, '30m': 7,
+    
+    // Hours - Week of data for context
+    '1H': 7, '2H': 7, '3H': 7, '4H': 7, 
+    '6H': 7, '8H': 7, '12H': 7,
+    
+    // Daily+ - Historical data (years of daily candles)
+    '1D': 1095,   // 3 years of daily candles
+    '2D': 1095,   // 3 years
+    '3D': 1095,   // 3 years
+    '5D': 1095,   // 3 years
+    '1W': 1095,   // 3 years of weekly candles
+    
+    // Months - More historical data
+    '1M': 3650,   // 10 years
+    '3M': 3650,   // 10 years
+    '6M': 3650,   // 10 years
+    
+    // Years - Maximum historical data
+    '1Y': 3650,   // 10 years
+    '2Y': 7300,   // 20 years
+    '3Y': 7300,   // 20 years
+    '5Y': 9125,   // 25 years
+    
     // Special
     'YTD': Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24)),
-    'MAX': 3650 // 10 years
+    'MAX': 9125   // 25 years
   };
-  return map[timeframe] || 30;
+  return map[timeframe] || 365;
 };
 
 export const TradingDashboardSimple: React.FC = () => {
@@ -1600,6 +1618,7 @@ export const TradingDashboardSimple: React.FC = () => {
               selected={selectedTimeframe}
               options={['1D', '5D', '1M', '6M', '1Y', '2Y', '3Y', 'YTD', 'MAX']}
               onChange={(range) => setSelectedTimeframe(range)}
+              showAdvancedMenu={true}
             />
             <div className="chart-wrapper">
               <TradingChart
