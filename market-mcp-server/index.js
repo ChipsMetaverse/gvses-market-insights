@@ -1,5 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import express from 'express';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -2473,9 +2475,132 @@ class MarketMCPServer {
   }
   
   async run() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Market MCP Server running with streaming support...');
+    // Check if port is provided as command line argument
+    const port = process.argv[2];
+    
+    if (port) {
+      // HTTP mode - don't connect transport, handle directly via Express
+      const app = express();
+      app.use(express.json());
+      
+      // Handle JSON-RPC requests
+      app.post('/', async (req, res) => {
+        try {
+          const request = req.body;
+          console.error('[HTTP] Received request:', request.method);
+          
+          // Handle different JSON-RPC methods
+          let result;
+          if (request.method === 'tools/list') {
+            // List available tools
+            result = {
+              tools: [
+                {
+                  name: 'get_quote',
+                  description: 'Get current stock quote with real-time price, volume, and market data',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      symbol: { type: 'string', description: 'Stock ticker symbol (e.g., AAPL, TSLA)' }
+                    },
+                    required: ['symbol']
+                  }
+                },
+                {
+                  name: 'get_stock_history',
+                  description: 'Get historical stock data with OHLCV candles',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      symbol: { type: 'string' },
+                      period: { type: 'string', description: '1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max' },
+                      interval: { type: 'string', description: '1m, 5m, 15m, 30m, 1h, 1d, 1wk, 1mo' }
+                    },
+                    required: ['symbol']
+                  }
+                },
+                {
+                  name: 'get_stock_news',
+                  description: 'Get latest news articles for a stock',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      symbol: { type: 'string' },
+                      limit: { type: 'number', description: 'Number of articles to return (default: 5)' }
+                    },
+                    required: ['symbol']
+                  }
+                },
+                {
+                  name: 'calculate_technical_indicators',
+                  description: 'Calculate technical indicators (RSI, MACD, Bollinger Bands, SMA, EMA)',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      symbol: { type: 'string' },
+                      indicators: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Array of indicators: rsi, macd, bollinger_bands, sma, ema'
+                      },
+                      period: { type: 'string', description: 'Time period (default: 1y)' }
+                    },
+                    required: ['symbol', 'indicators']
+                  }
+                }
+              ]
+            };
+          } else if (request.method === 'tools/call') {
+            // Call the appropriate tool method
+            const { name, arguments: args } = request.params;
+            
+            switch (name) {
+              case 'get_quote':
+                result = await this.getQuote(args);
+                break;
+              case 'get_stock_history':
+                result = await this.getStockHistory(args);
+                break;
+              case 'get_stock_news':
+                result = await this.getStockNews(args);
+                break;
+              case 'calculate_technical_indicators':
+                result = await this.calculateTechnicalIndicators(args);
+                break;
+              default:
+                throw new Error(`Unknown tool: ${name}`);
+            }
+          } else {
+            throw new Error(`Unknown method: ${request.method}`);
+          }
+          
+          res.json({
+            jsonrpc: '2.0',
+            id: request.id || 1,
+            result
+          });
+        } catch (error) {
+          console.error('[HTTP] Error:', error.message);
+          res.status(500).json({
+            jsonrpc: '2.0',
+            id: req.body.id || 1,
+            error: {
+              code: -32603,
+              message: error.message
+            }
+          });
+        }
+      });
+      
+      app.listen(port, '127.0.0.1', () => {
+        console.error(`Market MCP Server running in HTTP mode on port ${port}`);
+      });
+    } else {
+      // STDIO mode (default)
+      const transport = new StdioServerTransport();
+      await this.server.connect(transport);
+      console.error('Market MCP Server running in STDIO mode with streaming support...');
+    }
   }
 }
 
