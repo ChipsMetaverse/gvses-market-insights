@@ -2556,18 +2556,18 @@ class MarketMCPServer {
             switch (name) {
               case 'get_stock_quote':
               case 'get_quote':
-                result = await this.getQuote(args);
+                result = await this.getStockQuote(args);
                 break;
               case 'get_stock_history':
                 result = await this.getStockHistory(args);
                 break;
               case 'get_market_news':
               case 'get_stock_news':
-                result = await this.getStockNews(args);
+                result = await this.getMarketNews(args);
                 break;
               case 'get_technical_indicators':
               case 'calculate_technical_indicators':
-                result = await this.calculateTechnicalIndicators(args);
+                result = await this.getTechnicalIndicators(args);
                 break;
               default:
                 throw new Error(`Unknown tool: ${name}`);
