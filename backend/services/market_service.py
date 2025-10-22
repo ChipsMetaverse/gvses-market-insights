@@ -426,15 +426,24 @@ async def get_ohlcv(symbol: str, range_str: str) -> List[Dict[str, Any]]:
         if result:
             logger.info(f"MCP result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
         
-        # Handle MCP response format: result.result.content[0].text contains JSON string
-        if result and isinstance(result, dict) and "result" in result and "content" in result["result"]:
-            content = result["result"]["content"]
-            if content and len(content) > 0 and "text" in content[0]:
-                import json
-                json_text = content[0]["text"]
-                logger.info(f"Parsing historical JSON text: {json_text[:200]}...")
-                result = json.loads(json_text)
-                logger.info(f"Extracted historical data with {len(result.get('data', []))} candles")
+        # Handle both STDIO and HTTP MCP response formats
+        if result and isinstance(result, dict):
+            # STDIO format: result.result.content[0].text contains JSON string
+            if "result" in result and isinstance(result["result"], dict) and "content" in result["result"]:
+                content = result["result"]["content"]
+                if content and len(content) > 0 and "text" in content[0]:
+                    import json
+                    json_text = content[0]["text"]
+                    logger.info(f"[STDIO] Parsing historical JSON from content: {json_text[:200]}...")
+                    result = json.loads(json_text)
+                    logger.info(f"Extracted historical data with {len(result.get('data', []))} candles")
+            # HTTP format: result.result directly contains the data
+            elif "result" in result and isinstance(result["result"], dict):
+                logger.info(f"[HTTP] Using direct result format")
+                result = result["result"]
+            # Already unwrapped (shouldn't happen, but handle gracefully)
+            else:
+                logger.info(f"[Direct] Using result as-is")
         
         # Parse string result if needed (fallback)
         elif result and isinstance(result, str):
