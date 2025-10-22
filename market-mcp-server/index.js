@@ -2576,10 +2576,20 @@ class MarketMCPServer {
             throw new Error(`Unknown method: ${request.method}`);
           }
           
+          // Wrap result in MCP content format to match STDIO behavior
+          const mcpFormattedResult = {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(result)
+              }
+            ]
+          };
+          
           res.json({
             jsonrpc: '2.0',
             id: request.id || 1,
-            result
+            result: mcpFormattedResult
           });
         } catch (error) {
           console.error('[HTTP] Error:', error.message);
