@@ -8,7 +8,7 @@ Dynamically generates tool schemas from the market MCP server.
 import logging
 import asyncio
 from typing import Dict, List, Any, Optional
-from .direct_mcp_client import get_direct_mcp_client
+from .http_mcp_client import get_http_mcp_client as get_direct_mcp_client  # Using HTTP for better performance
 from services.chart_tool_registry import get_chart_tool_registry
 
 logger = logging.getLogger(__name__)

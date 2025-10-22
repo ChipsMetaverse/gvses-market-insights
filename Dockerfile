@@ -62,6 +62,9 @@ COPY backend/ ./backend/
 COPY nginx.conf /etc/nginx/sites-available/default
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
+# Create centralized log directory
+RUN mkdir -p /var/log/app && chmod 777 /var/log/app
+
 # Clean up build dependencies to reduce image size
 RUN apt-get remove -y gcc g++ python3-dev curl && \
     apt-get autoremove -y && \

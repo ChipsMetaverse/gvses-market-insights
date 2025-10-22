@@ -13,7 +13,7 @@ import json
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from services.direct_mcp_client import get_direct_mcp_client
+from services.http_mcp_client import get_http_mcp_client as get_direct_mcp_client  # Using HTTP for better performance
 
 logger = logging.getLogger(__name__)
 

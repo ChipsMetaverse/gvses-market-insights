@@ -31,7 +31,7 @@ from slowapi.errors import RateLimitExceeded
 from market_data_service import MarketDataService
 from routers.dashboard_router import router as dashboard_router
 from routers.agent_router import router as agent_router
-from services.direct_mcp_client import get_direct_mcp_client
+from services.http_mcp_client import get_http_mcp_client as get_direct_mcp_client  # Using HTTP for better performance
 from services.market_service_factory import MarketServiceFactory
 from services.openai_relay_server import openai_relay_server
 from chart_control_api import router as chart_control_router

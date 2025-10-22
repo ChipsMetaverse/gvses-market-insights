@@ -456,7 +456,7 @@ class MarketServiceWrapper:
                     # Try to get movers from MCP
                     movers = {}
                     try:
-                        from .direct_mcp_client import get_direct_mcp_client
+                        from .http_mcp_client import get_http_mcp_client as get_direct_mcp_client
                         client = get_direct_mcp_client()
                         
                         # Get CNBC pre-market movers
@@ -479,7 +479,7 @@ class MarketServiceWrapper:
         # Fallback to MCP market overview
         try:
             logger.info("Using MCP for market overview (Yahoo Finance)")
-            from .direct_mcp_client import get_direct_mcp_client
+            from .http_mcp_client import get_http_mcp_client as get_direct_mcp_client
             client = get_direct_mcp_client()
             
             # Get comprehensive market overview from MCP

@@ -19,7 +19,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from .direct_mcp_client import get_direct_mcp_client
+from .http_mcp_client import get_http_mcp_client as get_direct_mcp_client  # Using HTTP for better performance
 
 logger = logging.getLogger(__name__)
 

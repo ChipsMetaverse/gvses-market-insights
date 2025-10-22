@@ -65,8 +65,8 @@ class MCPWebSocketTransport:
             return
             
         try:
-            # Import and get the direct MCP client (replaces problematic subprocess wrapper)
-            from .direct_mcp_client import get_direct_mcp_client
+            # Import and get the HTTP MCP client for better performance
+            from .http_mcp_client import get_http_mcp_client as get_direct_mcp_client
             self.mcp_client = get_direct_mcp_client()
             
             # Direct client doesn't need initialization - ready to use
