@@ -310,7 +310,8 @@ export function RealtimeChatKit({
       <div className="flex-grow border rounded-lg overflow-hidden shadow-sm">
         {chatKitControl ? (
           <ChatKit 
-            control={chatKitControl} 
+            control={chatKitControl}
+            domainPublicKey={import.meta.env.VITE_CHATKIT_DOMAIN_PK || "domain_pk_68f817e0d8c08190922b1575cf3ffd760e268e4f4191db83"}
             className="h-full w-full"
             style={{
               height: '100%',
