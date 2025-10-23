@@ -386,7 +386,7 @@ async def get_technical_indicators(
         indicator_list = [i.strip().lower() for i in indicators.split(",")]
         
         # Call MCP server for technical indicators
-        mcp_client = get_direct_mcp_client()
+        mcp_client = await get_direct_mcp_client()
         if not mcp_client:
             raise HTTPException(status_code=503, detail="Technical analysis service unavailable")
         
