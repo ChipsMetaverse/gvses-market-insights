@@ -1482,8 +1482,14 @@ class MarketMCPServer {
   async getTechnicalIndicators(args) {
     try {
       const period = args.period || 14;
+      // Use args.period (days) to determine how far back to fetch data
+      // Default to 90 days if not specified, but respect the requested period
+      const daysBack = Math.max(args.period || 90, 90); // At least 90 days for good calculations
+      const period1 = new Date();
+      period1.setDate(period1.getDate() - daysBack);
+      
       const history = await yahooFinance.historical(args.symbol, {
-        period1: subMonths(new Date(), 3),
+        period1,
         period2: new Date(),
         interval: '1d'
       });
