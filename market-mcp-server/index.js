@@ -2532,8 +2532,7 @@ class MarketMCPServer {
         for (const [sessionId, timestamp] of sessionTimestamps.entries()) {
           if (now - timestamp > sessionTimeout) {
             console.error(`[Session] Cleaning up stale session: ${sessionId}`);
-            const transport = transports.get(sessionId);
-            if (transport) transport.close();
+            // No need to call close() - we're storing plain session metadata, not transport objects
             transports.delete(sessionId);
             sessionTimestamps.delete(sessionId);
           }
