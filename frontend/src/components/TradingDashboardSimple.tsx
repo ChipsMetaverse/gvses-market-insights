@@ -17,6 +17,7 @@ import { CommandToast } from './CommandToast';
 import { VoiceCommandHelper } from './VoiceCommandHelper';
 import StructuredResponse from './StructuredResponse';
 import { DebugWidget } from './DebugWidget';
+import { Tooltip } from './Tooltip';
 import { TimeRange } from '../types/dashboard';
 import './TradingDashboardSimple.css';
 
@@ -1510,19 +1511,25 @@ export const TradingDashboardSimple: React.FC = () => {
                 <div className="technical-section">
                   <h4>TECHNICAL LEVELS</h4>
                   <div className="level-row">
-                    <span>Sell High</span>
+                    <Tooltip content="Resistance level - Consider taking profits near this price">
+                      <span>Sell High</span>
+                    </Tooltip>
                     <span className="level-val qe">
                       ${technicalLevels.sell_high_level ? technicalLevels.sell_high_level.toFixed(2) : '---'}
                     </span>
                   </div>
                   <div className="level-row">
-                    <span>Buy Low</span>
+                    <Tooltip content="Support level - Potential buying opportunity near this price">
+                      <span>Buy Low</span>
+                    </Tooltip>
                     <span className="level-val st">
                       ${technicalLevels.buy_low_level ? technicalLevels.buy_low_level.toFixed(2) : '---'}
                     </span>
                   </div>
                   <div className="level-row">
-                    <span>BTD</span>
+                    <Tooltip content="Buy The Dip - Strong support level for accumulation">
+                      <span>BTD</span>
+                    </Tooltip>
                     <span className="level-val ltb">
                       ${technicalLevels.btd_level ? technicalLevels.btd_level.toFixed(2) : '---'}
                     </span>
