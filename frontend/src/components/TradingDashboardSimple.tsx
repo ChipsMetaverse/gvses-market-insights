@@ -18,6 +18,7 @@ import { VoiceCommandHelper } from './VoiceCommandHelper';
 import StructuredResponse from './StructuredResponse';
 import { DebugWidget } from './DebugWidget';
 import { Tooltip } from './Tooltip';
+import { OnboardingTour } from './OnboardingTour';
 import { TimeRange } from '../types/dashboard';
 import './TradingDashboardSimple.css';
 
@@ -166,6 +167,10 @@ export const TradingDashboardSimple: React.FC = () => {
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [chartTimeframe, setChartTimeframe] = useState('1D');
   const [voiceProvider, setVoiceProvider] = useState<ConversationProviderKey>('chatkit');
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    const completed = localStorage.getItem('gvses_onboarding_completed');
+    return completed !== 'true';
+  });
   
   // Dynamic watchlist with localStorage persistence
   const [watchlist, setWatchlist] = useState<string[]>(() => {
@@ -1415,7 +1420,7 @@ export const TradingDashboardSimple: React.FC = () => {
       )}
       
       {/* Header with Integrated Ticker Cards */}
-      <header className="dashboard-header-with-tickers">
+      <header className="dashboard-header-with-tickers header-container">
         <div className="header-left">
           <h1 className="brand">GVSES</h1>
           <span className="subtitle">Market Assistant</span>
@@ -1458,7 +1463,7 @@ export const TradingDashboardSimple: React.FC = () => {
       {/* Main Layout */}
       <div className="dashboard-layout">
         {/* Left Panel - Chart Analysis */}
-        <aside className="analysis-panel-left" style={{ width: `${leftPanelWidth}px` }}>
+        <aside className="analysis-panel-left left-panel" style={{ width: `${leftPanelWidth}px` }}>
 
           <h2 className="panel-title">CHART ANALYSIS</h2>
           <div className="analysis-content">
@@ -1619,7 +1624,7 @@ export const TradingDashboardSimple: React.FC = () => {
         {/* Center - Chart Always Visible */}
         <main className="main-content">
           {/* Chart Section - Always Visible */}
-          <div className="chart-section">
+          <div className="chart-section chart-container">
             {/* Timeframe Selector */}
             <TimeRangeSelector
               selected={selectedTimeframe}
@@ -1659,7 +1664,7 @@ export const TradingDashboardSimple: React.FC = () => {
         <PanelDivider onDrag={handleRightPanelResize} />
 
         {/* Right Panel - Voice Assistant Only */}
-        <aside className="voice-panel-right" style={{ width: `${rightPanelWidth}px` }}>
+        <aside className="voice-panel-right chatkit-container" style={{ width: `${rightPanelWidth}px` }}>
           {voiceProvider === 'chatkit' ? (
             // Render RealtimeChatKit when using ChatKit provider - no wrapper needed
             <RealtimeChatKit 
@@ -1789,6 +1794,11 @@ export const TradingDashboardSimple: React.FC = () => {
         realtimeSDKConnected={realtimeSDK.isConnected}
         isBetaMode={voiceProvider === 'realtime-sdk'}
       />
+
+      {/* Onboarding Tour - First-time user walkthrough */}
+      {showOnboarding && (
+        <OnboardingTour onComplete={() => setShowOnboarding(false)} />
+      )}
     </div>
   );
 };
