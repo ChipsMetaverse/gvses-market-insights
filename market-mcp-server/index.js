@@ -1505,16 +1505,28 @@ class MarketMCPServer {
         indicators.macd = this.calculateMACD(prices);
       }
       
-      if (requestedIndicators.includes('bb')) {
+      // Bollinger Bands - support both 'bb' and 'bollinger' names
+      if (requestedIndicators.includes('bb') || requestedIndicators.includes('bollinger')) {
         indicators.bollingerBands = this.calculateBollingerBands(prices, 20);
+        // Also add as 'bollinger' for backend compatibility
+        indicators.bollinger = indicators.bollingerBands;
       }
       
-      if (requestedIndicators.includes('sma')) {
+      // Moving Averages - support both 'sma' and 'moving_averages' names
+      if (requestedIndicators.includes('sma') || requestedIndicators.includes('moving_averages')) {
+        const sma20 = this.calculateSMA(prices, 20);
+        const sma50 = this.calculateSMA(prices, 50);
+        const sma200 = this.calculateSMA(prices, 200);
+        
         indicators.sma = {
-          sma20: this.calculateSMA(prices, 20),
-          sma50: this.calculateSMA(prices, 50),
-          sma200: this.calculateSMA(prices, 200)
+          sma20,
+          sma50,
+          sma200
         };
+        // Also add individual properties for backend compatibility
+        indicators.sma20 = sma20;
+        indicators.sma50 = sma50;
+        indicators.sma200 = sma200;
       }
       
       if (requestedIndicators.includes('ema')) {
