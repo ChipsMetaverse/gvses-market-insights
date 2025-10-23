@@ -251,7 +251,7 @@ async def get_quote(symbol: str) -> Dict[str, Any]:
     
     try:
         # Get real data from MCP server
-        client = get_direct_mcp_client()
+        client = await get_direct_mcp_client()
         
         result = await client.call_tool("get_stock_quote", {"symbol": symbol})
         
@@ -411,7 +411,7 @@ async def get_ohlcv(symbol: str, range_str: str) -> List[Dict[str, Any]]:
         period = period_map.get(range_str, "1mo")
         
         # Get real data from MCP server
-        client = get_direct_mcp_client()
+        client = await get_direct_mcp_client()
         
         # Build parameters - let MCP server use its defaults for interval
         params = {
