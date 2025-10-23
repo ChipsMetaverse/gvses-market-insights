@@ -1502,14 +1502,10 @@ class MarketMCPServer {
       const indicators = {};
       const requestedIndicators = args.indicators || ['rsi', 'macd', 'bb'];
       
-      console.error(`[getTechnicalIndicators] Symbol: ${args.symbol}, Requested: ${requestedIndicators}, DaysBack: ${daysBack}, Prices count: ${prices.length}`);
-      
       // Calculate requested indicators (use standard periods for calculations)
       if (requestedIndicators.includes('rsi')) {
         const rsiPeriod = 14; // Standard RSI period
-        const rsiValue = this.calculateRSI(prices, rsiPeriod);
-        console.error(`[RSI] Calculated RSI for ${args.symbol}: ${rsiValue} (prices: ${prices.length}, rsiPeriod: ${rsiPeriod})`);
-        indicators.rsi = rsiValue;
+        indicators.rsi = this.calculateRSI(prices, rsiPeriod);
       }
       
       if (requestedIndicators.includes('macd')) {
@@ -1652,10 +1648,7 @@ class MarketMCPServer {
   
   // Technical Indicator Calculations
   calculateRSI(prices, period = 14) {
-    console.error(`[calculateRSI] Called with prices.length=${prices.length}, period=${period}`);
-    
     if (prices.length < period + 1) {
-      console.error(`[calculateRSI] Insufficient data: need ${period + 1}, have ${prices.length}`);
       return null;
     }
     
@@ -1673,14 +1666,11 @@ class MarketMCPServer {
     
     // Handle edge case where avgLoss is 0 (would cause Infinity)
     if (avgLoss === 0) {
-      console.error(`[calculateRSI] avgLoss is 0, returning RSI = 100`);
       return 100; // All gains, no losses = RSI of 100
     }
     
     const rs = avgGain / avgLoss;
     const rsi = 100 - (100 / (1 + rs));
-    
-    console.error(`[calculateRSI] Result: ${rsi} (avgGain: ${avgGain}, avgLoss: ${avgLoss}, rs: ${rs})`);
     
     return Math.round(rsi * 100) / 100;
   }
