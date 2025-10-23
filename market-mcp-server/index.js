@@ -1481,7 +1481,7 @@ class MarketMCPServer {
   // Technical Analysis Methods
   async getTechnicalIndicators(args) {
     try {
-      const period = args.period || 14;
+      // args.period is for historical data lookback (days), NOT the indicator calculation period
       // Use args.period (days) to determine how far back to fetch data
       // Default to 90 days if not specified, but respect the requested period
       const daysBack = Math.max(args.period || 90, 90); // At least 90 days for good calculations
@@ -1502,9 +1502,14 @@ class MarketMCPServer {
       const indicators = {};
       const requestedIndicators = args.indicators || ['rsi', 'macd', 'bb'];
       
-      // Calculate requested indicators
+      console.error(`[getTechnicalIndicators] Symbol: ${args.symbol}, Requested: ${requestedIndicators}, DaysBack: ${daysBack}, Prices count: ${prices.length}`);
+      
+      // Calculate requested indicators (use standard periods for calculations)
       if (requestedIndicators.includes('rsi')) {
-        indicators.rsi = this.calculateRSI(prices, period);
+        const rsiPeriod = 14; // Standard RSI period
+        const rsiValue = this.calculateRSI(prices, rsiPeriod);
+        console.error(`[RSI] Calculated RSI for ${args.symbol}: ${rsiValue} (prices: ${prices.length}, rsiPeriod: ${rsiPeriod})`);
+        indicators.rsi = rsiValue;
       }
       
       if (requestedIndicators.includes('macd')) {
@@ -1647,7 +1652,12 @@ class MarketMCPServer {
   
   // Technical Indicator Calculations
   calculateRSI(prices, period = 14) {
-    if (prices.length < period + 1) return null;
+    console.error(`[calculateRSI] Called with prices.length=${prices.length}, period=${period}`);
+    
+    if (prices.length < period + 1) {
+      console.error(`[calculateRSI] Insufficient data: need ${period + 1}, have ${prices.length}`);
+      return null;
+    }
     
     let gains = 0;
     let losses = 0;
@@ -1660,8 +1670,17 @@ class MarketMCPServer {
     
     const avgGain = gains / period;
     const avgLoss = losses / period;
+    
+    // Handle edge case where avgLoss is 0 (would cause Infinity)
+    if (avgLoss === 0) {
+      console.error(`[calculateRSI] avgLoss is 0, returning RSI = 100`);
+      return 100; // All gains, no losses = RSI of 100
+    }
+    
     const rs = avgGain / avgLoss;
     const rsi = 100 - (100 / (1 + rs));
+    
+    console.error(`[calculateRSI] Result: ${rsi} (avgGain: ${avgGain}, avgLoss: ${avgLoss}, rs: ${rs})`);
     
     return Math.round(rsi * 100) / 100;
   }
