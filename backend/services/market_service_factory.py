@@ -457,7 +457,7 @@ class MarketServiceWrapper:
                     movers = {}
                     try:
                         from .http_mcp_client import get_http_mcp_client as get_direct_mcp_client
-                        client = get_direct_mcp_client()
+                        client = await get_direct_mcp_client()
                         
                         # Get CNBC pre-market movers
                         cnbc_movers = await client.call_tool("get_cnbc_movers", {})
@@ -480,7 +480,7 @@ class MarketServiceWrapper:
         try:
             logger.info("Using MCP for market overview (Yahoo Finance)")
             from .http_mcp_client import get_http_mcp_client as get_direct_mcp_client
-            client = get_direct_mcp_client()
+            client = await get_direct_mcp_client()
             
             # Get comprehensive market overview from MCP
             overview = await client.call_tool("get_market_overview", {})

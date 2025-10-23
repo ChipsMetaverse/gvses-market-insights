@@ -21,7 +21,7 @@ async def get_related_news(symbol: str, limit: int = 6) -> dict:
     
     try:
         # Get real news from MCP server  
-        client = get_direct_mcp_client()
+        client = await get_direct_mcp_client()
         # Get market news (MCP server handles symbol-specific news internally)
         result = await client.call_tool("get_market_news", {
             "limit": limit
