@@ -37,7 +37,26 @@
 
 ---
 
-## 🔄 **IN PROGRESS**
+## ✅ **COMPLETED**
+
+### 1️⃣ **Add Tooltips** ✅ **DONE**
+
+**Priority:** 🔴 HIGH  
+**Impact:** Beginner/Novice traders need explanations  
+**Effort:** 1 hour  
+**Status:** ✅ **DEPLOYED TO PRODUCTION**
+
+**Implementation:**
+- Created `Tooltip.tsx` React component
+- Integrated tooltips into "TECHNICAL LEVELS" section
+- Added explanatory text for Sell High, Buy Low, BTD
+
+**Result:**
+- Users hover over labels to see explanations
+- Reduces confusion for new traders
+- Commit: `24a1db1`
+
+---
 
 ### 2️⃣ **Pattern Detection** ✅ **ALREADY WORKING!**
 
@@ -80,12 +99,12 @@ Pattern Detection is production-ready and waiting for users to try it.
 
 ---
 
-### 3️⃣ **Add Onboarding Modal**
+### 3️⃣ **Add Onboarding Modal** ✅ **DONE**
 
 **Priority:** 🔴 HIGH  
 **Impact:** First-time users don't know where to start  
-**Effort:** 3-5 hours  
-**Status:** 📝 **PLANNED - NOT STARTED**
+**Effort:** 4.5 hours  
+**Status:** ✅ **DEPLOYED TO PRODUCTION**
 
 **Design Spec:**
 
