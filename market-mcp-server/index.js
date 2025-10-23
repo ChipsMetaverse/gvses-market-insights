@@ -1,7 +1,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
+import crypto from 'node:crypto';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -2479,124 +2481,193 @@ class MarketMCPServer {
     const port = process.argv[2];
     
     if (port) {
-      // HTTP mode - don't connect transport, handle directly via Express
+      // StreamableHTTP mode - Official MCP transport for production
       const app = express();
+      const transports = new Map(); // Store transports by session ID
+      const sessionTimeout = 30 * 60 * 1000; // 30 minute timeout
+      const sessionTimestamps = new Map();
+      
+      // Middleware for CORS
+      app.use((req, res, next) => {
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id');
+        res.header('Access-Control-Expose-Headers', 'Mcp-Session-Id');
+        if (req.method === 'OPTIONS') return res.sendStatus(200);
+        next();
+      });
+      
+      // Use JSON parsing middleware
       app.use(express.json());
       
-      // Handle JSON-RPC requests
-      app.post('/', async (req, res) => {
-        try {
-          const request = req.body;
-          console.error('[HTTP] Received request:', request.method);
-          
-          // Handle different JSON-RPC methods
-          let result;
-          if (request.method === 'tools/list') {
-            // List available tools
-            result = {
-              tools: [
-                {
-                  name: 'get_stock_quote',
-                  description: 'Get current stock quote with real-time price, volume, and market data',
-                  inputSchema: {
-                    type: 'object',
-                    properties: {
-                      symbol: { type: 'string', description: 'Stock ticker symbol (e.g., AAPL, TSLA)' }
-                    },
-                    required: ['symbol']
-                  }
-                },
-                {
-                  name: 'get_stock_history',
-                  description: 'Get historical stock data with OHLCV candles',
-                  inputSchema: {
-                    type: 'object',
-                    properties: {
-                      symbol: { type: 'string' },
-                      period: { type: 'string', description: '1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max' },
-                      interval: { type: 'string', description: '1m, 5m, 15m, 30m, 1h, 1d, 1wk, 1mo' }
-                    },
-                    required: ['symbol']
-                  }
-                },
-                {
-                  name: 'get_market_news',
-                  description: 'Get latest market news from CNBC and other sources',
-                  inputSchema: {
-                    type: 'object',
-                    properties: {
-                      symbol: { type: 'string', description: 'Stock ticker symbol (optional)' },
-                      limit: { type: 'number', description: 'Number of articles to return (default: 5)' }
-                    }
-                  }
-                },
-                {
-                  name: 'get_technical_indicators',
-                  description: 'Calculate technical indicators (RSI, MACD, Bollinger Bands, SMA, EMA)',
-                  inputSchema: {
-                    type: 'object',
-                    properties: {
-                      symbol: { type: 'string' },
-                      indicators: {
-                        type: 'array',
-                        items: { type: 'string' },
-                        description: 'Array of indicators: rsi, macd, bollinger_bands, sma, ema'
-                      },
-                      period: { type: 'string', description: 'Time period (default: 1y)' }
-                    },
-                    required: ['symbol', 'indicators']
-                  }
-                }
-              ]
-            };
-          } else if (request.method === 'tools/call') {
-            // Call the appropriate tool method
-            const { name, arguments: args } = request.params;
-            
-            switch (name) {
-              case 'get_stock_quote':
-              case 'get_quote':
-                result = await this.getStockQuote(args);
-                break;
-              case 'get_stock_history':
-                result = await this.getStockHistory(args);
-                break;
-              case 'get_market_news':
-              case 'get_stock_news':
-                result = await this.getMarketNews(args);
-                break;
-              case 'get_technical_indicators':
-              case 'calculate_technical_indicators':
-                result = await this.getTechnicalIndicators(args);
-                break;
-              default:
-                throw new Error(`Unknown tool: ${name}`);
-            }
-          } else {
-            throw new Error(`Unknown method: ${request.method}`);
+      // Cleanup stale sessions every 5 minutes
+      setInterval(() => {
+        const now = Date.now();
+        for (const [sessionId, timestamp] of sessionTimestamps.entries()) {
+          if (now - timestamp > sessionTimeout) {
+            console.error(`[Session] Cleaning up stale session: ${sessionId}`);
+            const transport = transports.get(sessionId);
+            if (transport) transport.close();
+            transports.delete(sessionId);
+            sessionTimestamps.delete(sessionId);
           }
+        }
+      }, 5 * 60 * 1000);
+      
+      app.post('/mcp', async (req, res) => {
+        try {
+          const isInitRequest = req.body?.method === 'initialize';
           
-          // Return clean JSON - backend will handle unwrapping
-          res.json({
-            jsonrpc: '2.0',
-            id: request.id || 1,
-            result
-          });
-        } catch (error) {
-          console.error('[HTTP] Error:', error.message);
-          res.status(500).json({
-            jsonrpc: '2.0',
-            id: req.body.id || 1,
-            error: {
-              code: -32603,
-              message: error.message
+          if (isInitRequest) {
+            // Create new session
+            const sessionId = crypto.randomUUID();
+            console.error(`[Session] Creating new session: ${sessionId}`);
+            
+            // Store session info
+            transports.set(sessionId, { created: Date.now() });
+            sessionTimestamps.set(sessionId, Date.now());
+            
+            res.setHeader('Mcp-Session-Id', sessionId);
+            
+            // Return initialize response with capabilities
+            res.json({
+              jsonrpc: '2.0',
+              result: {
+                protocolVersion: '2024-11-05',
+                capabilities: {
+                  tools: {},
+                  streaming: true
+                },
+                serverInfo: {
+                  name: 'market-mcp-server',
+                  version: '1.0.0'
+                }
+              },
+              id: req.body.id
+            });
+          } else {
+            // Handle existing session request
+            const sessionId = req.headers['mcp-session-id'];
+            
+            if (!sessionId) {
+              return res.status(400).json({
+                jsonrpc: '2.0',
+                error: {
+                  code: -32600,
+                  message: 'Bad Request: No session ID provided. Initialize a session first.'
+                },
+                id: req.body?.id || null
+              });
             }
-          });
+            
+            if (!transports.has(sessionId)) {
+              return res.status(404).json({
+                jsonrpc: '2.0',
+                error: {
+                  code: -32001,
+                  message: 'Session not found or expired. Please initialize a new session.'
+                },
+                id: req.body?.id || null
+              });
+            }
+            
+            // Update session activity timestamp
+            sessionTimestamps.set(sessionId, Date.now());
+            console.error(`[Session] Reusing session: ${sessionId} for method: ${req.body?.method}`);
+            
+            // Handle tool calls directly
+            if (req.body.method === 'tools/list') {
+              // Return list of available tools
+              const tools = [
+                { name: 'get_stock_quote', description: 'Get real-time stock quote', inputSchema: { type: 'object', properties: { symbol: { type: 'string' } }, required: ['symbol'] } },
+                { name: 'get_stock_history', description: 'Get historical stock data', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, period: { type: 'string' }, interval: { type: 'string' } }, required: ['symbol'] } },
+                { name: 'get_market_news', description: 'Get market news', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, limit: { type: 'number' } }, required: ['symbol'] } },
+                { name: 'get_technical_indicators', description: 'Calculate technical indicators', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, indicators: { type: 'array' } }, required: ['symbol', 'indicators'] } }
+              ];
+              return res.json({ jsonrpc: '2.0', result: { tools }, id: req.body.id });
+            } else if (req.body.method === 'tools/call') {
+              // Execute tool call
+              const { name, arguments: args } = req.body.params;
+              
+              try {
+                let result;
+                switch (name) {
+                  case 'get_stock_quote':
+                    result = await this.getStockQuote(args);
+                    break;
+                  case 'get_stock_history':
+                    result = await this.getStockHistory(args);
+                    break;
+                  case 'get_market_news':
+                    result = await this.getMarketNews(args);
+                    break;
+                  case 'get_technical_indicators':
+                    result = await this.getTechnicalIndicators(args);
+                    break;
+                  default:
+                    return res.status(400).json({
+                      jsonrpc: '2.0',
+                      error: { code: -32601, message: `Unknown tool: ${name}` },
+                      id: req.body.id
+                    });
+                }
+                
+                return res.json({
+                  jsonrpc: '2.0',
+                  result: {
+                    content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]
+                  },
+                  id: req.body.id
+                });
+              } catch (error) {
+                return res.status(500).json({
+                  jsonrpc: '2.0',
+                  error: { code: -32603, message: `Tool execution failed: ${error.message}` },
+                  id: req.body.id
+                });
+              }
+            } else {
+              return res.status(400).json({
+                jsonrpc: '2.0',
+                error: { code: -32601, message: `Method not found: ${req.body.method}` },
+                id: req.body.id
+              });
+            }
+          }
+        } catch (error) {
+          console.error('[StreamableHTTP] Error:', error);
+          if (!res.headersSent) {
+            res.status(500).json({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: error.message },
+              id: req.body?.id || null
+            });
+          }
         }
       });
       
-      app.listen(port, '127.0.0.1', () => {
-        console.error(`Market MCP Server running in HTTP mode on port ${port}`);
+      // DELETE endpoint for explicit session termination
+      app.delete('/mcp', async (req, res) => {
+        const sessionId = req.headers['mcp-session-id'];
+        
+        if (!sessionId) {
+          return res.status(400).json({ error: 'No session ID provided' });
+        }
+        
+        if (transports.has(sessionId)) {
+          console.error(`[Session] Explicitly closing session: ${sessionId}`);
+          transports.delete(sessionId);
+          sessionTimestamps.delete(sessionId);
+          res.status(204).end();
+        } else {
+          res.status(404).json({ error: 'Session not found' });
+        }
+      });
+      
+      // Start the HTTP server
+      app.listen(parseInt(port), '127.0.0.1', () => {
+        console.error(`Market MCP Server running with StreamableHTTP on port ${port}`);
+        console.error(`MCP endpoint: http://127.0.0.1:${port}/mcp`);
+        console.error(`Session management: 30min timeout, cleanup every 5min`);
       });
     } else {
       // STDIO mode (default)

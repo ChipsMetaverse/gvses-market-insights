@@ -24,18 +24,20 @@ logger = logging.getLogger(__name__)
 class HTTPMCPClient:
     """HTTP-based communication client for the Node.js MCP server."""
     
-    def __init__(self, base_url: str = "http://127.0.0.1:3001"):
+    def __init__(self, base_url: str = "http://127.0.0.1:3001/mcp"):
         """
-        Initialize the HTTP MCP client.
+        Initialize the HTTP MCP client for StreamableHTTP transport.
         
         Args:
-            base_url: Base URL of the MCP server (default: http://127.0.0.1:3001)
+            base_url: Base URL of the MCP server (default: http://127.0.0.1:3001/mcp)
         """
         self.base_url = base_url
         self._client: Optional[httpx.AsyncClient] = None
         self._initialized = False
+        self._session_id: Optional[str] = None  # MCP session ID
+        self._session_lock = asyncio.Lock()      # Lock for session initialization
         
-        logger.info(f"HTTPMCPClient initialized with base URL: {self.base_url}")
+        logger.info(f"HTTPMCPClient initialized with StreamableHTTP endpoint: {self.base_url}")
     
     async def _ensure_client(self):
         """Ensure HTTP client is initialized."""
@@ -48,12 +50,81 @@ class HTTPMCPClient:
             logger.info("HTTP client initialized with connection pooling")
     
     async def close(self):
-        """Close the HTTP client and cleanup resources."""
+        """Close the HTTP client, terminate session, and cleanup resources."""
+        if self._session_id:
+            try:
+                logger.info(f"Terminating MCP session: {self._session_id}")
+                await self._client.delete(
+                    self.base_url,
+                    headers={"Mcp-Session-Id": self._session_id}
+                )
+            except Exception as e:
+                logger.warning(f"Failed to terminate session gracefully: {e}")
+            finally:
+                self._session_id = None
+        
         if self._client is not None:
             await self._client.aclose()
             self._client = None
             self._initialized = False
             logger.info("HTTP client closed")
+    
+    async def initialize(self) -> Dict[str, Any]:
+        """
+        Initialize MCP session with the server.
+        Must be called before any tool operations.
+        
+        Returns:
+            Dict containing initialization result
+        """
+        async with self._session_lock:
+            if self._session_id:
+                logger.info(f"Session already initialized: {self._session_id}")
+                return {"result": {"protocolVersion": "2024-11-05", "sessionId": self._session_id}}
+            
+            await self._ensure_client()
+            
+            request = {
+                "jsonrpc": "2.0",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "gvses-backend",
+                        "version": "1.0.0"
+                    }
+                },
+                "id": 1
+            }
+            
+            try:
+                logger.info("Initializing MCP session...")
+                response = await self._client.post(
+                    self.base_url,
+                    json=request,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream"
+                    }
+                )
+                response.raise_for_status()
+                
+                # Extract session ID from response headers
+                session_id = response.headers.get('mcp-session-id') or response.headers.get('Mcp-Session-Id')
+                
+                if not session_id:
+                    raise RuntimeError("Server did not return session ID in headers")
+                
+                self._session_id = session_id
+                logger.info(f"MCP session initialized successfully: {session_id}")
+                
+                result = response.json()
+                return result
+                
+            except Exception as e:
+                logger.error(f"Failed to initialize MCP session: {e}")
+                raise
     
     async def list_tools(self) -> Dict[str, Any]:
         """
@@ -117,7 +188,7 @@ class HTTPMCPClient:
     
     async def _call_mcp_server(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute an HTTP POST request to the MCP server.
+        Execute an HTTP POST request to the MCP server with session management.
         
         Args:
             request: JSON-RPC 2.0 request dictionary
@@ -126,20 +197,34 @@ class HTTPMCPClient:
             JSON-RPC 2.0 response dictionary
             
         Raises:
+            RuntimeError: If session not initialized
             httpx.HTTPError: If HTTP request fails
             json.JSONDecodeError: If response is not valid JSON
-            RuntimeError: If MCP server returns an error
         """
         await self._ensure_client()
         
+        # Ensure session is initialized (unless this IS an initialize request)
+        if request.get("method") != "initialize" and not self._session_id:
+            logger.info("No active session, initializing...")
+            await self.initialize()
+        
         try:
             logger.debug(f"Sending HTTP request to {self.base_url}: {request.get('method')}")
+            
+            # Build headers with session ID if available
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream"
+            }
+            if self._session_id and request.get("method") != "initialize":
+                headers["Mcp-Session-Id"] = self._session_id
+                logger.debug(f"Using session ID: {self._session_id}")
             
             # Send POST request to MCP server
             response = await self._client.post(
                 self.base_url,
                 json=request,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
             
             # Check HTTP status
@@ -174,37 +259,46 @@ class HTTPMCPClient:
             raise
 
 
-# Singleton instance for connection pooling
-_http_mcp_client: Optional[HTTPMCPClient] = None
+# Singleton instance for reusing sessions across requests
+_global_client: Optional[HTTPMCPClient] = None
+_client_lock = asyncio.Lock()
 
 
-def get_http_mcp_client() -> HTTPMCPClient:
+async def get_http_mcp_client() -> HTTPMCPClient:
     """
-    Get the singleton HTTP MCP client instance.
+    Get or create singleton HTTP MCP client instance with persistent session.
+    This avoids repeated initialize handshakes for every request.
     
     Returns:
-        HTTPMCPClient: Shared client instance with connection pooling
+        HTTPMCPClient instance with active session
     """
-    global _http_mcp_client
-    if _http_mcp_client is None:
-        # Determine MCP server URL based on environment
-        if os.getenv("FLY_APP_NAME"):
-            # Production on Fly.io - use localhost
-            base_url = "http://127.0.0.1:3001"
-        else:
-            # Development - use localhost
-            base_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:3001")
-        
-        _http_mcp_client = HTTPMCPClient(base_url=base_url)
-        logger.info(f"Created singleton HTTP MCP client: {base_url}")
+    global _global_client
     
-    return _http_mcp_client
+    async with _client_lock:
+        if _global_client is None:
+            # Determine MCP server URL based on environment
+            if os.getenv("FLY_APP_NAME"):
+                # Production on Fly.io - use localhost
+                base_url = "http://127.0.0.1:3001/mcp"
+            else:
+                # Development - use localhost
+                base_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:3001/mcp")
+            
+            logger.info("Creating new global HTTP MCP client")
+            _global_client = HTTPMCPClient(base_url=base_url)
+            await _global_client.initialize()
+        elif not _global_client._session_id:
+            logger.info("Re-initializing expired session")
+            await _global_client.initialize()
+    
+    return _global_client
 
 
-async def close_http_mcp_client():
-    """Close the singleton HTTP MCP client."""
-    global _http_mcp_client
-    if _http_mcp_client is not None:
-        await _http_mcp_client.close()
-        _http_mcp_client = None
+async def reset_http_mcp_client():
+    """Reset the global client (useful for testing or error recovery)."""
+    global _global_client
+    async with _client_lock:
+        if _global_client:
+            await _global_client.close()
+            _global_client = None
 
