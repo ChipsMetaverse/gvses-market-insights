@@ -248,10 +248,17 @@ class MarketDataService {
       const response = await axios.get(`${apiUrl}/api/stock-news`, {
         params: { symbol }
       });
-      return response.data.news || [];
+      const payload = response.data ?? {};
+      const articles =
+        payload.articles ||
+        payload.items ||
+        payload.news ||
+        []; // accommodate legacy formats
+
+      return Array.isArray(articles) ? articles : [];
     } catch (error) {
       console.error(`Error fetching news for ${symbol}:`, error);
-      return [];
+      throw error;
     }
   }
 

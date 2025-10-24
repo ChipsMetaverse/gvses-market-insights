@@ -157,6 +157,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [selectedSymbol, setSelectedSymbol] = useState('TSLA');
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeRange>('1D');
   const [stockNews, setStockNews] = useState<any[]>([]);
+  const [newsError, setNewsError] = useState<string | null>(null);
   const [technicalLevels, setTechnicalLevels] = useState<any>({});
   const [detectedPatterns, setDetectedPatterns] = useState<any[]>([]);
   const [backendPatterns, setBackendPatterns] = useState<any[]>([]);
@@ -1196,14 +1197,11 @@ export const TradingDashboardSimple: React.FC = () => {
     try {
       const news = await marketDataService.getStockNews(symbol);
       setStockNews(news); // Show all available news items
-    } catch (error) {
+      setNewsError(null);
+    } catch (error: any) {
       console.error('Error fetching news:', error);
-      // Set fallback news only if news fetch fails
-      setStockNews([
-        { title: `${symbol} shows bullish flag pattern forming`, time: '2 min ago' },
-        { title: `Price testing key support levels`, time: '5 min ago' },
-        { title: `Volume breakout above resistance`, time: '8 min ago' }
-      ]);
+      setStockNews([]);
+      setNewsError('Unable to load news at this time. Please try again later.');
     }
     
     // Fetch comprehensive data separately
@@ -1473,6 +1471,11 @@ export const TradingDashboardSimple: React.FC = () => {
               <>
                 {/* Scrollable news section */}
                 <div className="news-scroll-container">
+                  {newsError && (
+                    <div className="analysis-item error-message">
+                      <p className="news-error-text">{newsError}</p>
+                    </div>
+                  )}
                   {stockNews.map((news, index) => (
                     <div key={index} className="analysis-item clickable-news">
                       <div 

@@ -15,7 +15,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, AsyncIterator
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -36,8 +36,11 @@ class HTTPMCPClient:
         self._initialized = False
         self._session_id: Optional[str] = None  # MCP session ID
         self._session_lock = asyncio.Lock()      # Lock for session initialization
+        self._api_key = os.getenv("MCP_API_KEY")  # API key for authentication
         
         logger.info(f"HTTPMCPClient initialized with StreamableHTTP endpoint: {self.base_url}")
+        if self._api_key:
+            logger.info("API key configured for MCP authentication")
     
     async def _ensure_client(self):
         """Ensure HTTP client is initialized."""
@@ -100,13 +103,19 @@ class HTTPMCPClient:
             
             try:
                 logger.info("Initializing MCP session...")
+                headers = {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream"
+                }
+                
+                # Add API key for authentication
+                if self._api_key:
+                    headers["X-API-Key"] = self._api_key
+                
                 response = await self._client.post(
                     self.base_url,
                     json=request,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Accept": "application/json, text/event-stream"
-                    }
+                    headers=headers
                 )
                 response.raise_for_status()
                 
@@ -186,6 +195,85 @@ class HTTPMCPClient:
                 "id": 1
             }
     
+    async def call_tool_streaming(
+        self, 
+        tool_name: str, 
+        arguments: Dict[str, Any]
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Call a tool and stream results via SSE.
+        
+        Args:
+            tool_name: Tool name to call (e.g., 'stream_market_news')
+            arguments: Tool arguments (should include stream=True)
+            
+        Yields:
+            Dict containing SSE event data (JSON-RPC notifications or results)
+        """
+        await self._ensure_client()
+        
+        if not self._session_id:
+            await self.initialize()
+        
+        # Add stream flag
+        arguments['stream'] = True
+        
+        request = {
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            },
+            "id": 1
+        }
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "Mcp-Session-Id": self._session_id
+        }
+        
+        if self._api_key:
+            headers["X-API-Key"] = self._api_key
+        
+        try:
+            logger.info(f"Starting SSE stream for tool: {tool_name}")
+            async with self._client.stream(
+                "POST",
+                self.base_url,
+                json=request,
+                headers=headers,
+                timeout=None  # No timeout for streaming
+            ) as response:
+                response.raise_for_status()
+                
+                async for line in response.aiter_lines():
+                    if line.startswith('data: '):
+                        data = line[6:]  # Remove 'data: ' prefix
+                        try:
+                            event = json.loads(data)
+                            logger.debug(f"Received SSE event: {event.get('method', 'result')}")
+                            yield event
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"Invalid JSON in SSE: {data[:100]}... Error: {e}")
+                    elif line.startswith('id: '):
+                        # Event ID line (can be used for resumability)
+                        continue
+                    elif line == '':
+                        # Empty line (end of event)
+                        continue
+                        
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error during streaming: {e.response.status_code}")
+            raise RuntimeError(f"Streaming HTTP error: {e.response.status_code}")
+        except httpx.TimeoutException:
+            logger.error("Timeout during streaming")
+            raise RuntimeError("Streaming timeout")
+        except Exception as e:
+            logger.error(f"Unexpected error during streaming: {e}")
+            raise
+    
     async def _call_mcp_server(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute an HTTP POST request to the MCP server with session management.
@@ -211,11 +299,17 @@ class HTTPMCPClient:
         try:
             logger.debug(f"Sending HTTP request to {self.base_url}: {request.get('method')}")
             
-            # Build headers with session ID if available
+            # Build headers with session ID and API key if available
             headers = {
                 "Content-Type": "application/json",
                 "Accept": "application/json, text/event-stream"
             }
+            
+            # Add API key for authentication
+            if self._api_key:
+                headers["X-API-Key"] = self._api_key
+            
+            # Add session ID for stateful requests
             if self._session_id and request.get("method") != "initialize":
                 headers["Mcp-Session-Id"] = self._session_id
                 logger.debug(f"Using session ID: {self._session_id}")

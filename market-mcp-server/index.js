@@ -4,6 +4,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import crypto from 'node:crypto';
+import rateLimit from 'express-rate-limit';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -35,6 +36,10 @@ import dotenv from 'dotenv';
 import CNBCIntegration from './cnbc-integration.js';
 
 dotenv.config();
+
+// Protocol version constant
+const PROTOCOL_VERSION = '2025-06-18';
+const ENABLE_STREAMING = process.env.ENABLE_STREAMING === 'true';
 
 // Cache with 60 second TTL for rate limiting
 const cache = new NodeCache({ stdTTL: 60 });
@@ -1430,52 +1435,97 @@ class MarketMCPServer {
     }
   }
   
-  async streamMarketNews(args) {
-    const duration = Math.min(args.duration || 60, 300);
-    const streamId = `news_${Date.now()}`;
+  async streamMarketNews(args, res, requestId, req) {
+    const { interval = 10000, duration = 60000, stream = false } = args;
     
-    return new Promise((resolve) => {
-      const results = [];
+    // Non-streaming mode (backward compatible)
+    if (!stream) {
+      const updates = [];
       const startTime = Date.now();
       
-      const interval = setInterval(async () => {
-        const elapsed = (Date.now() - startTime) / 1000;
-        
-        if (elapsed >= duration) {
-          clearInterval(interval);
-          resolve({
-            streamId,
-            duration: elapsed,
-            sources: args.sources,
-            articles: results,
-            status: 'completed'
-          });
+      while (Date.now() - startTime < duration) {
+        const news = await this.getMarketNews({ limit: 3 });
+        updates.push({ timestamp: new Date().toISOString(), news });
+        await new Promise(resolve => setTimeout(resolve, interval));
+      }
+      
+      return { updates };
+    }
+    
+    // SSE streaming mode
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    
+    const startTime = Date.now();
+    let eventId = 0;
+    
+    const streamInterval = setInterval(async () => {
+      try {
+        if (Date.now() - startTime >= duration) {
+          clearInterval(streamInterval);
+          
+          // Send final response
+          const finalEvent = {
+            jsonrpc: '2.0',
+            result: { 
+              content: [{ type: 'text', text: 'Stream complete' }],
+              isError: false
+            },
+            id: requestId
+          };
+          res.write(`id: ${eventId++}\n`);
+          res.write(`data: ${JSON.stringify(finalEvent)}\n\n`);
+          res.end();
           return;
         }
         
-        try {
-          const news = await this.getMarketNews({ limit: 5 });
-          
-          if (args.keywords && args.keywords.length > 0) {
-            news.articles = news.articles.filter(article => 
-              args.keywords.some(keyword => 
-                article.title.toLowerCase().includes(keyword.toLowerCase()) ||
-                article.summary?.toLowerCase().includes(keyword.toLowerCase())
-              )
-            );
-          }
-          
-          if (news.articles.length > 0) {
-            results.push({
+        // Fetch and send news update
+        const news = await this.getMarketNews({ limit: 3 });
+        
+        const notification = {
+          jsonrpc: '2.0',
+          method: 'notifications/progress',
+          params: {
+            progressToken: requestId,
+            progress: (Date.now() - startTime) / duration,
+            message: JSON.stringify({
               timestamp: new Date().toISOString(),
-              articles: news.articles
-            });
+              news
+            })
           }
-        } catch (error) {
-          // Continue streaming even if one fetch fails
-        }
-      }, 10000); // Check every 10 seconds
-    });
+        };
+        
+        res.write(`id: ${eventId++}\n`);
+        res.write(`data: ${JSON.stringify(notification)}\n\n`);
+        
+      } catch (error) {
+        clearInterval(streamInterval);
+        
+        const errorEvent = {
+          jsonrpc: '2.0',
+          result: {
+            content: [{ type: 'text', text: `Error: ${error.message}` }],
+            isError: true
+          },
+          id: requestId
+        };
+        res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+        res.end();
+      }
+    }, interval);
+    
+    // Handle client disconnect (if req object is available)
+    if (req) {
+      req.on('close', () => {
+        clearInterval(streamInterval);
+        console.error(`[Stream] Client disconnected from stream ${requestId}`);
+      });
+    }
+    
+    // Return null to indicate streaming response is handled
+    return null;
   }
   
   // Technical Analysis Methods
@@ -2514,17 +2564,79 @@ class MarketMCPServer {
       const sessionTimeout = 30 * 60 * 1000; // 30 minute timeout
       const sessionTimestamps = new Map();
       
-      // Middleware for CORS
-      app.use((req, res, next) => {
+      // 1. Rate Limiting (applied first, before parsing body)
+      const limiter = rateLimit({
+        windowMs: 60 * 1000, // 1 minute
+        max: 100, // 100 requests per minute per IP
+        message: { 
+          jsonrpc: '2.0', 
+          error: { code: -32000, message: 'Rate limit exceeded' } 
+        },
+        standardHeaders: true,
+        legacyHeaders: false
+      });
+      app.use('/mcp', limiter);
+      
+      // 2. CORS Middleware
+      app.use('/mcp', (req, res, next) => {
         res.header('Access-Control-Allow-Origin', '*');
-        res.header('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id, X-API-Key, Authorization, Mcp-Protocol-Version');
         res.header('Access-Control-Expose-Headers', 'Mcp-Session-Id');
         if (req.method === 'OPTIONS') return res.sendStatus(200);
         next();
       });
       
-      // Use JSON parsing middleware
-      app.use(express.json());
+      // 3. Origin Validation (before parsing body)
+      app.use('/mcp', (req, res, next) => {
+        const origin = req.headers.origin;
+        const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5174,https://gvses-ai-market-assistant.fly.dev').split(',');
+        
+        // Skip origin check if no origin header (server-to-server requests)
+        if (origin && !allowedOrigins.includes(origin)) {
+          return res.status(403).json({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Forbidden: Invalid origin' },
+            id: null
+          });
+        }
+        
+        next();
+      });
+      
+      // 4. API Key Authentication (before parsing body)
+      app.use('/mcp', (req, res, next) => {
+        // Skip auth for development
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[Auth] Development mode - skipping API key check');
+          return next();
+        }
+        
+        const apiKey = req.headers['x-api-key'] || 
+                       req.headers['authorization']?.replace('Bearer ', '');
+        
+        const validKeys = (process.env.MCP_API_KEYS || '').split(',').filter(k => k.length > 0);
+        
+        // If no keys configured, allow (for backward compatibility during migration)
+        if (validKeys.length === 0) {
+          console.error('[Auth] WARNING: No API keys configured, allowing request');
+          return next();
+        }
+        
+        if (!apiKey || !validKeys.includes(apiKey)) {
+          console.error('[Auth] Invalid or missing API key');
+          return res.status(401).json({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Unauthorized: Invalid or missing API key' },
+            id: null
+          });
+        }
+        
+        console.error('[Auth] API key validated successfully');
+        next();
+      });
+      
+      // 5. Parse JSON body (after security checks)
+      app.use('/mcp', express.json());
       
       // Cleanup stale sessions every 5 minutes
       setInterval(() => {
@@ -2539,6 +2651,36 @@ class MarketMCPServer {
         }
       }, 5 * 60 * 1000);
       
+      // 6. Protocol Version Validation (after JSON parsing, before business logic)
+      app.post('/mcp', (req, res, next) => {
+        // Skip version check for initialize requests
+        if (req.body?.method === 'initialize') {
+          return next();
+        }
+        
+        const clientVersion = req.headers['mcp-protocol-version'];
+        
+        // For now, allow requests without version header (backward compatibility)
+        if (clientVersion && clientVersion !== PROTOCOL_VERSION) {
+          console.error(`[Protocol] Version mismatch: client=${clientVersion}, server=${PROTOCOL_VERSION}`);
+          return res.status(400).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32602,
+              message: 'Unsupported protocol version',
+              data: { 
+                supported: [PROTOCOL_VERSION], 
+                received: clientVersion 
+              }
+            },
+            id: req.body.id
+          });
+        }
+        
+        next();
+      });
+      
+      // Main MCP request handler
       app.post('/mcp', async (req, res) => {
         try {
           const isInitRequest = req.body?.method === 'initialize';
@@ -2554,14 +2696,17 @@ class MarketMCPServer {
             
             res.setHeader('Mcp-Session-Id', sessionId);
             
-            // Return initialize response with capabilities
+            // Return initialize response with updated protocol version and capabilities
             res.json({
               jsonrpc: '2.0',
               result: {
-                protocolVersion: '2024-11-05',
+                protocolVersion: PROTOCOL_VERSION,
                 capabilities: {
-                  tools: {},
-                  streaming: true
+                  tools: { listChanged: false },
+                  streaming: ENABLE_STREAMING,
+                  experimental: {
+                    serverSentEvents: ENABLE_STREAMING
+                  }
                 },
                 serverInfo: {
                   name: 'market-mcp-server',
@@ -2615,7 +2760,21 @@ class MarketMCPServer {
               const { name, arguments: args } = req.body.params;
               
               try {
+                // Check if streaming is requested
+                const isStreamingRequest = args.stream === true && ENABLE_STREAMING;
+                
                 let result;
+                
+                // Handle streaming tools
+                if (name === 'stream_market_news' && isStreamingRequest) {
+                  result = await this.streamMarketNews(args, res, req.body.id, req);
+                  // If result is null, streaming is handled in method
+                  if (result === null) {
+                    return; // Don't send response, already streaming
+                  }
+                }
+                
+                // Handle non-streaming tools
                 switch (name) {
                   case 'get_stock_quote':
                     result = await this.getStockQuote(args);
@@ -2628,6 +2787,10 @@ class MarketMCPServer {
                     break;
                   case 'get_technical_indicators':
                     result = await this.getTechnicalIndicators(args);
+                    break;
+                  case 'stream_market_news':
+                    // Non-streaming mode
+                    result = await this.streamMarketNews(args);
                     break;
                   default:
                     return res.status(400).json({

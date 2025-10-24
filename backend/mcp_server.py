@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Header
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import httpx
 from supabase import create_client, Client
@@ -346,6 +347,60 @@ async def get_stock_news(request: Request, symbol: str, limit: int = 10):
     except Exception as e:
         logger.error(f"Failed to get stock news for {symbol}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch stock news: {str(e)}")
+
+# Streaming news endpoint (SSE)
+@app.get("/api/mcp/stream-news")
+@limiter.limit("10/minute")
+async def stream_news(request: Request, symbol: str = "TSLA", interval: int = 10000, duration: int = 60000):
+    """
+    Stream news updates via Server-Sent Events (SSE).
+    
+    Args:
+        symbol: Stock ticker symbol (default: TSLA)
+        interval: Update interval in milliseconds (default: 10000ms / 10s)
+        duration: Total stream duration in milliseconds (default: 60000ms / 60s)
+    
+    Returns:
+        StreamingResponse with text/event-stream content type
+    """
+    from services.http_mcp_client import get_http_mcp_client
+    import json as json_lib
+    
+    async def event_generator():
+        try:
+            client = await get_http_mcp_client()
+            logger.info(f"Starting news stream for {symbol}")
+            
+            async for event in client.call_tool_streaming(
+                "stream_market_news",
+                {"symbol": symbol, "interval": interval, "duration": duration}
+            ):
+                # Forward SSE event to client
+                event_data = json_lib.dumps(event)
+                yield f"data: {event_data}\n\n"
+                
+            logger.info(f"News stream completed for {symbol}")
+            
+        except Exception as e:
+            logger.error(f"Error in news stream: {e}")
+            error_event = {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32603,
+                    "message": f"Stream error: {str(e)}"
+                }
+            }
+            yield f"data: {json_lib.dumps(error_event)}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive"
+        }
+    )
 
 # Comprehensive stock data endpoint
 @app.get("/api/comprehensive-stock-data")
