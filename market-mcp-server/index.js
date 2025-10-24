@@ -2763,13 +2763,17 @@ class MarketMCPServer {
                 // Check if streaming is requested
                 const isStreamingRequest = args.stream === true && ENABLE_STREAMING;
                 
+                console.error(`[STREAMING DEBUG] Tool: ${name}, stream arg: ${args.stream}, ENABLE_STREAMING: ${ENABLE_STREAMING}, isStreamingRequest: ${isStreamingRequest}`);
+                
                 let result;
                 
                 // Handle streaming tools
                 if (name === 'stream_market_news' && isStreamingRequest) {
+                  console.error(`[STREAMING DEBUG] Calling streamMarketNews with SSE mode`);
                   result = await this.streamMarketNews(args, res, req.body.id, req);
                   // If result is null, streaming is handled in method
                   if (result === null) {
+                    console.error(`[STREAMING DEBUG] Streaming handled, returning early`);
                     return; // Don't send response, already streaming
                   }
                 }
