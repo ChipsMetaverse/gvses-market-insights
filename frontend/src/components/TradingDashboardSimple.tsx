@@ -1538,47 +1538,7 @@ export const TradingDashboardSimple: React.FC = () => {
               <>
                 {/* Scrollable news section */}
                 <div className="news-scroll-container">
-                  {/* Streaming controls */}
-                  <div style={{ padding: '10px', borderBottom: '1px solid #e0e0e0', marginBottom: '10px' }}>
-                    {!isStreaming ? (
-                      <button 
-                        onClick={startNewsStream}
-                        style={{
-                          padding: '8px 16px',
-                          background: '#4CAF50',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          fontWeight: '500'
-                        }}
-                      >
-                        🔴 Start Live News Stream
-                      </button>
-                    ) : (
-                      <button 
-                        onClick={stopNewsStream}
-                        style={{
-                          padding: '8px 16px',
-                          background: '#f44336',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          fontWeight: '500'
-                        }}
-                      >
-                        ⏹️ Stop Stream
-                      </button>
-                    )}
-                    {isStreaming && (
-                      <span style={{ marginLeft: '10px', color: '#4CAF50', fontSize: '13px' }}>
-                        ● Live streaming...
-                      </span>
-                    )}
-                  </div>
+                  {/* Streaming controls removed - keeping automatic news updates */}
 
                   {newsError && (
                     <div className="analysis-item error-message">
