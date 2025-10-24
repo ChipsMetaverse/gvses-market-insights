@@ -160,6 +160,11 @@ export const TradingDashboardSimple: React.FC = () => {
   const [newsError, setNewsError] = useState<string | null>(null);
   const [technicalLevels, setTechnicalLevels] = useState<any>({});
   const [detectedPatterns, setDetectedPatterns] = useState<any[]>([]);
+  
+  // Streaming news state
+  const [streamingNews, setStreamingNews] = useState<any[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const [backendPatterns, setBackendPatterns] = useState<any[]>([]);
   const [patternValidations, setPatternValidations] = useState<Record<string, 'accepted' | 'rejected'>>({});
   const [currentSnapshot, setCurrentSnapshot] = useState<ChartSnapshot | null>(null);
@@ -1127,6 +1132,59 @@ export const TradingDashboardSimple: React.FC = () => {
     setExpandedNews(expandedNews === index ? null : index);
   };
 
+  // Live news streaming handlers
+  const startNewsStream = useCallback(() => {
+    // Close existing stream
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+    
+    setIsStreaming(true);
+    setStreamingNews([]);
+    
+    // Create EventSource with proper URL
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const streamUrl = `${apiUrl}/api/mcp/stream-news?symbol=${selectedSymbol}&duration=60000&interval=10000`;
+    
+    console.log('[Streaming] Starting news stream:', streamUrl);
+    const eventSource = new EventSource(streamUrl);
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('[Streaming] Event received:', data);
+        
+        if (data.method === 'notifications/progress') {
+          const newsUpdate = JSON.parse(data.params.message);
+          setStreamingNews(prev => [...prev, newsUpdate]);
+        } else if (data.result) {
+          // Final message
+          console.log('[Streaming] Stream complete');
+          setIsStreaming(false);
+          eventSource.close();
+        }
+      } catch (error) {
+        console.error('[Streaming] Parse error:', error);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('[Streaming] EventSource error:', error);
+      setIsStreaming(false);
+      eventSource.close();
+    };
+    
+    eventSourceRef.current = eventSource;
+  }, [selectedSymbol]);
+
+  const stopNewsStream = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    setIsStreaming(false);
+  }, []);
+
   const handleBackToClassic = () => {
     console.log('Back to classic view');
     // Add navigation logic here if needed
@@ -1255,6 +1313,15 @@ export const TradingDashboardSimple: React.FC = () => {
   useEffect(() => {
     fetchStockAnalysis(selectedSymbol);
   }, [selectedSymbol]);
+  
+  // Cleanup streaming connection on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
   
   // Register chart control callbacks for both services
   useEffect(() => {
@@ -1471,12 +1538,56 @@ export const TradingDashboardSimple: React.FC = () => {
               <>
                 {/* Scrollable news section */}
                 <div className="news-scroll-container">
+                  {/* Streaming controls */}
+                  <div style={{ padding: '10px', borderBottom: '1px solid #e0e0e0', marginBottom: '10px' }}>
+                    {!isStreaming ? (
+                      <button 
+                        onClick={startNewsStream}
+                        style={{
+                          padding: '8px 16px',
+                          background: '#4CAF50',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        🔴 Start Live News Stream
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={stopNewsStream}
+                        style={{
+                          padding: '8px 16px',
+                          background: '#f44336',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        ⏹️ Stop Stream
+                      </button>
+                    )}
+                    {isStreaming && (
+                      <span style={{ marginLeft: '10px', color: '#4CAF50', fontSize: '13px' }}>
+                        ● Live streaming...
+                      </span>
+                    )}
+                  </div>
+
                   {newsError && (
                     <div className="analysis-item error-message">
                       <p className="news-error-text">{newsError}</p>
                     </div>
                   )}
-                  {stockNews.map((news, index) => (
+                  
+                  {/* Show streaming news when active, otherwise show regular news */}
+                  {(isStreaming ? streamingNews : stockNews).map((news, index) => (
                     <div key={index} className="analysis-item clickable-news">
                       <div 
                         className="news-header"
