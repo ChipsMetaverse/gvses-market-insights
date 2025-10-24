@@ -1,0 +1,50 @@
+/* Custom ChatKit Branding Override for G'sves */
+
+/* Override the default "What can I help with today?" greeting */
+.chatkit-container [class*="greeting"],
+.chatkit-container [class*="welcome"],
+.chatkit-container h1,
+.chatkit-container h2 {
+  font-family: 'system-ui', -apple-system, sans-serif !important;
+}
+
+/* Override placeholder text "Message the AI" to match G'sves branding */
+.chatkit-container textarea::placeholder,
+.chatkit-container input::placeholder {
+  content: "Ask G'sves about markets, stocks, or trading strategies..." !important;
+  opacity: 0.6 !important;
+}
+
+/* Alternative: Hide the default placeholder and add custom one */
+.chatkit-container textarea[placeholder*="Message"],
+.chatkit-container input[placeholder*="Message"] {
+  position: relative;
+}
+
+.chatkit-container textarea[placeholder*="Message"]::before,
+.chatkit-container input[placeholder*="Message"]::before {
+  content: "Ask G'sves about markets, stocks, or trading strategies...";
+  position: absolute;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Style adjustments for professional look */
+.chatkit-container {
+  --chatkit-primary-color: #1e40af; /* Professional blue */
+  --chatkit-text-color: #1f2937;
+  --chatkit-background: #ffffff;
+}
+
+/* Override any OpenAI branding colors */
+.chatkit-container [class*="button"],
+.chatkit-container button {
+  background-color: #1e40af !important;
+  color: white !important;
+}
+
+.chatkit-container [class*="button"]:hover,
+.chatkit-container button:hover {
+  background-color: #1e3a8a !important;
+}
+

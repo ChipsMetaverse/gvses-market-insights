@@ -3,6 +3,7 @@ import { ChatKit, useChatKit } from '@openai/chatkit-react';
 import { useAgentVoiceConversation } from '../hooks/useAgentVoiceConversation';
 import { AgentResponseParser } from '../services/agentResponseParser';
 import { useDataPersistence } from '../hooks/useDataPersistence';
+import '../styles/chatkit-branding.css';
 
 interface RealtimeChatKitProps {
   className?: string;
@@ -307,7 +308,7 @@ export function RealtimeChatKit({
       )}
 
       {/* Unified ChatKit + Agent Builder Interface */}
-      <div className="flex-grow border rounded-lg overflow-hidden shadow-sm">
+      <div className="flex-grow border rounded-lg overflow-hidden shadow-sm chatkit-container">
         {chatKitControl ? (
           <ChatKit 
             control={chatKitControl}
