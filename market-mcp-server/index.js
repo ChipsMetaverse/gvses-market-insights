@@ -1460,9 +1460,27 @@ class MarketMCPServer {
     
     const startTime = Date.now();
     let eventId = 0;
+
+    // Send immediate progress event so clients know the stream is alive
+    const initialEvent = {
+      jsonrpc: '2.0',
+      method: 'notifications/progress',
+      params: {
+        progressToken: requestId,
+        progress: 0,
+        message: JSON.stringify({
+          status: 'connected',
+          timestamp: new Date().toISOString()
+        })
+      }
+    };
+    res.write(`id: ${eventId++}\n`);
+    res.write(`data: ${JSON.stringify(initialEvent)}\n\n`);
     
     const streamInterval = setInterval(async () => {
       try {
+        console.log(`[Stream ${requestId}] Interval fired, elapsed: ${Date.now() - startTime}ms / ${duration}ms`);
+        
         if (Date.now() - startTime >= duration) {
           clearInterval(streamInterval);
           
@@ -1478,11 +1496,14 @@ class MarketMCPServer {
           res.write(`id: ${eventId++}\n`);
           res.write(`data: ${JSON.stringify(finalEvent)}\n\n`);
           res.end();
+          console.log(`[Stream ${requestId}] Stream complete, connection closed`);
           return;
         }
         
         // Fetch and send news update
+        console.log(`[Stream ${requestId}] Fetching news...`);
         const news = await this.getMarketNews({ limit: 3 });
+        console.log(`[Stream ${requestId}] Got ${news.length} news items, sending event ${eventId}`);
         
         const notification = {
           jsonrpc: '2.0',
@@ -1516,15 +1537,13 @@ class MarketMCPServer {
       }
     }, interval);
     
-    // Handle client disconnect (if req object is available)
-    if (req) {
-      req.on('close', () => {
-        clearInterval(streamInterval);
-        console.error(`[Stream] Client disconnected from stream ${requestId}`);
-      });
-    }
+    // Handle client disconnect using response object
+    res.on('close', () => {
+      clearInterval(streamInterval);
+      console.log(`[Stream ${requestId}] Client disconnected, cleaning up interval`);
+    });
     
-    // Return null to indicate streaming response is handled
+    // Return null to indicate streaming response is handled by SSE
     return null;
   }
   
