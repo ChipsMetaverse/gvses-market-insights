@@ -418,6 +418,281 @@ class PatternDetector:
     # Structure/continuation detections
     # ------------------------------------------------------------------
 
+    def _detect_double_tops_bottoms(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        # Require enough candles to identify swing structure
+        if len(self.candles) < 20:
+            return patterns
+
+        highs_extrema = self._local_extrema(self.highs, order=3, mode='max')
+        lows_extrema = self._local_extrema(self.lows, order=3, mode='min')
+
+        if len(highs_extrema) >= 2:
+            last_two = highs_extrema[-2:]
+            (idx1, val1), (idx2, val2) = last_two
+            if self._percent_diff(val1, val2) < 0.02 and 3 <= idx2 - idx1 <= 40:
+                confidence = 72
+                patterns.append(Pattern(
+                    pattern_id=f"double_top_{idx2}_{self.times[idx2]}",
+                    pattern_type="double_top",
+                    confidence=confidence,
+                    start_candle=idx1,
+                    end_candle=idx2,
+                    description="Double Top - bearish reversal potential",
+                    signal="bearish",
+                    action="watch_closely"
+                ))
+
+        if len(lows_extrema) >= 2:
+            last_two = lows_extrema[-2:]
+            (idx1, val1), (idx2, val2) = last_two
+            if self._percent_diff(val1, val2) < 0.02 and 3 <= idx2 - idx1 <= 40:
+                confidence = 72
+                patterns.append(Pattern(
+                    pattern_id=f"double_bottom_{idx2}_{self.times[idx2]}",
+                    pattern_type="double_bottom",
+                    confidence=confidence,
+                    start_candle=idx1,
+                    end_candle=idx2,
+                    description="Double Bottom - bullish reversal potential",
+                    signal="bullish",
+                    action="watch_closely"
+                ))
+
+        return patterns
+
+    def _detect_head_shoulders(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 30:
+            return patterns
+
+        highs_extrema = self._local_extrema(self.highs, order=3, mode='max')
+        if len(highs_extrema) < 3:
+            return patterns
+
+        last_three = highs_extrema[-3:]
+        idx = [i for i, _ in last_three]
+        vals = [v for _, v in last_three]
+        # Head should be middle peak notably higher
+        if vals[1] > vals[0] * 1.02 and vals[1] > vals[2] * 1.02 and abs(vals[0] - vals[2]) / max(vals[1], 1e-9) < 0.08:
+            patterns.append(Pattern(
+                pattern_id=f"head_shoulders_{idx[-1]}_{self.times[idx[-1]]}",
+                pattern_type="head_shoulders",
+                confidence=75,
+                start_candle=idx[0],
+                end_candle=idx[-1],
+                description="Head & Shoulders - bearish reversal pattern",
+                signal="bearish",
+                action="watch_closely"
+            ))
+
+        lows_extrema = self._local_extrema(self.lows, order=3, mode='min')
+        if len(lows_extrema) >= 3:
+            last_three = lows_extrema[-3:]
+            idx = [i for i, _ in last_three]
+            vals = [v for _, v in last_three]
+            if vals[1] < vals[0] * 0.98 and vals[1] < vals[2] * 0.98 and abs(vals[0] - vals[2]) / max(abs(vals[1]), 1e-9) < 0.08:
+                patterns.append(Pattern(
+                    pattern_id=f"inverse_head_shoulders_{idx[-1]}_{self.times[idx[-1]]}",
+                    pattern_type="inverse_head_shoulders",
+                    confidence=75,
+                    start_candle=idx[0],
+                    end_candle=idx[-1],
+                    description="Inverse Head & Shoulders - bullish reversal pattern",
+                    signal="bullish",
+                    action="watch_closely"
+                ))
+
+        return patterns
+
+    def _detect_triangles(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 25:
+            return patterns
+
+        highs_extrema = self._local_extrema(self.highs, order=3, mode='max')
+        lows_extrema = self._local_extrema(self.lows, order=3, mode='min')
+        if len(highs_extrema) < 2 or len(lows_extrema) < 2:
+            return patterns
+
+        recent_highs = self.highs[-40:]
+        recent_lows = self.lows[-40:]
+        high_slope = self._fit_slope(np.array(recent_highs))
+        low_slope = self._fit_slope(np.array(recent_lows))
+
+        if high_slope < 0 and low_slope > 0:
+            patterns.append(Pattern(
+                pattern_id=f"sym_triangle_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type="symmetrical_triangle",
+                confidence=72,
+                start_candle=max(0, len(self.candles) - len(recent_highs)),
+                end_candle=len(self.candles) - 1,
+                description="Symmetrical triangle consolidation",
+                signal="neutral",
+                action="watch_closely"
+            ))
+        elif high_slope < 0 and abs(low_slope) < abs(high_slope) * 0.4:
+            patterns.append(Pattern(
+                pattern_id=f"descending_triangle_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type="descending_triangle",
+                confidence=70,
+                start_candle=max(0, len(self.candles) - len(recent_highs)),
+                end_candle=len(self.candles) - 1,
+                description="Descending triangle - bearish bias",
+                signal="bearish",
+                action="watch_closely"
+            ))
+        elif low_slope > 0 and abs(high_slope) < abs(low_slope) * 0.4:
+            patterns.append(Pattern(
+                pattern_id=f"ascending_triangle_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type="ascending_triangle",
+                confidence=70,
+                start_candle=max(0, len(self.candles) - len(recent_lows)),
+                end_candle=len(self.candles) - 1,
+                description="Ascending triangle - bullish bias",
+                signal="bullish",
+                action="watch_closely"
+            ))
+
+        return patterns
+
+    def _detect_flags(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 20:
+            return patterns
+
+        window = min(20, len(self.candles))
+        closes = np.array(self.closes[-window:])
+        slopes = self._fit_slope(closes)
+        # Identify strong prior move (flag pole)
+        lookback = min(40, len(self.candles))
+        pole_change = (self.closes[-1] - self.closes[-lookback]) / max(self.closes[-lookback], 1e-9)
+
+        if abs(pole_change) > 0.08 and abs(slopes) < abs(pole_change) * 0.2:
+            bullish = pole_change > 0
+            patterns.append(Pattern(
+                pattern_id=f"flag_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type="bullish_flag" if bullish else "bearish_flag",
+                confidence=70,
+                start_candle=len(self.candles) - window,
+                end_candle=len(self.candles) - 1,
+                description=f"{'Bullish' if bullish else 'Bearish'} flag consolidation",
+                signal="bullish" if bullish else "bearish",
+                action="watch_closely"
+            ))
+
+        return patterns
+
+    def _detect_wedges(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 25:
+            return patterns
+
+        highs = self.highs[-50:]
+        lows = self.lows[-50:]
+        high_slope = self._fit_slope(np.array(highs))
+        low_slope = self._fit_slope(np.array(lows))
+
+        if high_slope > 0 and low_slope > 0 and high_slope < low_slope:
+            patterns.append(Pattern(
+                pattern_id=f"rising_wedge_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type="rising_wedge",
+                confidence=70,
+                start_candle=len(self.candles) - len(highs),
+                end_candle=len(self.candles) - 1,
+                description="Rising wedge - bearish bias",
+                signal="bearish",
+                action="watch_closely"
+            ))
+        elif high_slope < 0 and low_slope < 0 and high_slope > low_slope:
+            patterns.append(Pattern(
+                pattern_id=f"falling_wedge_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type="falling_wedge",
+                confidence=70,
+                start_candle=len(self.candles) - len(highs),
+                end_candle=len(self.candles) - 1,
+                description="Falling wedge - bullish bias",
+                signal="bullish",
+                action="watch_closely"
+            ))
+
+        return patterns
+
+    def _detect_cup_handle(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 40:
+            return patterns
+
+        closes = np.array(self.closes[-60:])
+        if len(closes) < 20:
+            return patterns
+
+        midpoint = len(closes) // 2
+        left = closes[:midpoint]
+        right = closes[midpoint:]
+        if len(left) < 10 or len(right) < 10:
+            return patterns
+
+        left_peak = left.max()
+        right_peak = right.max()
+        cup_low = closes.min()
+
+        depth = (left_peak - cup_low) / max(left_peak, 1e-9)
+        recovery = (right_peak - cup_low) / max(left_peak, 1e-9)
+
+        if 0.08 < depth < 0.35 and recovery > 0.8:
+            patterns.append(Pattern(
+                pattern_id=f"cup_handle_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type="cup_handle",
+                confidence=70,
+                start_candle=len(self.candles) - len(closes),
+                end_candle=len(self.candles) - 1,
+                description="Cup and Handle base",
+                signal="bullish",
+                action="watch_closely"
+            ))
+
+        return patterns
+
+    def _detect_trend_acceleration(self) -> List[Pattern]:
+        patterns: List[Pattern] = []
+        if len(self.candles) < 30:
+            return patterns
+
+        closes = np.array(self.closes[-60:])
+        if len(closes) < 15:
+            return patterns
+
+        first_half = closes[: len(closes) // 2]
+        second_half = closes[len(closes) // 2 :]
+        slope1 = self._fit_slope(first_half)
+        slope2 = self._fit_slope(second_half)
+
+        if slope2 > slope1 * 1.5 and slope2 > 0:
+            patterns.append(Pattern(
+                pattern_id=f"trend_acceleration_bull_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type="trend_acceleration",
+                confidence=68,
+                start_candle=len(self.candles) - len(closes),
+                end_candle=len(self.candles) - 1,
+                description="Accelerating uptrend",
+                signal="bullish",
+                action="watch_closely"
+            ))
+        elif slope2 < slope1 * 1.5 and slope2 < 0:
+            patterns.append(Pattern(
+                pattern_id=f"trend_acceleration_bear_{len(self.candles)-1}_{self.times[-1]}",
+                pattern_type="trend_acceleration",
+                confidence=68,
+                start_candle=len(self.candles) - len(closes),
+                end_candle=len(self.candles) - 1,
+                description="Accelerating downtrend",
+                signal="bearish",
+                action="watch_closely"
+            ))
+
+        return patterns
+
     def _detect_rectangles_channels(self) -> List[Pattern]:
         patterns: List[Pattern] = []
         if len(self.candles) < 20:

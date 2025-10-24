@@ -11,7 +11,9 @@ import os
 from typing import Any, Optional, Dict, List
 import asyncio
 from datetime import datetime, timezone, timedelta
+
 from services.database_service import get_database_service
+from pattern_detection import PatternDetector
 
 logger = logging.getLogger(__name__)
 
@@ -269,11 +271,34 @@ class MarketServiceWrapper:
             
             # Calculate technical levels with advanced TA or fallback
             technical_levels = await self._calculate_technical_levels(symbol, candles, quote)
-            
+
+            # Detect chart patterns from candle data
+            patterns_result: Dict[str, Any] = {"detected": []}
+            try:
+                if candles:
+                    print(f"🔍 [{symbol}] Pattern detection starting with {len(candles)} candles")
+                    logger.info(f"[{symbol}] Pattern detection: {len(candles)} candles available")
+                    detector = PatternDetector(candles)
+                    detected_patterns = detector.detect_all_patterns()
+                    print(f"✅ [{symbol}] Patterns found: {len(detected_patterns.get('detected', []))} total")
+                    logger.info(f"[{symbol}] Patterns found: {len(detected_patterns.get('detected', []))} total")
+                    if isinstance(detected_patterns, dict):
+                        # Keep only top 5 patterns for brevity if available
+                        detected = detected_patterns.get("detected", [])
+                        if detected:
+                            detected_patterns["detected"] = detected[:5]
+                            logger.info(f"[{symbol}] Returning top 5 patterns")
+                        patterns_result = detected_patterns
+                else:
+                    logger.warning(f"[{symbol}] No candles available for pattern detection")
+            except Exception as pattern_error:
+                logger.error(f"Pattern detection failed for {symbol}: {pattern_error}", exc_info=True)
+
             return {
                 "symbol": symbol.upper(),
                 "price_data": quote,
                 "technical_levels": technical_levels,
+                "patterns": patterns_result,
                 "data_source": "mcp"
             }
         except Exception as e:
@@ -282,6 +307,7 @@ class MarketServiceWrapper:
                 "symbol": symbol.upper(),
                 "price_data": {},
                 "technical_levels": {},
+                "patterns": {"detected": []},
                 "data_source": "error",
                 "error": str(e)
             }
