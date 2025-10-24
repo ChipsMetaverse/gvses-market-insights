@@ -16,7 +16,6 @@ import { useIndicatorContext } from '../contexts/IndicatorContext';
 import { CommandToast } from './CommandToast';
 import { VoiceCommandHelper } from './VoiceCommandHelper';
 import StructuredResponse from './StructuredResponse';
-import { DebugWidget } from './DebugWidget';
 import { Tooltip } from './Tooltip';
 import { OnboardingTour } from './OnboardingTour';
 import { TimeRange } from '../types/dashboard';
@@ -1857,18 +1856,6 @@ export const TradingDashboardSimple: React.FC = () => {
         position="right"
         maxHeight={400}
       />
-
-      {/* Debug Widget - Real-time diagnostics */}
-      <DebugWidget
-        isConnected={isConversationConnected}
-        isLoading={isConversationConnecting}
-        voiceProvider={voiceProvider}
-        openAIConnected={openAIRealtime.isConnected}
-        agentVoiceConnected={agentVoice.isConnected}
-        realtimeSDKConnected={realtimeSDK.isConnected}
-        isBetaMode={voiceProvider === 'realtime-sdk'}
-      />
-
       {/* Onboarding Tour - First-time user walkthrough */}
       {showOnboarding && (
         <OnboardingTour onComplete={() => setShowOnboarding(false)} />
