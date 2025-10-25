@@ -293,6 +293,71 @@ class EnhancedChartControl {
   }
   
   /**
+   * Draw a trendline between two points
+   */
+  drawTrendline(startTime: number, startPrice: number, endTime: number, endPrice: number, color: string = '#3b82f6'): string {
+    if (!this.chartRef || !this.seriesRef) {
+      return 'Chart not initialized';
+    }
+
+    try {
+      // Create line series for the trendline
+      const lineSeries = this.chartRef.addLineSeries({
+        color: color,
+        lineWidth: 2,
+        lineStyle: 0, // Solid line
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+
+      // Set data points for the trendline
+      lineSeries.setData([
+        { time: startTime, value: startPrice },
+        { time: endTime, value: endPrice }
+      ]);
+
+      // Store reference for cleanup
+      const lineId = `trendline_${Date.now()}`;
+      this.annotationsMap.set(lineId, lineSeries);
+
+      return `Trendline drawn from ${startTime} to ${endTime}`;
+    } catch (error) {
+      console.error('Error drawing trendline:', error);
+      return 'Failed to draw trendline';
+    }
+  }
+
+  /**
+   * Draw a horizontal line at a specific price level
+   */
+  drawHorizontalLine(price: number, color: string = '#ef4444', label?: string): string {
+    if (!this.chartRef || !this.seriesRef) {
+      return 'Chart not initialized';
+    }
+
+    try {
+      // Create price line
+      const priceLine = this.seriesRef.createPriceLine({
+        price: price,
+        color: color,
+        lineWidth: 2,
+        lineStyle: 2, // Dashed line
+        axisLabelVisible: true,
+        title: label || `Level ${price.toFixed(2)}`,
+      });
+
+      // Store reference for cleanup
+      const lineId = `horizontal_${Date.now()}`;
+      this.drawingsMap.set(lineId, priceLine);
+
+      return `Horizontal line drawn at ${price.toFixed(2)}`;
+    } catch (error) {
+      console.error('Error drawing horizontal line:', error);
+      return 'Failed to draw horizontal line';
+    }
+  }
+
+  /**
    * Clear all drawings and annotations
    */
   clearDrawings(): string {
@@ -318,6 +383,15 @@ class EnhancedChartControl {
     this.overlayControls.clearOverlays?.();
     
     return 'Cleared all drawings';
+  }
+
+  /**
+   * Clear a specific pattern's overlays
+   */
+  clearPattern(patternId: string): string {
+    // Remove all drawings/annotations associated with this pattern
+    // For now, we clear everything since we don't track per-pattern
+    return this.clearDrawings();
   }
   
   /**

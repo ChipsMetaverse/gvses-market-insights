@@ -511,16 +511,34 @@ export const TradingDashboardSimple: React.FC = () => {
 
   // Pattern visualization handlers
   const drawPatternOverlay = useCallback((pattern: any) => {
-    if (!pattern.chart_metadata) return;
+    if (!pattern.chart_metadata) {
+      console.log('[Pattern] No chart_metadata for pattern:', pattern.pattern_type);
+      return;
+    }
     
-    // Use revealPattern to draw the pattern on the chart
-    const patternInfo = {
-      description: pattern.description || pattern.pattern_type,
-      indicator: pattern.signal,
-      title: pattern.pattern_type
-    };
+    const { trendlines, levels } = pattern.chart_metadata;
+    console.log('[Pattern] Drawing overlay:', { pattern_type: pattern.pattern_type, trendlines, levels });
     
-    enhancedChartControl.revealPattern(pattern.pattern_type, patternInfo);
+    // Draw trendlines
+    trendlines?.forEach((trendline: any) => {
+      const color = trendline.type === 'upper_trendline' ? '#ef4444' : '#3b82f6';
+      enhancedChartControl.drawTrendline(
+        trendline.start.time,
+        trendline.start.price,
+        trendline.end.time,
+        trendline.end.price,
+        color
+      );
+      console.log('[Pattern] Drew trendline:', trendline.type);
+    });
+    
+    // Draw support/resistance levels
+    levels?.forEach((level: any) => {
+      const color = level.type === 'support' ? '#10b981' : '#ef4444';
+      const label = level.type === 'support' ? 'Support' : 'Resistance';
+      enhancedChartControl.drawHorizontalLine(level.price, color, label);
+      console.log('[Pattern] Drew level:', level.type, level.price);
+    });
   }, []);
 
   const togglePatternVisibility = useCallback((pattern: any) => {
