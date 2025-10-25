@@ -181,6 +181,11 @@ class Pattern:
     typical_duration: Optional[str] = None  # "2-4 weeks"
     strategy_notes: Optional[str] = None  # Trading approach
     metadata: Optional[Dict[str, Any]] = None
+    chart_metadata: Optional[Dict[str, Any]] = None
+    start_time: Optional[int] = None
+    end_time: Optional[int] = None
+    start_price: Optional[float] = None
+    end_price: Optional[float] = None
     knowledge_reasoning: Optional[str] = None
     entry_guidance: Optional[str] = None
     stop_loss_guidance: Optional[str] = None
@@ -263,6 +268,7 @@ class PatternDetector:
         """
         Enrich pattern with knowledge base guidance (entry, stop-loss, targets, risk notes).
         Validates against recognition rules and adjusts confidence if needed.
+        If pattern not in knowledge base, returns pattern unchanged (allows all patterns through).
         """
         if not self.use_knowledge_base or not self._knowledge_library:
             return pattern
@@ -275,6 +281,13 @@ class PatternDetector:
         elif kb_pattern_id == "cup_handle":
             kb_pattern_id = "cup_and_handle"
         
+        # Check if pattern exists in knowledge base
+        kb_pattern = self._knowledge_library.get_pattern(kb_pattern_id)
+        if not kb_pattern:
+            # Pattern not in knowledge base - allow through with original confidence
+            logger.debug(f"Pattern {kb_pattern_id} not in knowledge base, keeping original confidence")
+            return pattern
+        
         # Validate against knowledge base rules
         is_valid, conf_adj, reasoning = self._knowledge_library.validate_against_rules(
             kb_pattern_id,
@@ -285,6 +298,7 @@ class PatternDetector:
         if not is_valid:
             # Pattern didn't pass knowledge validation, reduce confidence significantly
             pattern.confidence = max(0, pattern.confidence - 20)
+            pattern.knowledge_reasoning = f"Failed validation: {reasoning}"
             return pattern
         
         # Apply confidence adjustment from knowledge validation
