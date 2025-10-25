@@ -280,14 +280,31 @@ class MarketServiceWrapper:
                     logger.info(f"[{symbol}] Pattern detection: {len(candles)} candles available")
                     detector = PatternDetector(candles)
                     detected_patterns = detector.detect_all_patterns()
-                    print(f"✅ [{symbol}] Patterns found: {len(detected_patterns.get('detected', []))} total")
-                    logger.info(f"[{symbol}] Patterns found: {len(detected_patterns.get('detected', []))} total")
+                    total_detected = len(detected_patterns.get('detected', [])) if isinstance(detected_patterns, dict) else 0
+                    print(f"✅ [{symbol}] Patterns found: {total_detected} total")
+                    logger.info(f"[{symbol}] Patterns found: {total_detected} total")
                     if isinstance(detected_patterns, dict):
-                        # Keep only top 5 patterns for brevity if available
                         detected = detected_patterns.get("detected", [])
-                        if detected:
-                            detected_patterns["detected"] = detected[:5]
-                            logger.info(f"[{symbol}] Returning top 5 patterns")
+                        augmented_patterns = []
+                        for pattern in detected[:5]:
+                            start_idx = pattern.get("start_candle")
+                            end_idx = pattern.get("end_candle")
+                            if start_idx is not None and 0 <= start_idx < len(candles):
+                                pattern["start_time"] = candles[start_idx].get("time")
+                                pattern["start_price"] = candles[start_idx].get("close")
+                            if end_idx is not None and 0 <= end_idx < len(candles):
+                                pattern["end_time"] = candles[end_idx].get("time")
+                                pattern["end_price"] = candles[end_idx].get("close")
+
+                            metadata = pattern.get("metadata", {})
+                            if metadata:
+                                chart_overlay = self._build_chart_metadata_from_pattern(metadata, candles)
+                                if chart_overlay:
+                                    pattern["chart_metadata"] = chart_overlay
+
+                            augmented_patterns.append(pattern)
+                        detected_patterns["detected"] = augmented_patterns
+                        logger.info(f"[{symbol}] Returning top {len(augmented_patterns)} patterns with metadata")
                         patterns_result = detected_patterns
                 else:
                     logger.warning(f"[{symbol}] No candles available for pattern detection")
@@ -320,7 +337,126 @@ class MarketServiceWrapper:
             logger.info("Market service ready")
         except Exception as e:
             logger.warning(f"Market service warm-up failed: {e}")
-    
+
+    def _build_chart_metadata_from_pattern(self, metadata: Dict[str, Any], candles: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Convert pattern metadata into chart overlay instructions."""
+
+        if not metadata:
+            return None
+
+        chart_data: Dict[str, Any] = {"trendlines": [], "levels": []}
+
+        def resolve_point(point_meta: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            index = point_meta.get("candle")
+            price = point_meta.get("price")
+            if index is None or price is None:
+                return None
+            if not (0 <= index < len(candles)):
+                return None
+            time_value = candles[index].get("time")
+            return {
+                "time": time_value,
+                "price": float(price)
+            }
+
+        # Trendlines (upper/lower)
+        for key in ["upper_trendline", "lower_trendline"]:
+            trendline = metadata.get(key)
+            if trendline:
+                start_idx = trendline.get("start_candle")
+                end_idx = trendline.get("end_candle")
+                if start_idx is not None and end_idx is not None:
+                    if 0 <= start_idx < len(candles) and 0 <= end_idx < len(candles):
+                        chart_data["trendlines"].append({
+                            "type": key,
+                            "start": {
+                                "time": candles[start_idx].get("time"),
+                                "price": float(trendline.get("start_price", candles[start_idx].get("close", 0)))
+                            },
+                            "end": {
+                                "time": candles[end_idx].get("time"),
+                                "price": float(trendline.get("end_price", candles[end_idx].get("close", 0)))
+                            }
+                        })
+
+        # Channel bounds or neckline/horizontal levels
+        level_keys = {
+            "horizontal_level": "resistance",
+            "neckline": "neckline",
+            "cup_low": "support",
+            "left_peak": "resistance",
+            "right_peak": "resistance"
+        }
+
+        for meta_key, level_type in level_keys.items():
+            value = metadata.get(meta_key)
+            if value is not None:
+                chart_data["levels"].append({
+                    "type": level_type,
+                    "price": float(value)
+                })
+
+        channel_bounds = metadata.get("channel_bounds")
+        if isinstance(channel_bounds, dict):
+            upper = channel_bounds.get("upper")
+            lower = channel_bounds.get("lower")
+            if upper is not None:
+                chart_data["levels"].append({
+                    "type": "resistance",
+                    "price": float(upper)
+                })
+            if lower is not None:
+                chart_data["levels"].append({
+                    "type": "support",
+                    "price": float(lower)
+                })
+
+        swing_highs = metadata.get("swing_highs")
+        if isinstance(swing_highs, list):
+            for swing in swing_highs:
+                point = resolve_point(swing)
+                if point:
+                    chart_data["levels"].append({
+                        "type": "pivot_high",
+                        "price": point["price"],
+                        "time": point["time"]
+                    })
+
+        swing_lows = metadata.get("swing_lows")
+        if isinstance(swing_lows, list):
+            for swing in swing_lows:
+                point = resolve_point(swing)
+                if point:
+                    chart_data["levels"].append({
+                        "type": "pivot_low",
+                        "price": point["price"],
+                        "time": point["time"]
+                    })
+
+        troughs = metadata.get("troughs") or metadata.get("peaks")
+        if isinstance(troughs, list):
+            label = "pivot_low" if metadata.get("troughs") else "pivot_high"
+            for swing in troughs:
+                point = resolve_point(swing)
+                if point:
+                    chart_data["levels"].append({
+                        "type": label,
+                        "price": point["price"],
+                        "time": point["time"]
+                    })
+
+        slope_change = metadata.get("slope_change")
+        if slope_change is not None:
+            chart_data.setdefault("annotations", []).append({
+                "type": "trend_note",
+                "value": float(slope_change)
+            })
+
+        # Remove empty buckets
+        chart_data = {k: v for k, v in chart_data.items() if v}
+
+        return chart_data or None
+
     async def _calculate_technical_levels(self, symbol: str, candles: list, quote: dict) -> dict:
         """
         Calculate technical levels with advanced TA module or fallback to simple calculations.

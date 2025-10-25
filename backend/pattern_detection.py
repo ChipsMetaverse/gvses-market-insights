@@ -8,8 +8,88 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+from pathlib import Path
+import json
 
 logger = logging.getLogger(__name__)
+
+class PatternLibrary:
+    """Loads pattern definitions and provides knowledge-based validation helpers."""
+
+    _instance: Optional["PatternLibrary"] = None
+
+    def __new__(cls, patterns_file: Optional[Path] = None):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._init_library(patterns_file)
+        return cls._instance
+
+    def _init_library(self, patterns_file: Optional[Path]) -> None:
+        if patterns_file is None:
+            base_dir = Path(__file__).resolve().parent
+            patterns_file = base_dir / "training" / "patterns.json"
+
+        try:
+            with patterns_file.open("r", encoding="utf-8") as fh:
+                patterns_data = json.load(fh)
+        except FileNotFoundError:
+            logger.error("Pattern knowledge base missing at %s", patterns_file)
+            patterns_data = []
+        except json.JSONDecodeError as exc:
+            logger.error("Pattern knowledge base malformed: %s", exc)
+            patterns_data = []
+
+        self.patterns: Dict[str, Dict[str, Any]] = {
+            entry.get("pattern_id", ""): entry for entry in patterns_data if entry.get("pattern_id")
+        }
+
+    def get_pattern(self, pattern_id: str) -> Optional[Dict[str, Any]]:
+        return self.patterns.get(pattern_id)
+
+    def get_recognition_rules(self, pattern_id: str) -> Dict[str, Any]:
+        pattern = self.get_pattern(pattern_id)
+        return pattern.get("recognition_rules", {}) if pattern else {}
+
+    def get_trading_playbook(self, pattern_id: str) -> Dict[str, Any]:
+        pattern = self.get_pattern(pattern_id)
+        return pattern.get("trading_playbook", {}) if pattern else {}
+
+    def validate_against_rules(
+        self,
+        pattern_id: str,
+        candles: List[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Tuple[bool, float, str]:
+        """Return (is_valid, confidence_adjustment, reasoning text)."""
+
+        pattern = self.get_pattern(pattern_id)
+        if not pattern:
+            return False, 0.0, "Pattern not found in library"
+
+        rules = pattern.get("recognition_rules", {})
+        reasoning_parts: List[str] = []
+        is_valid = True
+        confidence_adjustment = 0.0
+
+        if rules.get("candle_structure"):
+            reasoning_parts.append(f"Structure: {rules['candle_structure']}")
+        if rules.get("trend_context"):
+            reasoning_parts.append(f"Trend: {rules['trend_context']}")
+        if rules.get("volume_confirmation"):
+            reasoning_parts.append(f"Volume: {rules['volume_confirmation']}")
+
+        invalidations = rules.get("invalidations", [])
+        if invalidations:
+            reasoning_parts.append("Watch invalidations:")
+            for invalidation in invalidations:
+                reasoning_parts.append(f"- {invalidation}")
+
+        if metadata and metadata.get("confidence_hint"):
+            confidence_adjustment += float(metadata["confidence_hint"])
+
+        reasoning = " \n".join(reasoning_parts) if reasoning_parts else "Knowledge rules applied"
+        return is_valid, confidence_adjustment, reasoning
+
 
 PATTERN_CATEGORY_MAP = {
     # Candlestick
@@ -100,6 +180,12 @@ class Pattern:
     risk_reward_ratio: Optional[float] = None
     typical_duration: Optional[str] = None  # "2-4 weeks"
     strategy_notes: Optional[str] = None  # Trading approach
+    metadata: Optional[Dict[str, Any]] = None
+    knowledge_reasoning: Optional[str] = None
+    entry_guidance: Optional[str] = None
+    stop_loss_guidance: Optional[str] = None
+    targets_guidance: Optional[List[str]] = None
+    risk_notes: Optional[str] = None
 
 
 class PatternDetector:
@@ -108,7 +194,7 @@ class PatternDetector:
     Emphasizes reliability and clear confidence scoring
     """
     
-    def __init__(self, candles: List[Dict], cache_seconds: int = 60):
+    def __init__(self, candles: List[Dict], cache_seconds: int = 60, use_knowledge_base: bool = True):
         """
         Initialize with OHLCV candle data
         
@@ -120,6 +206,8 @@ class PatternDetector:
         self.cache_seconds = cache_seconds
         self._last_detection_time = None
         self._cached_results = None
+        self.use_knowledge_base = use_knowledge_base
+        self._knowledge_library = PatternLibrary() if use_knowledge_base else None
 
         if self.candles:
             self.opens = np.array([float(c.get('open', 0)) for c in self.candles])
@@ -170,6 +258,53 @@ class PatternDetector:
         x = np.arange(len(values))
         slope, _ = np.polyfit(x, values, 1)
         return slope
+    
+    def _enrich_with_knowledge(self, pattern: Pattern) -> Pattern:
+        """
+        Enrich pattern with knowledge base guidance (entry, stop-loss, targets, risk notes).
+        Validates against recognition rules and adjusts confidence if needed.
+        """
+        if not self.use_knowledge_base or not self._knowledge_library:
+            return pattern
+        
+        # Map pattern_type to knowledge base pattern_id
+        # Some patterns use underscores, some use different conventions
+        kb_pattern_id = pattern.pattern_type
+        if kb_pattern_id == "head_shoulders":
+            kb_pattern_id = "head_and_shoulders"
+        elif kb_pattern_id == "cup_handle":
+            kb_pattern_id = "cup_and_handle"
+        
+        # Validate against knowledge base rules
+        is_valid, conf_adj, reasoning = self._knowledge_library.validate_against_rules(
+            kb_pattern_id,
+            self.candles,
+            pattern.metadata
+        )
+        
+        if not is_valid:
+            # Pattern didn't pass knowledge validation, reduce confidence significantly
+            pattern.confidence = max(0, pattern.confidence - 20)
+            return pattern
+        
+        # Apply confidence adjustment from knowledge validation
+        pattern.confidence = min(100, pattern.confidence + conf_adj)
+        pattern.knowledge_reasoning = reasoning
+        
+        # Enrich with trading playbook
+        playbook = self._knowledge_library.get_trading_playbook(kb_pattern_id)
+        if playbook:
+            pattern.entry_guidance = playbook.get("entry")
+            pattern.stop_loss_guidance = playbook.get("stop_loss")
+            pattern.targets_guidance = playbook.get("targets", [])
+            pattern.risk_notes = playbook.get("risk_notes")
+            
+            # If playbook has timeframe_bias, add to strategy_notes
+            if playbook.get("timeframe_bias"):
+                bias = playbook["timeframe_bias"]
+                pattern.strategy_notes = f"Best timeframe: {bias}"
+        
+        return pattern
         
     def detect_all_patterns(self) -> Dict[str, Any]:
         """
@@ -181,7 +316,7 @@ class PatternDetector:
             if (datetime.now() - self._last_detection_time).seconds < self.cache_seconds:
                 return self._cached_results
         
-        detected_patterns = []
+        detected_patterns: List[Pattern] = []
         
         # Detect candlestick patterns
         candlestick_patterns = self._detect_candlestick_patterns()
@@ -221,8 +356,20 @@ class PatternDetector:
         detected_patterns.extend(self._detect_diamond())
         detected_patterns.extend(self._detect_rounding_bottom())
         
-        # Filter low confidence patterns
-        high_confidence_patterns = [p for p in detected_patterns if p.confidence >= 70]
+        # Enrich patterns with knowledge base guidance and validation
+        validated_patterns: List[Pattern] = []
+
+        for pattern in detected_patterns:
+            # Apply knowledge-driven enrichment and validation
+            enriched = self._enrich_with_knowledge(pattern)
+            
+            # Only include patterns with confidence >= 65 after enrichment
+            if enriched.confidence >= 65:
+                validated_patterns.append(enriched)
+            else:
+                logger.debug("Pattern %s filtered (confidence %s < 65)", pattern.pattern_type, enriched.confidence)
+
+        high_confidence_patterns = [p for p in validated_patterns if p.confidence >= 70]
         
         results = {
             "detected": [self._pattern_to_dict(p) for p in high_confidence_patterns],
@@ -249,6 +396,8 @@ class PatternDetector:
         self._last_detection_time = datetime.now()
         
         return results
+
+
 
     # ------------------------------------------------------------------
     # Additional candlestick detections
@@ -440,7 +589,20 @@ class PatternDetector:
                     end_candle=idx2,
                     description="Double Top - bearish reversal potential",
                     signal="bearish",
-                    action="watch_closely"
+                    action="watch_closely",
+                    metadata={
+                        "neckline": float(min(self.closes[idx1:idx2+1])),
+                        "swing_highs": [
+                            {
+                                "candle": int(idx1),
+                                "price": float(val1)
+                            },
+                            {
+                                "candle": int(idx2),
+                                "price": float(val2)
+                            }
+                        ]
+                    }
                 ))
 
         if len(lows_extrema) >= 2:
@@ -456,7 +618,20 @@ class PatternDetector:
                     end_candle=idx2,
                     description="Double Bottom - bullish reversal potential",
                     signal="bullish",
-                    action="watch_closely"
+                    action="watch_closely",
+                    metadata={
+                        "neckline": float(max(self.closes[idx1:idx2+1])),
+                        "swing_lows": [
+                            {
+                                "candle": int(idx1),
+                                "price": float(val1)
+                            },
+                            {
+                                "candle": int(idx2),
+                                "price": float(val2)
+                            }
+                        ]
+                    }
                 ))
 
         return patterns
@@ -483,7 +658,15 @@ class PatternDetector:
                 end_candle=idx[-1],
                 description="Head & Shoulders - bearish reversal pattern",
                 signal="bearish",
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "peaks": [
+                        {"candle": int(idx[0]), "price": float(vals[0])},
+                        {"candle": int(idx[1]), "price": float(vals[1])},
+                        {"candle": int(idx[2]), "price": float(vals[2])}
+                    ],
+                    "neckline": float(min(self.lows[idx[0]:idx[-1]+1]))
+                }
             ))
 
         lows_extrema = self._local_extrema(self.lows, order=3, mode='min')
@@ -500,7 +683,15 @@ class PatternDetector:
                     end_candle=idx[-1],
                     description="Inverse Head & Shoulders - bullish reversal pattern",
                     signal="bullish",
-                    action="watch_closely"
+                    action="watch_closely",
+                    metadata={
+                        "troughs": [
+                            {"candle": int(idx[0]), "price": float(vals[0])},
+                            {"candle": int(idx[1]), "price": float(vals[1])},
+                            {"candle": int(idx[2]), "price": float(vals[2])}
+                        ],
+                        "neckline": float(max(self.highs[idx[0]:idx[-1]+1]))
+                    }
                 ))
 
         return patterns
@@ -521,37 +712,75 @@ class PatternDetector:
         low_slope = self._fit_slope(np.array(recent_lows))
 
         if high_slope < 0 and low_slope > 0:
+            start_idx = len(self.candles) - len(recent_highs)
+            end_idx = len(self.candles) - 1
             patterns.append(Pattern(
                 pattern_id=f"sym_triangle_{len(self.candles)-1}_{self.times[-1]}",
                 pattern_type="symmetrical_triangle",
                 confidence=72,
-                start_candle=max(0, len(self.candles) - len(recent_highs)),
-                end_candle=len(self.candles) - 1,
+                start_candle=start_idx,
+                end_candle=end_idx,
                 description="Symmetrical triangle consolidation",
                 signal="neutral",
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "upper_trendline": {
+                        "start_candle": int(max(start_idx, 0)),
+                        "start_price": float(recent_highs[0]),
+                        "end_candle": int(end_idx),
+                        "end_price": float(recent_highs[-1])
+                    },
+                    "lower_trendline": {
+                        "start_candle": int(max(start_idx,0)),
+                        "start_price": float(recent_lows[0]),
+                        "end_candle": int(end_idx),
+                        "end_price": float(recent_lows[-1])
+                    }
+                }
             ))
         elif high_slope < 0 and abs(low_slope) < abs(high_slope) * 0.4:
+            start_idx = len(self.candles) - len(recent_highs)
+            end_idx = len(self.candles) - 1
             patterns.append(Pattern(
                 pattern_id=f"descending_triangle_{len(self.candles)-1}_{self.times[-1]}",
                 pattern_type="descending_triangle",
                 confidence=70,
-                start_candle=max(0, len(self.candles) - len(recent_highs)),
-                end_candle=len(self.candles) - 1,
+                start_candle=start_idx,
+                end_candle=end_idx,
                 description="Descending triangle - bearish bias",
                 signal="bearish",
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "upper_trendline": {
+                        "start_candle": int(max(start_idx, 0)),
+                        "start_price": float(recent_highs[0]),
+                        "end_candle": int(end_idx),
+                        "end_price": float(recent_highs[-1])
+                    },
+                    "horizontal_level": float(min(recent_lows))
+                }
             ))
         elif low_slope > 0 and abs(high_slope) < abs(low_slope) * 0.4:
+            start_idx = len(self.candles) - len(recent_lows)
+            end_idx = len(self.candles) - 1
             patterns.append(Pattern(
                 pattern_id=f"ascending_triangle_{len(self.candles)-1}_{self.times[-1]}",
                 pattern_type="ascending_triangle",
                 confidence=70,
-                start_candle=max(0, len(self.candles) - len(recent_lows)),
-                end_candle=len(self.candles) - 1,
+                start_candle=start_idx,
+                end_candle=end_idx,
                 description="Ascending triangle - bullish bias",
                 signal="bullish",
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "lower_trendline": {
+                        "start_candle": int(max(start_idx, 0)),
+                        "start_price": float(recent_lows[0]),
+                        "end_candle": int(end_idx),
+                        "end_price": float(recent_lows[-1])
+                    },
+                    "horizontal_level": float(max(recent_highs))
+                }
             ))
 
         return patterns
@@ -570,15 +799,23 @@ class PatternDetector:
 
         if abs(pole_change) > 0.08 and abs(slopes) < abs(pole_change) * 0.2:
             bullish = pole_change > 0
+            start_idx = len(self.candles) - window
+            end_idx = len(self.candles) - 1
             patterns.append(Pattern(
                 pattern_id=f"flag_{len(self.candles)-1}_{self.times[-1]}",
                 pattern_type="bullish_flag" if bullish else "bearish_flag",
                 confidence=70,
-                start_candle=len(self.candles) - window,
-                end_candle=len(self.candles) - 1,
+                start_candle=start_idx,
+                end_candle=end_idx,
                 description=f"{'Bullish' if bullish else 'Bearish'} flag consolidation",
                 signal="bullish" if bullish else "bearish",
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "channel_bounds": {
+                        "upper": float(max(self.highs[start_idx:end_idx+1])),
+                        "lower": float(min(self.lows[start_idx:end_idx+1]))
+                    }
+                }
             ))
 
         return patterns
@@ -594,26 +831,58 @@ class PatternDetector:
         low_slope = self._fit_slope(np.array(lows))
 
         if high_slope > 0 and low_slope > 0 and high_slope < low_slope:
+            start_idx = len(self.candles) - len(highs)
+            end_idx = len(self.candles) - 1
             patterns.append(Pattern(
                 pattern_id=f"rising_wedge_{len(self.candles)-1}_{self.times[-1]}",
                 pattern_type="rising_wedge",
                 confidence=70,
-                start_candle=len(self.candles) - len(highs),
-                end_candle=len(self.candles) - 1,
+                start_candle=start_idx,
+                end_candle=end_idx,
                 description="Rising wedge - bearish bias",
                 signal="bearish",
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "upper_trendline": {
+                        "start_candle": int(start_idx),
+                        "start_price": float(highs[0]),
+                        "end_candle": int(end_idx),
+                        "end_price": float(highs[-1])
+                    },
+                    "lower_trendline": {
+                        "start_candle": int(start_idx),
+                        "start_price": float(lows[0]),
+                        "end_candle": int(end_idx),
+                        "end_price": float(lows[-1])
+                    }
+                }
             ))
         elif high_slope < 0 and low_slope < 0 and high_slope > low_slope:
+            start_idx = len(self.candles) - len(highs)
+            end_idx = len(self.candles) - 1
             patterns.append(Pattern(
                 pattern_id=f"falling_wedge_{len(self.candles)-1}_{self.times[-1]}",
                 pattern_type="falling_wedge",
                 confidence=70,
-                start_candle=len(self.candles) - len(highs),
-                end_candle=len(self.candles) - 1,
+                start_candle=start_idx,
+                end_candle=end_idx,
                 description="Falling wedge - bullish bias",
                 signal="bullish",
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "upper_trendline": {
+                        "start_candle": int(start_idx),
+                        "start_price": float(highs[0]),
+                        "end_candle": int(end_idx),
+                        "end_price": float(highs[-1])
+                    },
+                    "lower_trendline": {
+                        "start_candle": int(start_idx),
+                        "start_price": float(lows[0]),
+                        "end_candle": int(end_idx),
+                        "end_price": float(lows[-1])
+                    }
+                }
             ))
 
         return patterns
@@ -641,15 +910,22 @@ class PatternDetector:
         recovery = (right_peak - cup_low) / max(left_peak, 1e-9)
 
         if 0.08 < depth < 0.35 and recovery > 0.8:
+            start_idx = len(self.candles) - len(closes)
+            end_idx = len(self.candles) - 1
             patterns.append(Pattern(
                 pattern_id=f"cup_handle_{len(self.candles)-1}_{self.times[-1]}",
                 pattern_type="cup_handle",
                 confidence=70,
-                start_candle=len(self.candles) - len(closes),
-                end_candle=len(self.candles) - 1,
+                start_candle=start_idx,
+                end_candle=end_idx,
                 description="Cup and Handle base",
                 signal="bullish",
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "cup_low": float(cup_low),
+                    "left_peak": float(left_peak),
+                    "right_peak": float(right_peak)
+                }
             ))
 
         return patterns
@@ -669,26 +945,36 @@ class PatternDetector:
         slope2 = self._fit_slope(second_half)
 
         if slope2 > slope1 * 1.5 and slope2 > 0:
+            start_idx = len(self.candles) - len(closes)
+            end_idx = len(self.candles) - 1
             patterns.append(Pattern(
                 pattern_id=f"trend_acceleration_bull_{len(self.candles)-1}_{self.times[-1]}",
                 pattern_type="trend_acceleration",
                 confidence=68,
-                start_candle=len(self.candles) - len(closes),
-                end_candle=len(self.candles) - 1,
+                start_candle=start_idx,
+                end_candle=end_idx,
                 description="Accelerating uptrend",
                 signal="bullish",
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "slope_change": float(slope2 - slope1)
+                }
             ))
         elif slope2 < slope1 * 1.5 and slope2 < 0:
+            start_idx = len(self.candles) - len(closes)
+            end_idx = len(self.candles) - 1
             patterns.append(Pattern(
                 pattern_id=f"trend_acceleration_bear_{len(self.candles)-1}_{self.times[-1]}",
                 pattern_type="trend_acceleration",
                 confidence=68,
-                start_candle=len(self.candles) - len(closes),
-                end_candle=len(self.candles) - 1,
+                start_candle=start_idx,
+                end_candle=end_idx,
                 description="Accelerating downtrend",
                 signal="bearish",
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "slope_change": float(slope2 - slope1)
+                }
             ))
 
         return patterns
@@ -1453,7 +1739,9 @@ class PatternDetector:
         """Convert Pattern object to dictionary for JSON serialization"""
         return {
             "id": pattern.pattern_id,
+            "pattern_id": pattern.pattern_id,
             "type": pattern.pattern_type,
+            "pattern_type": pattern.pattern_type,
             "confidence": round(pattern.confidence, 1),
             "start_candle": pattern.start_candle,
             "end_candle": pattern.end_candle,
@@ -1461,7 +1749,14 @@ class PatternDetector:
             "signal": pattern.signal,
             "action": pattern.action,
             "target": round(pattern.target, 2) if pattern.target else None,
-            "stop_loss": round(pattern.stop_loss, 2) if pattern.stop_loss else None
+            "stop_loss": round(pattern.stop_loss, 2) if pattern.stop_loss else None,
+            "metadata": pattern.metadata or {},
+            "chart_metadata": pattern.chart_metadata,
+            "knowledge_reasoning": pattern.knowledge_reasoning,
+            "entry_guidance": pattern.entry_guidance,
+            "stop_loss_guidance": pattern.stop_loss_guidance,
+            "targets_guidance": pattern.targets_guidance,
+            "risk_notes": pattern.risk_notes
         }
 
 

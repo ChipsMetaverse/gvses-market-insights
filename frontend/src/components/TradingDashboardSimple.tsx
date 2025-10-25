@@ -167,6 +167,10 @@ export const TradingDashboardSimple: React.FC = () => {
   const [backendPatterns, setBackendPatterns] = useState<any[]>([]);
   const [patternValidations, setPatternValidations] = useState<Record<string, 'accepted' | 'rejected'>>({});
   const [currentSnapshot, setCurrentSnapshot] = useState<ChartSnapshot | null>(null);
+  
+  // Pattern visualization state
+  const [visiblePatterns, setVisiblePatterns] = useState<Set<string>>(new Set());
+  const [hoveredPattern, setHoveredPattern] = useState<string | null>(null);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -504,6 +508,46 @@ export const TradingDashboardSimple: React.FC = () => {
     });
     setTimeout(() => setToastCommand(null), 2000);
   }, []);
+
+  // Pattern visualization handlers
+  const drawPatternOverlay = useCallback((pattern: any) => {
+    if (!pattern.chart_metadata) return;
+    
+    // Use revealPattern to draw the pattern on the chart
+    const patternInfo = {
+      description: pattern.description || pattern.pattern_type,
+      indicator: pattern.signal,
+      title: pattern.pattern_type
+    };
+    
+    enhancedChartControl.revealPattern(pattern.pattern_type, patternInfo);
+  }, []);
+
+  const togglePatternVisibility = useCallback((pattern: any) => {
+    const patternId = pattern.pattern_id || pattern.id || pattern.pattern_type;
+    
+    setVisiblePatterns(prev => {
+      const next = new Set(prev);
+      if (next.has(patternId)) {
+        // Hide pattern - clear all drawings and redraw remaining visible patterns
+        next.delete(patternId);
+        enhancedChartControl.clearDrawings();
+        
+        // Redraw other visible patterns
+        backendPatterns.forEach(p => {
+          const pid = p.pattern_id || p.id || p.pattern_type;
+          if (next.has(pid) && pid !== patternId) {
+            drawPatternOverlay(p);
+          }
+        });
+      } else {
+        // Show pattern - draw overlay
+        next.add(patternId);
+        drawPatternOverlay(pattern);
+      }
+      return next;
+    });
+  }, [backendPatterns, drawPatternOverlay]);
   
   // Cleanup on provider switch
   useEffect(() => {
@@ -1617,73 +1661,72 @@ export const TradingDashboardSimple: React.FC = () => {
                 <div className="pattern-section">
                   <h4>PATTERN DETECTION</h4>
                   
-                  {/* Local Patterns */}
-                  {detectedPatterns.length > 0 && (
-                    <>
-                      <div className="pattern-source-label">Local Analysis</div>
-                      {detectedPatterns.map((pattern, index) => (
-                        <div key={`local-${pattern.type}-${index}`} className="pattern-box">
-                          <div className="pattern-name">{pattern.description || pattern.type}</div>
-                          <div className="pattern-conf">
-                            Confidence: {pattern.confidence ? `${Math.round(pattern.confidence)}%` : 'N/A'}
-                          </div>
-                          {pattern.agent_explanation && (
-                            <div className="pattern-desc">{pattern.agent_explanation}</div>
-                          )}
-                        </div>
-                      ))}
-                    </>
-                  )}
-                  
-                  {/* Backend Patterns with Validation */}
-                  {backendPatterns.length > 0 && (
-                    <>
-                      <div className="pattern-source-label">Server Analysis</div>
-                      {backendPatterns.map((pattern) => {
-                        const validation = patternValidations[pattern.id];
+                  {backendPatterns.length === 0 && detectedPatterns.length === 0 ? (
+                    <div className="pattern-empty">No patterns detected. Try different timeframes or symbols.</div>
+                  ) : (
+                    <div className="pattern-list">
+                      {backendPatterns.map((pattern, index) => {
+                        const patternId = pattern.pattern_id || pattern.id || pattern.pattern_type || `pattern-${index}`;
+                        const isVisible = visiblePatterns.has(patternId);
+                        const isHovered = hoveredPattern === patternId;
+                        const signal = pattern.signal || 'neutral';
+                        
                         return (
-                          <div 
-                            key={pattern.id} 
-                            className={`pattern-box backend-pattern ${validation ? `pattern-${validation}` : ''}`}
+                          <div
+                            key={patternId}
+                            className={`pattern-item ${isHovered ? 'hovered' : ''}`}
+                            onMouseEnter={() => setHoveredPattern(patternId)}
+                            onMouseLeave={() => setHoveredPattern(null)}
+                            onClick={() => togglePatternVisibility(pattern)}
                           >
                             <div className="pattern-header">
-                              <div className="pattern-name">{pattern.type}</div>
-                              <div className="pattern-validation-controls">
-                                <button 
-                                  className={`pattern-btn accept ${validation === 'accepted' ? 'active' : ''}`}
-                                  onClick={() => validatePattern(pattern.id, 'accepted')}
-                                  title="Accept pattern"
-                                >
-                                  ✓
-                                </button>
-                                <button 
-                                  className={`pattern-btn reject ${validation === 'rejected' ? 'active' : ''}`}
-                                  onClick={() => validatePattern(pattern.id, 'rejected')}
-                                  title="Reject pattern"
-                                >
-                                  ✗
-                                </button>
-                              </div>
+                              <span className="pattern-name">{pattern.pattern_type || pattern.type}</span>
+                              <span className={`pattern-signal ${signal}`}>
+                                {signal === 'bullish' ? '↑' : signal === 'bearish' ? '↓' : '•'} {signal}
+                              </span>
+                              <label className="pattern-toggle" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isVisible}
+                                  onChange={() => togglePatternVisibility(pattern)}
+                                />
+                              </label>
                             </div>
-                            <div className="pattern-conf">
-                              Confidence: {pattern.confidence ? `${Math.round(pattern.confidence * 100)}%` : 'N/A'}
+                            <div className="pattern-details">
+                              <span className="confidence">
+                                {pattern.confidence ? `${Math.round(pattern.confidence)}%` : 'N/A'}
+                              </span>
+                              {pattern.entry_guidance && (
+                                <Tooltip content={pattern.entry_guidance}>
+                                  <span className="guidance-label">Entry</span>
+                                </Tooltip>
+                              )}
+                              {pattern.risk_notes && (
+                                <Tooltip content={pattern.risk_notes}>
+                                  <span className="risk-icon">⚠️</span>
+                                </Tooltip>
+                              )}
                             </div>
-                            {pattern.description && (
-                              <div className="pattern-desc">{pattern.description}</div>
-                            )}
-                            {pattern.targets && pattern.targets.length > 0 && (
-                              <div className="pattern-targets">
-                                Targets: {pattern.targets.map((t: number) => `$${t.toFixed(2)}`).join(', ')}
-                              </div>
-                            )}
                           </div>
                         );
                       })}
-                    </>
-                  )}
-                  
-                  {detectedPatterns.length === 0 && backendPatterns.length === 0 && (
-                    <div className="pattern-empty">No patterns detected. Try asking for chart analysis.</div>
+                      {detectedPatterns.map((pattern, index) => {
+                        const patternId = `local-${pattern.type}-${index}`;
+                        return (
+                          <div key={patternId} className="pattern-item local-pattern">
+                            <div className="pattern-header">
+                              <span className="pattern-name">{pattern.description || pattern.type}</span>
+                              <span className="pattern-source">Local</span>
+                            </div>
+                            <div className="pattern-details">
+                              <span className="confidence">
+                                {pattern.confidence ? `${Math.round(pattern.confidence)}%` : 'N/A'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               </>
