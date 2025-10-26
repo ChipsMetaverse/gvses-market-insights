@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 from pathlib import Path
 import json
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -25,19 +26,36 @@ class PatternLibrary:
         return cls._instance
 
     def _init_library(self, patterns_file: Optional[Path]) -> None:
+        base_dir = Path(__file__).resolve().parent
+        generated_path = base_dir / "training" / "patterns.generated.json"
+        legacy_path = base_dir / "training" / "patterns.json"
+
+        use_legacy = os.getenv("USE_LEGACY_PATTERN_LIBRARY", "").lower() in {"1", "true", "yes", "on"}
+
         if patterns_file is None:
-            base_dir = Path(__file__).resolve().parent
-            patterns_file = base_dir / "training" / "patterns.json"
+            if generated_path.exists():
+                patterns_file = generated_path
+            elif use_legacy and legacy_path.exists():
+                logger.warning(
+                    "Using legacy pattern library at %s due to USE_LEGACY_PATTERN_LIBRARY flag",
+                    legacy_path,
+                )
+                patterns_file = legacy_path
+            else:
+                raise FileNotFoundError(
+                    "Pattern knowledge base not found. Expected generated artifact at "
+                    f"{generated_path}. Run backend/training/generate_pattern_library.py to build it."
+                )
 
         try:
             with patterns_file.open("r", encoding="utf-8") as fh:
                 patterns_data = json.load(fh)
-        except FileNotFoundError:
-            logger.error("Pattern knowledge base missing at %s", patterns_file)
-            patterns_data = []
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"Pattern knowledge base missing at {patterns_file}. Run generate_pattern_library.py first."
+            ) from exc
         except json.JSONDecodeError as exc:
-            logger.error("Pattern knowledge base malformed: %s", exc)
-            patterns_data = []
+            raise ValueError(f"Pattern knowledge base malformed at {patterns_file}: {exc}") from exc
 
         self.patterns: Dict[str, Dict[str, Any]] = {
             entry.get("pattern_id", ""): entry for entry in patterns_data if entry.get("pattern_id")

@@ -134,6 +134,11 @@ deploy_*.py
 verify_*.py
 comprehensive_*.py
 
+# But allow test files in proper test directories
+!backend/tests/test_*.py
+!frontend/tests/test_*.js
+!**/tests/**/test_*.py
+
 # Investigation and report docs
 AGENTS_SDK_MIGRATION.md
 AGENT_BUILDER_INVESTIGATION_COMPLETE.md

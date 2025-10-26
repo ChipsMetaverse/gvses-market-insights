@@ -1,0 +1,423 @@
+[
+  {
+    "pattern_id": "head_and_shoulders",
+    "category": "chart_pattern",
+    "display_name": "Head and Shoulders",
+    "aliases": [
+      "H&S",
+      "head-and-shoulders"
+    ],
+    "description": "Classic reversal setup made of three swing highs: a peak, a higher head, and a lower right shoulder that stalls near the height of the left shoulder. A neckline connecting the swing lows acts as the confirmation level—once broken, momentum is expected to rotate lower as trapped buyers exit.",
+    "recognition_rules": {
+      "candle_structure": "Left shoulder advances then pulls back, head prints a higher high, and the right shoulder tops out below the head while volume fades.",
+      "trend_context": "Works best after a sustained uptrend or parabolic push where distribution forms along a horizontal neckline.",
+      "volume_confirmation": "Look for declining volume across the right shoulder and an expansion on the neckline breakdown.",
+      "invalidations": [
+        "Close back above the right-shoulder swing high after the neckline break",
+        "Neckline slopes sharply higher without consolidation"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bearish",
+      "entry": "Trigger on a decisive close below the neckline or on a throwback rejection when price retests the neckline from beneath.",
+      "stop_loss": "Defensive stop above the right-shoulder swing high; conservative traders can park above the head.",
+      "targets": [
+        "Measure the vertical distance from head to neckline and project downward from the breakout point",
+        "Trail into prior demand zones or round-number magnets"
+      ],
+      "risk_notes": "Choppy ranges dull the edge—prefer clean symmetry between shoulders and a neckline with multiple touches.",
+      "timeframe_bias": "swing"
+    },
+    "statistics": {
+      "typical_duration": "Several weeks on daily charts; shorter on intraday timeframes"
+    },
+    "visual_examples": [
+      {
+        "source": "Cup_and_Handle.gif",
+        "page": null
+      }
+    ],
+    "sources": [
+      {
+        "doc": "Price-Action-Patterns.pdf",
+        "page": 4
+      }
+    ]
+  },
+  {
+    "pattern_id": "cup_and_handle",
+    "category": "chart_pattern",
+    "display_name": "Cup and Handle",
+    "aliases": [
+      "cup & handle"
+    ],
+    "description": "Bullish continuation pattern where price rounds out a U-shaped basing phase (the cup) followed by a shallow pullback or consolidation (the handle). A break above handle resistance implies trend resumption with trapped shorts forced to cover.",
+    "recognition_rules": {
+      "candle_structure": "Cup forms with a smooth rounded bottom; handle drifts lower or sideways no more than one-third of the cup depth.",
+      "trend_context": "Preferably emerges after a strong uptrend that pauses for reaccumulation before the next leg higher.",
+      "volume_confirmation": "Volume dries up near the cup bottom and handle, then expands on the breakout thrust.",
+      "invalidations": [
+        "Handle retraces more than 50% of the cup advance",
+        "Breakdown below the cup lows before the breakout"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bullish",
+      "entry": "Buy the breakout through handle resistance or on a secondary retest that holds above former resistance.",
+      "stop_loss": "Place beneath handle lows or, for longer-term structures, under the midpoint of the cup.",
+      "targets": [
+        "Project the cup depth from the breakout level",
+        "Use measured moves into prior swing highs or Fibonacci extensions"
+      ],
+      "risk_notes": "Avoid when the handle is extremely steep or volume spikes ahead of the breakout (signs of distribution).",
+      "timeframe_bias": "medium-term"
+    },
+    "statistics": {
+      "typical_duration": "1–6 months on daily charts"
+    },
+    "visual_examples": [
+      {
+        "source": "Cup_and_Handle.gif",
+        "page": null
+      }
+    ],
+    "sources": [
+      {
+        "doc": "Encyclopedia of Chart Patterns.pdf",
+        "page": 120
+      }
+    ]
+  },
+  {
+    "pattern_id": "bullish_engulfing",
+    "category": "candlestick",
+    "display_name": "Bullish Engulfing",
+    "aliases": [
+      "bullish engulfing candle"
+    ],
+    "description": "Two-candle reversal where a wide real body completely engulfs the prior down candle, signaling an aggressive shift from sellers to buyers. Often marks exhaustion lows or the first step of a swing reversal.",
+    "recognition_rules": {
+      "candle_structure": "First candle closes lower with a relatively small real body; second candle opens below (or near) the prior close and pushes above the prior open, engulfing the full body.",
+      "trend_context": "Most reliable after a down swing into support or near the tail end of a bearish impulse.",
+      "volume_confirmation": "Rising volume or increased tick activity on the engulfing bar strengthens the signal.",
+      "invalidations": [
+        "Close back below the engulfing bar’s midpoint within the next one to two candles",
+        "Pattern forms inside congested chop without downward momentum"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bullish",
+      "entry": "Enter on the close of the engulfing bar or on a modest retracement into its midpoint.",
+      "stop_loss": "Place below the engulfing candle’s low to respect the invalidation threshold.",
+      "targets": [
+        "Target nearby supply zones or the next pivot high",
+        "Trail behind higher swing lows if momentum builds"
+      ],
+      "risk_notes": "Lower reliability when the engulfing candle emerges at resistance or within strong macro downtrends.",
+      "timeframe_bias": "short-term"
+    },
+    "statistics": {
+      "typical_duration": "1–5 bars for initial follow-through"
+    },
+    "visual_examples": [
+      {
+        "source": "IMAGE 2023-12-09 12:53:20.jpg",
+        "page": null
+      }
+    ],
+    "sources": [
+      {
+        "doc": "technical_analysis_for_dummies_2nd_edition.pdf",
+        "page": 210
+      }
+    ]
+  },
+  {
+    "pattern_id": "ascending_triangle",
+    "category": "chart_pattern",
+    "display_name": "Ascending Triangle",
+    "aliases": ["asc triangle"],
+    "description": "Bullish continuation pattern with horizontal resistance and rising support trendline. Buyers become increasingly aggressive while sellers hold a consistent level.",
+    "recognition_rules": {
+      "candle_structure": "Multiple swing highs cluster near the same horizontal level; swing lows form a rising trendline.",
+      "trend_context": "Best after an uptrend where bulls pause to consolidate before next leg.",
+      "volume_confirmation": "Volume contracts during consolidation, expands sharply on breakout.",
+      "invalidations": [
+        "Breakdown below rising support trendline",
+        "Multiple failed breakout attempts with declining volume"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bullish",
+      "entry": "Enter on decisive close above horizontal resistance or on retest pullback.",
+      "stop_loss": "Below most recent swing low or below rising trendline.",
+      "targets": [
+        "Project triangle height from breakout point",
+        "Target prior swing highs or measured moves"
+      ],
+      "risk_notes": "False breakouts common at resistance - watch for volume confirmation.",
+      "timeframe_bias": "medium-term"
+    },
+    "statistics": {
+      "typical_duration": "2-6 weeks on daily charts"
+    },
+    "visual_examples": [],
+    "sources": []
+  },
+  {
+    "pattern_id": "descending_triangle",
+    "category": "chart_pattern",
+    "display_name": "Descending Triangle",
+    "aliases": ["desc triangle"],
+    "description": "Bearish continuation pattern with horizontal support and descending resistance trendline. Sellers become increasingly aggressive while buyers hold a consistent level.",
+    "recognition_rules": {
+      "candle_structure": "Multiple swing lows cluster near the same horizontal level; swing highs form a descending trendline.",
+      "trend_context": "Best after a downtrend where bears pause to consolidate before next leg.",
+      "volume_confirmation": "Volume contracts during consolidation, expands sharply on breakdown.",
+      "invalidations": [
+        "Breakout above descending resistance trendline",
+        "Multiple failed breakdown attempts with declining volume"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bearish",
+      "entry": "Enter on decisive close below horizontal support or on retest bounce.",
+      "stop_loss": "Above most recent swing high or above descending trendline.",
+      "targets": [
+        "Project triangle height from breakdown point",
+        "Target prior swing lows or measured moves"
+      ],
+      "risk_notes": "False breakdowns common at support - watch for volume confirmation.",
+      "timeframe_bias": "medium-term"
+    },
+    "statistics": {
+      "typical_duration": "2-6 weeks on daily charts"
+    },
+    "visual_examples": [],
+    "sources": []
+  },
+  {
+    "pattern_id": "symmetrical_triangle",
+    "category": "chart_pattern",
+    "display_name": "Symmetrical Triangle",
+    "aliases": ["sym triangle", "coil"],
+    "description": "Neutral continuation pattern with converging trendlines. Breakout direction usually follows prior trend.",
+    "recognition_rules": {
+      "candle_structure": "Swing highs form descending trendline; swing lows form ascending trendline creating apex.",
+      "trend_context": "Can appear in any trend; breakout typically continues prior direction.",
+      "volume_confirmation": "Volume declines as triangle narrows, expands on breakout.",
+      "invalidations": [
+        "Price reaches apex without breaking out (indecision)",
+        "Weak breakout with no volume follow-through"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "neutral",
+      "entry": "Wait for breakout direction, enter on decisive close beyond trendline.",
+      "stop_loss": "Opposite side of triangle or below/above most recent swing.",
+      "targets": [
+        "Project widest part of triangle from breakout point",
+        "Trend continuation to prior momentum levels"
+      ],
+      "risk_notes": "Risky near apex - prefer entry in first half of triangle formation.",
+      "timeframe_bias": "medium-term"
+    },
+    "statistics": {
+      "typical_duration": "1-3 months on daily charts"
+    },
+    "visual_examples": [],
+    "sources": []
+  },
+  {
+    "pattern_id": "bullish_flag",
+    "category": "chart_pattern",
+    "display_name": "Bullish Flag",
+    "aliases": ["bull flag"],
+    "description": "Continuation pattern where strong upward move (flagpole) pauses for shallow downward/sideways consolidation (flag) before resuming.",
+    "recognition_rules": {
+      "candle_structure": "Sharp advance followed by tight consolidation with parallel descending or sideways boundaries.",
+      "trend_context": "Occurs mid-trend in strong uptrends; flag should retrace less than 38% of pole.",
+      "volume_confirmation": "Volume dries up during flag formation, surges on breakout.",
+      "invalidations": [
+        "Flag retraces more than 50% of pole",
+        "Breakdown below flag support before breakout"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bullish",
+      "entry": "Enter on break above flag resistance or on retest of former resistance.",
+      "stop_loss": "Below flag lows or below midpoint of pole.",
+      "targets": [
+        "Project flagpole height from breakout point",
+        "Prior swing highs or measured extension"
+      ],
+      "risk_notes": "Avoid when pole lacks strength or market shows divergence.",
+      "timeframe_bias": "short to medium-term"
+    },
+    "statistics": {
+      "typical_duration": "1-4 weeks on daily charts"
+    },
+    "visual_examples": [],
+    "sources": []
+  },
+  {
+    "pattern_id": "bearish_flag",
+    "category": "chart_pattern",
+    "display_name": "Bearish Flag",
+    "aliases": ["bear flag"],
+    "description": "Continuation pattern where strong downward move (flagpole) pauses for shallow upward/sideways consolidation (flag) before resuming.",
+    "recognition_rules": {
+      "candle_structure": "Sharp decline followed by tight consolidation with parallel ascending or sideways boundaries.",
+      "trend_context": "Occurs mid-trend in strong downtrends; flag should retrace less than 38% of pole.",
+      "volume_confirmation": "Volume dries up during flag formation, surges on breakdown.",
+      "invalidations": [
+        "Flag retraces more than 50% of pole",
+        "Breakout above flag resistance before breakdown"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bearish",
+      "entry": "Enter on break below flag support or on retest of former support.",
+      "stop_loss": "Above flag highs or above midpoint of pole.",
+      "targets": [
+        "Project flagpole height from breakdown point",
+        "Prior swing lows or measured extension"
+      ],
+      "risk_notes": "Avoid when pole lacks strength or market shows divergence.",
+      "timeframe_bias": "short to medium-term"
+    },
+    "statistics": {
+      "typical_duration": "1-4 weeks on daily charts"
+    },
+    "visual_examples": [],
+    "sources": []
+  },
+  {
+    "pattern_id": "falling_wedge",
+    "category": "chart_pattern",
+    "display_name": "Falling Wedge",
+    "aliases": ["descending wedge"],
+    "description": "Bullish reversal pattern with both support and resistance trendlines sloping downward, converging into apex. Selling pressure weakens as price nears apex.",
+    "recognition_rules": {
+      "candle_structure": "Both trendlines slope downward; lower highs and lower lows but rate of descent slowing.",
+      "trend_context": "Best at end of downtrend where bears exhaust and bulls prepare to reverse.",
+      "volume_confirmation": "Volume decreases during wedge formation, expands on upward breakout.",
+      "invalidations": [
+        "Breakdown below lower wedge trendline",
+        "No volume expansion on breakout"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bullish",
+      "entry": "Enter on break above upper wedge trendline or on successful retest.",
+      "stop_loss": "Below most recent swing low within wedge.",
+      "targets": [
+        "Project wedge height from breakout point",
+        "Return to pre-wedge levels or prior resistance"
+      ],
+      "risk_notes": "Premature entry before breakout risks whipsaw.",
+      "timeframe_bias": "medium-term"
+    },
+    "statistics": {
+      "typical_duration": "3-6 weeks on daily charts"
+    },
+    "visual_examples": [],
+    "sources": []
+  },
+  {
+    "pattern_id": "rising_wedge",
+    "category": "chart_pattern",
+    "display_name": "Rising Wedge",
+    "aliases": ["ascending wedge"],
+    "description": "Bearish reversal pattern with both support and resistance trendlines sloping upward, converging into apex. Buying pressure weakens as price nears apex.",
+    "recognition_rules": {
+      "candle_structure": "Both trendlines slope upward; higher highs and higher lows but rate of ascent slowing.",
+      "trend_context": "Best at end of uptrend where bulls exhaust and bears prepare to reverse.",
+      "volume_confirmation": "Volume decreases during wedge formation, expands on downward breakdown.",
+      "invalidations": [
+        "Breakout above upper wedge trendline",
+        "No volume expansion on breakdown"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bearish",
+      "entry": "Enter on break below lower wedge trendline or on successful retest.",
+      "stop_loss": "Above most recent swing high within wedge.",
+      "targets": [
+        "Project wedge height from breakdown point",
+        "Return to pre-wedge levels or prior support"
+      ],
+      "risk_notes": "Premature entry before breakdown risks whipsaw.",
+      "timeframe_bias": "medium-term"
+    },
+    "statistics": {
+      "typical_duration": "3-6 weeks on daily charts"
+    },
+    "visual_examples": [],
+    "sources": []
+  },
+  {
+    "pattern_id": "double_top",
+    "category": "chart_pattern",
+    "display_name": "Double Top",
+    "aliases": ["M top"],
+    "description": "Bearish reversal pattern with two peaks at similar price levels separated by moderate trough. Second peak fails to break higher, signaling exhaustion.",
+    "recognition_rules": {
+      "candle_structure": "Two swing highs within 2-3% of each other with trough between forming neckline.",
+      "trend_context": "Appears after uptrend; second peak shows weakening buying pressure.",
+      "volume_confirmation": "Second peak typically shows lower volume than first peak.",
+      "invalidations": [
+        "Close above second peak negates pattern",
+        "Neckline holds without breakdown"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bearish",
+      "entry": "Enter on decisive close below neckline or on throwback to neckline.",
+      "stop_loss": "Above second peak or above neckline resistance.",
+      "targets": [
+        "Measure height from peak to neckline, project downward from breakdown",
+        "Prior support levels or swing lows"
+      ],
+      "risk_notes": "Avoid if peaks are too far apart in time (>3 months) or price levels vary significantly.",
+      "timeframe_bias": "medium to long-term"
+    },
+    "statistics": {
+      "typical_duration": "Several weeks to months between peaks"
+    },
+    "visual_examples": [],
+    "sources": []
+  },
+  {
+    "pattern_id": "double_bottom",
+    "category": "chart_pattern",
+    "display_name": "Double Bottom",
+    "aliases": ["W bottom"],
+    "description": "Bullish reversal pattern with two troughs at similar price levels separated by moderate peak. Second trough fails to break lower, signaling exhaustion.",
+    "recognition_rules": {
+      "candle_structure": "Two swing lows within 2-3% of each other with peak between forming neckline.",
+      "trend_context": "Appears after downtrend; second trough shows weakening selling pressure.",
+      "volume_confirmation": "Second trough typically shows lower volume than first trough; volume expands on breakout.",
+      "invalidations": [
+        "Close below second trough negates pattern",
+        "Neckline holds without breakout"
+      ]
+    },
+    "trading_playbook": {
+      "signal": "bullish",
+      "entry": "Enter on decisive close above neckline or on pullback to neckline support.",
+      "stop_loss": "Below second trough or below neckline support.",
+      "targets": [
+        "Measure depth from trough to neckline, project upward from breakout",
+        "Prior resistance levels or swing highs"
+      ],
+      "risk_notes": "Avoid if troughs are too far apart in time (>3 months) or price levels vary significantly.",
+      "timeframe_bias": "medium to long-term"
+    },
+    "statistics": {
+      "typical_duration": "Several weeks to months between troughs"
+    },
+    "visual_examples": [],
+    "sources": []
+  }
+]
