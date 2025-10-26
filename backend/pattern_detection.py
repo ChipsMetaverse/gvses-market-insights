@@ -1285,7 +1285,14 @@ class PatternDetector:
                 end_candle=i,
                 description=desc,
                 signal=signal,
-                action="watch_closely"
+                action="watch_closely",
+                metadata={
+                    "gap_size": float(gap),
+                    "gap_pct": float(gap_pct),
+                    "prev_candle": {"open": float(prev['open']), "close": float(prev['close']), "low": float(prev['low']), "high": float(prev['high'])},
+                    "curr_candle": {"open": float(curr['open']), "close": float(curr['close']), "low": float(curr['low']), "high": float(curr['high'])},
+                    "horizontal_level": float(prev['close'])  # Gap level
+                }
             ))
         return patterns
     
@@ -1345,7 +1352,15 @@ class PatternDetector:
                     description="Morning Star - bullish candlestick reversal",
                     signal="bullish",
                     action="watch_closely",
-                    typical_duration="3-7 candles"
+                    typical_duration="3-7 candles",
+                    metadata={
+                        "candles": [
+                            {"open": float(c1['open']), "close": float(c1['close']), "low": float(c1['low']), "high": float(c1['high'])},
+                            {"open": float(c2['open']), "close": float(c2['close']), "low": float(c2['low']), "high": float(c2['high'])},
+                            {"open": float(c3['open']), "close": float(c3['close']), "low": float(c3['low']), "high": float(c3['high'])}
+                        ],
+                        "horizontal_level": float(min(c1['low'], c2['low'], c3['low']))  # Support level
+                    }
                 ))
 
             # Evening Star (bearish reversal)
@@ -1364,7 +1379,15 @@ class PatternDetector:
                     description="Evening Star - bearish candlestick reversal",
                     signal="bearish",
                     action="watch_closely",
-                    typical_duration="3-7 candles"
+                    typical_duration="3-7 candles",
+                    metadata={
+                        "candles": [
+                            {"open": float(c1['open']), "close": float(c1['close']), "low": float(c1['low']), "high": float(c1['high'])},
+                            {"open": float(c2['open']), "close": float(c2['close']), "low": float(c2['low']), "high": float(c2['high'])},
+                            {"open": float(c3['open']), "close": float(c3['close']), "low": float(c3['low']), "high": float(c3['high'])}
+                        ],
+                        "horizontal_level": float(max(c1['high'], c2['high'], c3['high']))  # Resistance level
+                    }
                 ))
 
             # Piercing Line (bullish)
@@ -1380,7 +1403,14 @@ class PatternDetector:
                     end_candle=i-1,
                     description="Piercing Line - bullish two-candle reversal",
                     signal="bullish",
-                    action="watch_closely"
+                    action="watch_closely",
+                    metadata={
+                        "candles": [
+                            {"open": float(c1['open']), "close": float(c1['close']), "low": float(c1['low']), "high": float(c1['high'])},
+                            {"open": float(c2['open']), "close": float(c2['close']), "low": float(c2['low']), "high": float(c2['high'])}
+                        ],
+                        "horizontal_level": float((c1_close + o1) / 2)  # Midpoint penetration level
+                    }
                 ))
 
             # Dark Cloud Cover (bearish)
@@ -1438,7 +1468,15 @@ class PatternDetector:
                     end_candle=i,
                     description="Three White Soldiers - strong bullish continuation",
                     signal="bullish",
-                    action="watch_closely"
+                    action="watch_closely",
+                    metadata={
+                        "candles": [
+                            {"open": float(c1['open']), "close": float(c1['close']), "low": float(c1['low']), "high": float(c1['high'])},
+                            {"open": float(c2['open']), "close": float(c2['close']), "low": float(c2['low']), "high": float(c2['high'])},
+                            {"open": float(c3['open']), "close": float(c3['close']), "low": float(c3['low']), "high": float(c3['high'])}
+                        ],
+                        "horizontal_level": float(min(c1['low'], c2['low'], c3['low']))  # Support level
+                    }
                 ))
 
             if (c1['close'] < c1['open'] and c2['close'] < c2['open'] and c3['close'] < c3['open'] and
@@ -1452,7 +1490,15 @@ class PatternDetector:
                     end_candle=i,
                     description="Three Black Crows - strong bearish continuation",
                     signal="bearish",
-                    action="watch_closely"
+                    action="watch_closely",
+                    metadata={
+                        "candles": [
+                            {"open": float(c1['open']), "close": float(c1['close']), "low": float(c1['low']), "high": float(c1['high'])},
+                            {"open": float(c2['open']), "close": float(c2['close']), "low": float(c2['low']), "high": float(c2['high'])},
+                            {"open": float(c3['open']), "close": float(c3['close']), "low": float(c3['low']), "high": float(c3['high'])}
+                        ],
+                        "horizontal_level": float(max(c1['high'], c2['high'], c3['high']))  # Resistance level
+                    }
                 ))
 
         return patterns
@@ -1591,7 +1637,12 @@ class PatternDetector:
                             signal="bullish",
                             action="watch_closely",
                             target=candle['high'] + body,
-                            stop_loss=candle['low']
+                            stop_loss=candle['low'],
+                            metadata={
+                                "candle": {"open": float(candle['open']), "close": float(candle['close']), "low": float(candle['low']), "high": float(candle['high'])},
+                                "lower_shadow": float(lower_shadow),
+                                "horizontal_level": float(candle['low'])  # Stop loss level
+                            }
                         )
         
         # Shooting Star: Long upper shadow (2x body), small lower shadow  
@@ -1616,7 +1667,12 @@ class PatternDetector:
                             signal="bearish",
                             action="watch_closely",
                             target=candle['low'] - body,
-                            stop_loss=candle['high']
+                            stop_loss=candle['high'],
+                            metadata={
+                                "candle": {"open": float(candle['open']), "close": float(candle['close']), "low": float(candle['low']), "high": float(candle['high'])},
+                                "upper_shadow": float(upper_shadow),
+                                "horizontal_level": float(candle['high'])  # Stop loss level
+                            }
                         )
         
         return None
