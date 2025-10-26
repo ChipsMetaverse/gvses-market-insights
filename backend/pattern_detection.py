@@ -1489,7 +1489,12 @@ class PatternDetector:
                 success_rate=0.65,  # 65% historical success rate
                 risk_reward_ratio=2.3,  # Average 1:2.3 risk/reward
                 typical_duration="3-5 days",
-                strategy_notes="Enter on confirmation candle close above engulfing high. Trail stop to breakeven at 1R profit."
+                strategy_notes="Enter on confirmation candle close above engulfing high. Trail stop to breakeven at 1R profit.",
+                metadata={
+                    "prev_candle": {"open": float(prev['open']), "close": float(prev['close']), "low": float(prev['low']), "high": float(prev['high'])},
+                    "curr_candle": {"open": float(curr['open']), "close": float(curr['close']), "low": float(curr['low']), "high": float(curr['high'])},
+                    "horizontal_level": float(prev['low'])  # Stop loss level
+                }
             )
         
         # Bearish Engulfing: Previous green, current red, current engulfs previous
@@ -1512,7 +1517,12 @@ class PatternDetector:
                 signal="bearish",
                 action="consider_entry" if confidence > 80 else "watch_closely",
                 target=curr['close'] - curr_body,
-                stop_loss=prev['high']
+                stop_loss=prev['high'],
+                metadata={
+                    "prev_candle": {"open": float(prev['open']), "close": float(prev['close']), "low": float(prev['low']), "high": float(prev['high'])},
+                    "curr_candle": {"open": float(curr['open']), "close": float(curr['close']), "low": float(curr['low']), "high": float(curr['high'])},
+                    "horizontal_level": float(prev['high'])  # Stop loss level
+                }
             )
         
         return None
@@ -1540,7 +1550,11 @@ class PatternDetector:
                     end_candle=index,
                     description="Doji - Market indecision",
                     signal="neutral",
-                    action="wait"
+                    action="wait",
+                    metadata={
+                        "candle": {"open": float(candle['open']), "close": float(candle['close']), "low": float(candle['low']), "high": float(candle['high'])},
+                        "horizontal_level": float((candle['high'] + candle['low']) / 2)  # Mid-point reference
+                    }
                 )
         
         return None

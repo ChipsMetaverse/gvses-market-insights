@@ -305,12 +305,21 @@ class MarketServiceWrapper:
                             augmented_patterns.append(pattern)
                         detected_patterns["detected"] = augmented_patterns
                         logger.info(f"[{symbol}] Returning top {len(augmented_patterns)} patterns with metadata")
+                        print(f"🎯 [{symbol}] PATTERNS RESULT BEFORE RETURN:", patterns_result)
+                        print(f"🎯 [{symbol}] AUGMENTED PATTERNS:", augmented_patterns)
+                        for i, p in enumerate(augmented_patterns):
+                            print(f"   Pattern {i}: {p.get('pattern_type')} - has_chart_metadata={bool(p.get('chart_metadata'))}")
                         patterns_result = detected_patterns
                 else:
                     logger.warning(f"[{symbol}] No candles available for pattern detection")
             except Exception as pattern_error:
                 logger.error(f"Pattern detection failed for {symbol}: {pattern_error}", exc_info=True)
+                print(f"❌ [{symbol}] PATTERN DETECTION ERROR:", pattern_error)
 
+            print(f"🚀 [{symbol}] FINAL RETURN - patterns_result:", patterns_result)
+            print(f"🚀 [{symbol}] patterns_result type:", type(patterns_result))
+            print(f"🚀 [{symbol}] patterns_result.detected length:", len(patterns_result.get('detected', [])))
+            
             return {
                 "symbol": symbol.upper(),
                 "price_data": quote,
