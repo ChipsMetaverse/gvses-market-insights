@@ -875,6 +875,19 @@ class HybridMarketService:
             "mcp": "operational" if self.mcp_available else "unavailable",
             "mode": "hybrid"
         }
+    
+    async def get_mcp_status(self) -> dict:
+        """
+        Get detailed MCP service status for health checks.
+        Returns initialization status, availability, and connection details.
+        """
+        return {
+            "initialized": self.mcp_available,
+            "available": self.mcp_available,
+            "service": "http_mcp_client",
+            "endpoint": "http://127.0.0.1:3001/mcp",
+            "mode": "hybrid" if self.direct_available and self.mcp_available else "fallback"
+        }
 
 
 class MarketServiceFactory:
