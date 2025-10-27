@@ -20,6 +20,7 @@ import { Tooltip } from './Tooltip';
 import { OnboardingTour } from './OnboardingTour';
 import { TimeRange } from '../types/dashboard';
 import './TradingDashboardSimple.css';
+import './TradingDashboardMobile.css';
 
 interface StockData {
   symbol: string;
@@ -147,7 +148,6 @@ export const TradingDashboardSimple: React.FC = () => {
   // Removed tab system - using unified interface
   const [isListening, setIsListening] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState('00:00');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
@@ -161,11 +161,10 @@ export const TradingDashboardSimple: React.FC = () => {
   const [detectedPatterns, setDetectedPatterns] = useState<any[]>([]);
   
   // Streaming news state
-  const [streamingNews, setStreamingNews] = useState<any[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingNews] = useState<any[]>([]);
+  const [isStreaming] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const [backendPatterns, setBackendPatterns] = useState<any[]>([]);
-  const [patternValidations, setPatternValidations] = useState<Record<string, 'accepted' | 'rejected'>>({});
   const [currentSnapshot, setCurrentSnapshot] = useState<ChartSnapshot | null>(null);
   
   // Pattern visualization state
@@ -175,7 +174,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [chartTimeframe, setChartTimeframe] = useState('1D');
-  const [voiceProvider, setVoiceProvider] = useState<ConversationProviderKey>('chatkit');
+  const [voiceProvider] = useState<ConversationProviderKey>('chatkit');
   const [showOnboarding, setShowOnboarding] = useState(() => {
     const completed = localStorage.getItem('gvses_onboarding_completed');
     return completed !== 'true';
@@ -221,6 +220,80 @@ export const TradingDashboardSimple: React.FC = () => {
     messages: 'trading-assistant-messages',
     session: 'trading-assistant-session'
   };
+
+  // Mobile responsiveness state (inline, no helper hooks)
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return window.innerWidth <= 768;
+  });
+  const [activePanel, setActivePanel] = useState<'analysis' | 'chart' | 'voice'>('chart');
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setActivePanel('chart');
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!isMobile || !element) {
+      return undefined;
+    }
+
+    const tabs: Array<'analysis' | 'chart' | 'voice'> = ['analysis', 'chart', 'voice'];
+    let touchStartX: number | null = null;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length > 0) {
+        touchStartX = event.touches[0].clientX;
+      }
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (touchStartX === null || event.changedTouches.length === 0) {
+        touchStartX = null;
+        return;
+      }
+
+      const deltaX = event.changedTouches[0].clientX - touchStartX;
+      const threshold = 40;
+      if (Math.abs(deltaX) >= threshold) {
+        const currentIndex = tabs.indexOf(activePanel);
+        if (deltaX < 0 && currentIndex < tabs.length - 1) {
+          setActivePanel(tabs[currentIndex + 1]);
+        } else if (deltaX > 0 && currentIndex > 0) {
+          setActivePanel(tabs[currentIndex - 1]);
+        }
+      }
+
+      touchStartX = null;
+    };
+
+    element.addEventListener('touchstart', handleTouchStart, { passive: true });
+    element.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      element.removeEventListener('touchstart', handleTouchStart);
+      element.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isMobile, activePanel]);
 
   // Load persisted messages on component mount
   useEffect(() => {
@@ -325,31 +398,13 @@ export const TradingDashboardSimple: React.FC = () => {
     }
   };
 
-  // Remove symbol from watchlist
-  const removeFromWatchlist = (symbol: string) => {
-    if (watchlist.length <= 1) {
-      setToastCommand({ command: '⚠️ Must keep at least one symbol', type: 'info' });
-      setTimeout(() => setToastCommand(null), 3000);
-      return;
-    }
-    
-    const newWatchlist = watchlist.filter(s => s !== symbol);
-    setWatchlist(newWatchlist);
-    setToastCommand({ command: `🗑️ Removed ${symbol} from watchlist`, type: 'info' });
-    setTimeout(() => setToastCommand(null), 3000);
-    
-    // If we removed the selected symbol, select the first one
-    if (selectedSymbol === symbol && newWatchlist.length > 0) {
-      setSelectedSymbol(newWatchlist[0]);
-    }
-  };
+  // removeFromWatchlist removed - unused function
   
   // Audio processing refs
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioWorkletRef = useRef<AudioWorkletNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Chart control ref
   const chartRef = useRef<any>(null);
@@ -427,14 +482,9 @@ export const TradingDashboardSimple: React.FC = () => {
       streamRef.current = null;
     }
 
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
 
     setIsRecording(false);
     setIsListening(false);
-    setRecordingTime('00:00');
     setAudioLevel(0);
   }, []);
 
@@ -494,20 +544,6 @@ export const TradingDashboardSimple: React.FC = () => {
     }
   }, [chartTimeframe]);
 
-  // Function to validate a pattern
-  const validatePattern = useCallback((patternId: string, validation: 'accepted' | 'rejected') => {
-    setPatternValidations(prev => ({
-      ...prev,
-      [patternId]: validation
-    }));
-    
-    // Show feedback
-    setToastCommand({ 
-      command: `Pattern ${validation === 'accepted' ? '✅ Accepted' : '❌ Rejected'}`, 
-      type: validation === 'accepted' ? 'success' : 'info' 
-    });
-    setTimeout(() => setToastCommand(null), 2000);
-  }, []);
 
   // Pattern visualization handlers
   const drawPatternOverlay = useCallback((pattern: any) => {
@@ -579,14 +615,11 @@ export const TradingDashboardSimple: React.FC = () => {
         // Disconnect ElevenLabs singleton
         import('../services/ElevenLabsConnectionManager').then(module => {
           const manager = module.ElevenLabsConnectionManager.getInstance();
-          manager.disconnect();
+          manager.closeConnection();
         });
       } else if (previousProvider === 'openai') {
-        // Disconnect OpenAI service
-        import('../services/OpenAIRealtimeService').then(module => {
-          const service = module.OpenAIRealtimeService.getInstance();
-          service.disconnect();
-        });
+        // OpenAI service cleanup is handled by the hook internally
+        // No manual disconnect needed
       }
       
       previousProviderRef.current = voiceProvider;
@@ -633,11 +666,11 @@ export const TradingDashboardSimple: React.FC = () => {
       }
     },
     onConnectionChange: handleConnectionChange,
-    onError: (error) => {
+    onError: (error: string) => {
       setToastCommand({ command: `❌ Error: ${error}`, type: 'error' });
       setTimeout(() => setToastCommand(null), 4000);
     },
-    onThinking: (thinking) => {
+    onThinking: (thinking: boolean) => {
       console.log('Agent thinking:', thinking);
     }
   });
@@ -700,67 +733,14 @@ export const TradingDashboardSimple: React.FC = () => {
   });
 
   // ChatKit conversation (Agent Builder workflow)
-  const [chatKitReady, setChatKitReady] = useState(false);
-  const [chatKitError, setChatKitError] = useState<string | null>(null);
-  const [chatKitControl, setChatKitControl] = useState<any>(null);
+  const [chatKitReady] = useState(false);
+  const [chatKitError] = useState<string | null>(null);
+  const [chatKitControl] = useState<any>(null);
   const [chatKitInitAttempts, setChatKitInitAttempts] = useState(0);
   const [chatKitInitMessageShown, setChatKitInitMessageShown] = useState(false);
   const MAX_CHATKIT_INIT_ATTEMPTS = 3;
 
-  const chatKitConfig = useMemo(() => ({
-    api: {
-      async getClientSecret(existing: any) {
-        const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        
-        try {
-          const deviceId = localStorage.getItem('chatkit_device_id') || `device_${Date.now()}`;
-          
-          console.log('🔑 Requesting ChatKit session from backend...');
-          const res = await fetch(`${backendUrl}/api/chatkit/session`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              device_id: deviceId,
-              existing_session: existing || null
-            }),
-          });
-          
-          if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(`Session failed: ${res.status} - ${errorText}`);
-          }
-          
-          const { client_secret } = await res.json();
-          localStorage.setItem('chatkit_device_id', deviceId);
-          console.log('✅ ChatKit session established with Agent Builder');
-          setChatKitError(null);
-          return client_secret;
-        } catch (err: any) {
-          const errorMsg = err.message || 'ChatKit session failed';
-          console.error('❌ ChatKit session error:', errorMsg);
-          setChatKitError(errorMsg);
-          setChatKitReady(false);
-          throw err;
-        }
-      },
-    },
-    onMessage: (message: any) => {
-      console.log('📨 ChatKit message received:', message);
-      const msg: Message = {
-        id: `chatkit-${Date.now()}`,
-        role: message.role,
-        content: message.content,
-        timestamp: new Date().toISOString(),
-        provider: 'chatkit'
-      };
-      setMessages(prev => [...prev, msg]);
-      
-      // Process chart commands if present
-      if (message.role === 'assistant' && message.content) {
-        handleAgentResponse(message.content);
-      }
-    },
-  }), []);
+  // chatKitConfig removed - now handled by RealtimeChatKit component
 
   // ChatKit is now handled by RealtimeChatKit component
   // const chatKitHookResult = useChatKit(chatKitConfig) as { control?: any; error?: unknown };
@@ -941,32 +921,7 @@ export const TradingDashboardSimple: React.FC = () => {
     }
   };
 
-  // Direct OpenAI connection handler - simplified single click
-  const handleOpenAIConnect = async () => {
-    const now = Date.now();
-    
-    // Debounce rapid clicks
-    if (now - connectionAttemptTimeRef.current < 1000) {
-      console.log('Debouncing rapid OpenAI connection attempt');
-      return;
-    }
-    
-    connectionAttemptTimeRef.current = now;
-    
-    // Set provider to OpenAI and connect immediately
-    setVoiceProvider('openai');
-    
-    // Small delay to ensure state update
-    setTimeout(async () => {
-      console.log('Connecting directly to OpenAI Realtime...');
-      try {
-        await currentConversation.startConversation();
-      } catch (error) {
-        console.error('Failed to connect to OpenAI:', error);
-        alert('Failed to connect to OpenAI Realtime. Please check your connection and try again.');
-      }
-    }, 100);
-  };
+  // handleOpenAIConnect removed - unused function
 
   // Handle text message sending - route ONLY to active provider
   const handleSendTextMessage = async () => {
@@ -1193,63 +1148,9 @@ export const TradingDashboardSimple: React.FC = () => {
     setExpandedNews(expandedNews === index ? null : index);
   };
 
-  // Live news streaming handlers
-  const startNewsStream = useCallback(() => {
-    // Close existing stream
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-    
-    setIsStreaming(true);
-    setStreamingNews([]);
-    
-    // Create EventSource with proper URL
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    const streamUrl = `${apiUrl}/api/mcp/stream-news?symbol=${selectedSymbol}&duration=60000&interval=10000`;
-    
-    console.log('[Streaming] Starting news stream:', streamUrl);
-    const eventSource = new EventSource(streamUrl);
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('[Streaming] Event received:', data);
-        
-        if (data.method === 'notifications/progress') {
-          const newsUpdate = JSON.parse(data.params.message);
-          setStreamingNews(prev => [...prev, newsUpdate]);
-        } else if (data.result) {
-          // Final message
-          console.log('[Streaming] Stream complete');
-          setIsStreaming(false);
-          eventSource.close();
-        }
-      } catch (error) {
-        console.error('[Streaming] Parse error:', error);
-      }
-    };
-    
-    eventSource.onerror = (error) => {
-      console.error('[Streaming] EventSource error:', error);
-      setIsStreaming(false);
-      eventSource.close();
-    };
-    
-    eventSourceRef.current = eventSource;
-  }, [selectedSymbol]);
+  // startNewsStream removed - unused streaming function
 
-  const stopNewsStream = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    setIsStreaming(false);
-  }, []);
-
-  const handleBackToClassic = () => {
-    console.log('Back to classic view');
-    // Add navigation logic here if needed
-  };
+  // stopNewsStream and handleBackToClassic removed - unused functions
 
   // Fetch stock prices for watchlist
   const fetchStocksData = async (symbolsToFetch?: string[]) => {
@@ -1263,7 +1164,7 @@ export const TradingDashboardSimple: React.FC = () => {
         let label = 'ST';
         let description = 'Neutral momentum';
         
-        const changePercent = stockPrice.change_percent || stockPrice.change_pct || 0;
+        const changePercent = stockPrice.change_percent || 0;
         
         if (changePercent > 2) {
           label = 'QE';
@@ -1284,9 +1185,9 @@ export const TradingDashboardSimple: React.FC = () => {
         
         return {
           symbol: stockPrice.symbol,
-          price: stockPrice.price || stockPrice.last || 0,
-          change: stockPrice.change || stockPrice.change_abs || 0,
-          changePercent: stockPrice.change_percent || stockPrice.change_pct || 0,
+          price: stockPrice.price || 0,
+          change: stockPrice.change || 0,
+          changePercent: stockPrice.change_percent || 0,
           label,
           description,
           volume: stockPrice.volume || 0
@@ -1488,14 +1389,14 @@ export const TradingDashboardSimple: React.FC = () => {
         setToastCommand({ command: message, type: 'info' });
         setTimeout(() => setToastCommand(null), 3000);
       },
-      onCommandExecuted: (command, success, message) => {
+      onCommandExecuted: (_command: string, success: boolean, message: string) => {
         // Show toast notification for command execution
         setToastCommand({
           command: message,
           type: success ? 'success' : 'error'
         });
       },
-      onCommandError: (error) => {
+      onCommandError: (error: string) => {
         // Show error toast
         setToastCommand({
           command: error,
@@ -1509,14 +1410,14 @@ export const TradingDashboardSimple: React.FC = () => {
   // Track if we've already started recording to prevent duplicates
   const hasStartedRecordingRef = useRef(false);
   const connectionAttemptTimeRef = useRef<number>(0);
-  const isMountedRef = useRef(true);
   
   // Process backend chart commands when snapshot is updated
   useEffect(() => {
-    if (currentSnapshot?.chart_commands?.length > 0) {
-      console.log('Executing backend chart commands:', currentSnapshot.chart_commands);
+    const commands = currentSnapshot?.chart_commands;
+    if (commands && commands.length > 0) {
+      console.log('Executing backend chart commands:', commands);
       enhancedChartControl.processEnhancedResponse(
-        currentSnapshot.chart_commands.join(' ')
+        commands.join(' ')
       ).catch(err => {
         console.error('Failed to execute backend chart commands:', err);
       });
@@ -1545,7 +1446,7 @@ export const TradingDashboardSimple: React.FC = () => {
   // which double-invokes effects in development.
 
   return (
-    <div className="trading-dashboard-simple" data-testid="trading-dashboard">
+    <div ref={containerRef} className="trading-dashboard-simple" data-testid="trading-dashboard">
       {/* Command Toast Notifications */}
       {toastCommand && (
         <CommandToast
@@ -1563,31 +1464,46 @@ export const TradingDashboardSimple: React.FC = () => {
           <span className="subtitle">Market Assistant</span>
         </div>
         
-        {/* Compact Ticker Cards in Header */}
-        <div className="header-tickers">
-          {isLoadingStocks ? (
-            <div className="ticker-loading">Loading...</div>
-          ) : (
-            stocksData.slice(0, 5).map((stock) => (
-              <div 
-                key={stock.symbol} 
-                className={`ticker-compact ${selectedSymbol === stock.symbol ? 'selected' : ''}`}
-                onClick={() => setSelectedSymbol(stock.symbol)}
-                title={`${stock.symbol}: ${stock.label}`}
-              >
-                <div className="ticker-compact-left">
-                  <div className="ticker-symbol-compact">{stock.symbol}</div>
-                  <div className="ticker-price-compact">${stock.price.toFixed(2)}</div>
-                </div>
-                <div className="ticker-compact-right">
-                  <div className={`ticker-change-compact ${stock.change >= 0 ? 'positive' : 'negative'}`}>
-                    {stock.change >= 0 ? '+' : ''}{stock.changePercent.toFixed(1)}%
+        {/* Ticker Display - Desktop cards or Mobile dropdown */}
+        {isMobile ? (
+          <div className="mobile-ticker-select">
+            <select 
+              value={selectedSymbol}
+              onChange={(e) => setSelectedSymbol(e.target.value)}
+            >
+              {stocksData.map((stock) => (
+                <option key={stock.symbol} value={stock.symbol}>
+                  {stock.symbol} - ${stock.price.toFixed(2)} ({stock.change >= 0 ? '+' : ''}{stock.changePercent.toFixed(1)}%)
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="header-tickers">
+            {isLoadingStocks ? (
+              <div className="ticker-loading">Loading...</div>
+            ) : (
+              stocksData.slice(0, 5).map((stock) => (
+                <div 
+                  key={stock.symbol} 
+                  className={`ticker-compact ${selectedSymbol === stock.symbol ? 'selected' : ''}`}
+                  onClick={() => setSelectedSymbol(stock.symbol)}
+                  title={`${stock.symbol}: ${stock.label}`}
+                >
+                  <div className="ticker-compact-left">
+                    <div className="ticker-symbol-compact">{stock.symbol}</div>
+                    <div className="ticker-price-compact">${stock.price.toFixed(2)}</div>
+                  </div>
+                  <div className="ticker-compact-right">
+                    <div className={`ticker-change-compact ${stock.change >= 0 ? 'positive' : 'negative'}`}>
+                      {stock.change >= 0 ? '+' : ''}{stock.changePercent.toFixed(1)}%
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        )}
         
         <div className="header-controls">
           <span className="status-indicator">
@@ -1600,7 +1516,12 @@ export const TradingDashboardSimple: React.FC = () => {
       {/* Main Layout */}
       <div className="dashboard-layout">
         {/* Left Panel - Chart Analysis */}
-        <aside className="analysis-panel-left left-panel" style={{ width: `${leftPanelWidth}px` }}>
+        <aside
+          className="analysis-panel-left left-panel panel"
+          style={{ width: isMobile ? '100%' : `${leftPanelWidth}px` }}
+          data-panel="analysis"
+          data-active={!isMobile || activePanel === 'analysis'}
+        >
 
           <h2 className="panel-title">CHART ANALYSIS</h2>
           <div className="analysis-content">
@@ -1763,11 +1684,15 @@ export const TradingDashboardSimple: React.FC = () => {
           </div>
         </aside>
 
-        {/* Left Panel Divider */}
-        <PanelDivider onDrag={handleLeftPanelResize} />
+        {/* Left Panel Divider - Desktop only */}
+        {!isMobile && <PanelDivider onDrag={handleLeftPanelResize} />}
 
         {/* Center - Chart Always Visible */}
-        <main className="main-content">
+        <main
+          className="main-content panel"
+          data-panel="chart"
+          data-active={!isMobile || activePanel === 'chart'}
+        >
           {/* Chart Section - Always Visible */}
           <div className="chart-section chart-container">
             {/* Timeframe Selector */}
@@ -1805,11 +1730,16 @@ export const TradingDashboardSimple: React.FC = () => {
           )}
         </main>
 
-        {/* Right Panel Divider */}
-        <PanelDivider onDrag={handleRightPanelResize} />
+        {/* Right Panel Divider - Desktop only */}
+        {!isMobile && <PanelDivider onDrag={handleRightPanelResize} />}
 
         {/* Right Panel - Voice Assistant Only */}
-        <aside className="voice-panel-right chatkit-container" style={{ width: `${rightPanelWidth}px` }}>
+        <aside
+          className="voice-panel-right chatkit-container panel"
+          style={{ width: isMobile ? '100%' : `${rightPanelWidth}px` }}
+          data-panel="voice"
+          data-active={!isMobile || activePanel === 'voice'}
+        >
           {voiceProvider === 'chatkit' ? (
             // Render RealtimeChatKit when using ChatKit provider - no wrapper needed
             <RealtimeChatKit 
@@ -1898,29 +1828,31 @@ export const TradingDashboardSimple: React.FC = () => {
       </div>
 
       
-      {/* Floating Voice Action Button */}
-      <button
-        className={`voice-fab ${isConversationConnected ? 'active' : ''} ${isConversationConnecting ? 'connecting' : ''}`}
-        onClick={() => {
-          console.log('🚨 [BUTTON] ==================== MICROPHONE BUTTON CLICKED ====================');
-          console.log('🚨 [BUTTON] Step 1: Click registered');
-          console.log('🚨 [BUTTON] Step 2: Checking handleConnectToggle...');
-          console.log('🚨 [BUTTON] handleConnectToggle type:', typeof handleConnectToggle);
-          console.log('🚨 [BUTTON] handleConnectToggle exists:', !!handleConnectToggle);
-          console.log('🚨 [BUTTON] Step 3: About to call handleConnectToggle()');
-          try {
-            handleConnectToggle();
-            console.log('🚨 [BUTTON] Step 4: handleConnectToggle() completed successfully');
-          } catch (err) {
-            console.error('🚨 [BUTTON] ERROR in handleConnectToggle:', err);
-            console.error('🚨 [BUTTON] Error details:', String(err));
-          }
-        }}
-        title={isConversationConnected ? 'Disconnect Voice' : 'Connect Voice'}
-        data-testid="voice-fab"
-      >
-        {isConversationConnecting ? '⌛' : isConversationConnected ? '🎤' : '🎙️'}
-      </button>
+      {/* Voice FAB - Different position on mobile */}
+        <button
+          className={`voice-fab ${isConversationConnected ? 'active' : ''} ${isConversationConnecting ? 'connecting' : ''} ${isMobile ? 'mobile-position' : ''}`}
+          onClick={() => {
+            console.log('🚨 [BUTTON] ==================== MICROPHONE BUTTON CLICKED ====================');
+            console.log('🚨 [BUTTON] Step 1: Click registered');
+            console.log('🚨 [BUTTON] Step 2: Checking handleConnectToggle...');
+            console.log('🚨 [BUTTON] handleConnectToggle type:', typeof handleConnectToggle);
+            console.log('🚨 [BUTTON] handleConnectToggle exists:', !!handleConnectToggle);
+            console.log('🚨 [BUTTON] Step 3: About to call handleConnectToggle()');
+            try {
+              handleConnectToggle();
+              console.log('🚨 [BUTTON] Step 4: handleConnectToggle() completed successfully');
+            } catch (err) {
+              console.error('🚨 [BUTTON] ERROR in handleConnectToggle:', err);
+              console.error('🚨 [BUTTON] Error details:', String(err));
+            }
+          }}
+          title={isConversationConnected ? 'Disconnect Voice' : 'Connect Voice'}
+          data-testid="voice-fab"
+          style={isMobile && activePanel === 'voice' ? { display: 'none' } : undefined}
+        >
+          {isConversationConnecting ? '⌛' : isConversationConnected ? '🎤' : '🎙️'}
+        </button>
+
       
       {/* Voice Command Helper - Shows command history and suggestions */}
       <VoiceCommandHelper
@@ -1932,6 +1864,53 @@ export const TradingDashboardSimple: React.FC = () => {
       {showOnboarding && (
         <OnboardingTour onComplete={() => setShowOnboarding(false)} />
       )}
-    </div>
-  );
-};
+      
+      {/* Mobile Tab Bar - Fixed at bottom */}
+        {isMobile && (
+          <nav className="mobile-tab-bar" aria-label="Dashboard navigation">
+            <ul className="mobile-tab-bar__list">
+              <li>
+                <button
+                  type="button"
+                  className={`mobile-tab-bar__button ${activePanel === 'analysis' ? 'mobile-tab-bar__button--active' : ''}`}
+                  aria-pressed={activePanel === 'analysis'}
+                  aria-label="Analysis"
+                  onClick={() => setActivePanel('analysis')}
+                >
+                  <span>Analysis</span>
+                  {stockNews.length > 0 && (
+                    <span className="mobile-tab-bar__badge">{stockNews.length > 9 ? '9+' : stockNews.length}</span>
+                  )}
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  className={`mobile-tab-bar__button ${activePanel === 'chart' ? 'mobile-tab-bar__button--active' : ''}`}
+                  aria-pressed={activePanel === 'chart'}
+                  aria-label="Chart"
+                  onClick={() => setActivePanel('chart')}
+                >
+                  <span>Chart</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  className={`mobile-tab-bar__button ${activePanel === 'voice' ? 'mobile-tab-bar__button--active' : ''}`}
+                  aria-pressed={activePanel === 'voice'}
+                  aria-label="Voice"
+                  onClick={() => setActivePanel('voice')}
+                >
+                  <span>Voice</span>
+                  {unifiedMessages.length > 0 && (
+                    <span className="mobile-tab-bar__badge">{unifiedMessages.length > 9 ? '9+' : unifiedMessages.length}</span>
+                  )}
+                </button>
+              </li>
+            </ul>
+          </nav>
+        )}
+      </div>
+    );
+  };
