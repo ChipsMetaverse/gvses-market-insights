@@ -1333,9 +1333,17 @@ export const TradingDashboardSimple: React.FC = () => {
       }
 
       const patterns = comprehensive.patterns?.detected || [];
+      console.log(`[Pattern API] Fetched ${patterns.length} patterns from backend for ${symbol}`);
+      
       if (patterns.length > 0) {
-        // Sort by confidence descending and take top 3
+        // Sort by confidence descending
         const sortedPatterns = [...patterns].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0));
+        
+        // Store ALL backend patterns (not just top 3) for visualization
+        setBackendPatterns(sortedPatterns);
+        console.log(`[Pattern API] Set ${sortedPatterns.length} backend patterns with chart_metadata`);
+        
+        // Also keep top 3 in detectedPatterns for backward compatibility
         setDetectedPatterns(sortedPatterns.slice(0, 3));
 
         const primary = sortedPatterns[0];
@@ -1346,6 +1354,8 @@ export const TradingDashboardSimple: React.FC = () => {
           indicator: primary?.related_indicator,
         });
       } else {
+        console.log('[Pattern API] No patterns returned from backend');
+        setBackendPatterns([]);
         setDetectedPatterns([]);
         enhancedChartControl.clearDrawings();
       }
@@ -1353,6 +1363,7 @@ export const TradingDashboardSimple: React.FC = () => {
       console.error('Error fetching comprehensive data:', error);
       // Technical levels will just remain undefined/empty if this fails
       setTechnicalLevels({});
+      setBackendPatterns([]);
       setDetectedPatterns([]);
       enhancedChartControl.clearDrawings();
     }
