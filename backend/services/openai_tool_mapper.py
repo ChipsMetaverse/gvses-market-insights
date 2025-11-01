@@ -275,6 +275,7 @@ class OpenAIToolMapper:
     def _convert_schema(self, mcp_schema: Dict[str, Any]) -> Dict[str, Any]:
         """
         Convert MCP input schema to OpenAI parameters format.
+        Filters out anyOf/allOf/oneOf at top level as they're not supported by Claude API.
         
         Args:
             mcp_schema: MCP tool input schema
@@ -288,6 +289,43 @@ class OpenAIToolMapper:
                 "properties": {},
                 "required": []
             }
+        
+        # CRITICAL: Claude API does not support anyOf/allOf/oneOf at top level
+        # If schema uses these, try to flatten or use first option
+        if "anyOf" in mcp_schema or "allOf" in mcp_schema or "oneOf" in mcp_schema:
+            logger.warning(f"Tool schema contains anyOf/allOf/oneOf at top level - attempting to flatten")
+            
+            # Try anyOf/oneOf first - use first valid object schema
+            for key in ["anyOf", "oneOf"]:
+                if key in mcp_schema:
+                    options = mcp_schema[key]
+                    if isinstance(options, list) and len(options) > 0:
+                        # Find first object-type schema
+                        for option in options:
+                            if isinstance(option, dict) and option.get("type") == "object":
+                                logger.info(f"Flattened {key} to first object option")
+                                mcp_schema = option
+                                break
+                        break
+            
+            # Handle allOf - merge all object schemas
+            if "allOf" in mcp_schema:
+                merged_props = {}
+                merged_required = []
+                for subschema in mcp_schema.get("allOf", []):
+                    if isinstance(subschema, dict):
+                        if "properties" in subschema:
+                            merged_props.update(subschema["properties"])
+                        if "required" in subschema:
+                            merged_required.extend(subschema["required"])
+                
+                if merged_props:
+                    logger.info("Flattened allOf by merging properties")
+                    mcp_schema = {
+                        "type": "object",
+                        "properties": merged_props,
+                        "required": list(set(merged_required))
+                    }
         
         # Handle different schema formats
         schema_type = mcp_schema.get("type", "object")
@@ -306,11 +344,35 @@ class OpenAIToolMapper:
         }
     
     def _convert_property(self, prop_def: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert a single property definition to OpenAI format."""
+        """
+        Convert a single property definition to OpenAI format.
+        Filters out anyOf/allOf/oneOf as they're not well supported.
+        """
+        if not isinstance(prop_def, dict):
+            return {"type": "string"}
+        
+        # Handle anyOf/allOf/oneOf in property definitions
+        if "anyOf" in prop_def or "allOf" in prop_def or "oneOf" in prop_def:
+            logger.debug("Property contains anyOf/allOf/oneOf - flattening")
+            
+            # For anyOf/oneOf, use first option
+            for key in ["anyOf", "oneOf"]:
+                if key in prop_def and isinstance(prop_def[key], list) and len(prop_def[key]) > 0:
+                    prop_def = prop_def[key][0] if isinstance(prop_def[key][0], dict) else {"type": "string"}
+                    break
+            
+            # For allOf, merge properties
+            if "allOf" in prop_def and isinstance(prop_def["allOf"], list):
+                merged = {}
+                for subschema in prop_def["allOf"]:
+                    if isinstance(subschema, dict):
+                        merged.update(subschema)
+                prop_def = merged if merged else {"type": "string"}
+        
         converted = {}
         
-        # Copy basic fields
-        for field in ["type", "description", "enum"]:
+        # Copy basic fields (anyOf/allOf/oneOf deliberately excluded)
+        for field in ["type", "description", "enum", "default"]:
             if field in prop_def:
                 converted[field] = prop_def[field]
         

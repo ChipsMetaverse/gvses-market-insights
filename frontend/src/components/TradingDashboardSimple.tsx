@@ -117,23 +117,23 @@ const timeframeToDays = (timeframe: TimeRange): number => {
     '1H': 7, '2H': 7, '3H': 7, '4H': 7, 
     '6H': 7, '8H': 7, '12H': 7,
     
-    // Daily+ - Historical data (years of daily candles)
-    '1D': 1095,   // 3 years of daily candles
-    '2D': 1095,   // 3 years
-    '3D': 1095,   // 3 years
-    '5D': 1095,   // 3 years
-    '1W': 1095,   // 3 years of weekly candles
+    // Daily+ - Historical data (fetch more than needed for technical indicators)
+    '1D': 200,   // Fetch 200 days but display 1
+    '2D': 200,   // Fetch 200 days but display 2
+    '3D': 200,   // Fetch 200 days but display 3
+    '5D': 200,   // Fetch 200 days but display 5
+    '1W': 200,   // Fetch 200 days but display 7
     
-    // Months - More historical data
-    '1M': 3650,   // 10 years
-    '3M': 3650,   // 10 years
-    '6M': 3650,   // 10 years
+    // Months - Fetch extra for MA200 but display only requested range
+    '1M': 250,   // Fetch 250 days but display 30
+    '3M': 300,   // Fetch 300 days but display 90
+    '6M': 380,   // Fetch 380 days but display 180
     
-    // Years - Maximum historical data
-    '1Y': 3650,   // 10 years
-    '2Y': 7300,   // 20 years
-    '3Y': 7300,   // 20 years
-    '5Y': 9125,   // 25 years
+    // Years - Fetch all needed data
+    '1Y': 365,   // 1 year
+    '2Y': 730,   // 2 years
+    '3Y': 1095,  // 3 years
+    '5Y': 1825,  // 5 years
     
     // Special
     'YTD': Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24)),
@@ -166,10 +166,12 @@ export const TradingDashboardSimple: React.FC = () => {
   const eventSourceRef = useRef<EventSource | null>(null);
   const [backendPatterns, setBackendPatterns] = useState<any[]>([]);
   const [currentSnapshot, setCurrentSnapshot] = useState<ChartSnapshot | null>(null);
+  const pendingPatternFocusRef = useRef<number | null>(null);
   
-  // Pattern visualization state
-  const [visiblePatterns, setVisiblePatterns] = useState<Set<string>>(new Set());
-  const [hoveredPattern, setHoveredPattern] = useState<string | null>(null);
+  // Pattern visualization state - Phase 1: Smart Visibility Controls
+  const [patternVisibility, setPatternVisibility] = useState<{ [patternId: string]: boolean }>({});
+  const [hoveredPatternId, setHoveredPatternId] = useState<string | null>(null);
+  const [showAllPatterns, setShowAllPatterns] = useState(false);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -544,65 +546,174 @@ export const TradingDashboardSimple: React.FC = () => {
     }
   }, [chartTimeframe]);
 
+  const applyChartSnapshot = async (snapshot: ChartSnapshot | null) => {
+    if (!snapshot) {
+      return;
+    }
+
+    const commands = snapshot.chart_commands;
+    if (commands && commands.length > 0) {
+      console.log('Executing backend chart commands:', commands);
+      enhancedChartControl.processEnhancedResponse(
+        commands.join(' ')
+      ).catch(err => {
+        console.error('Failed to execute backend chart commands:', err);
+      });
+    }
+  };
+
+  // Phase 1: Pattern Visibility Control Helpers
+  const getPatternId = useCallback((pattern: any): string => {
+    // Generate unique pattern ID from pattern properties
+    return `${pattern.pattern_type}_${pattern.start_time}_${pattern.confidence || pattern.strength || 75}`;
+  }, []);
+
+  const shouldDrawPattern = useCallback((pattern: any): boolean => {
+    const patternId = getPatternId(pattern);
+    
+    // Pattern should be drawn if:
+    // 1. It's currently being hovered (preview mode)
+    // 2. It's explicitly selected/toggled on (persistent visibility)
+    // 3. "Show All" is enabled
+    const isHovered = hoveredPatternId === patternId;
+    const isSelected = patternVisibility[patternId] === true;
+    const showAll = showAllPatterns;
+    
+    const shouldDraw = isHovered || isSelected || showAll;
+    
+    if (shouldDraw) {
+      console.log(`[Pattern Visibility] Drawing pattern ${patternId}:`, {
+        isHovered,
+        isSelected,
+        showAll,
+      });
+    }
+    
+    return shouldDraw;
+  }, [hoveredPatternId, patternVisibility, showAllPatterns, getPatternId]);
+
+  const handlePatternCardHover = useCallback((pattern: any) => {
+    const patternId = getPatternId(pattern);
+    console.log(`[Pattern Interaction] Hover ENTER: ${patternId}`);
+    setHoveredPatternId(patternId);
+  }, [getPatternId]);
+
+  const handlePatternCardLeave = useCallback(() => {
+    console.log(`[Pattern Interaction] Hover LEAVE`);
+    setHoveredPatternId(null);
+  }, []);
+
+  const handlePatternToggle = useCallback((pattern: any) => {
+    const patternId = getPatternId(pattern);
+    const currentState = patternVisibility[patternId] || false;
+    console.log(`[Pattern Interaction] Toggle ${patternId}: ${currentState} → ${!currentState}`);
+    
+    setPatternVisibility(prev => ({
+      ...prev,
+      [patternId]: !currentState
+    }));
+  }, [patternVisibility, getPatternId]);
+
+  const handleShowAllToggle = useCallback(() => {
+    console.log(`[Pattern Interaction] Show All: ${showAllPatterns} → ${!showAllPatterns}`);
+    setShowAllPatterns(prev => !prev);
+  }, [showAllPatterns]);
 
   // Pattern visualization handlers
   const drawPatternOverlay = useCallback((pattern: any) => {
-    if (!pattern.chart_metadata) {
-      console.log('[Pattern] No chart_metadata for pattern:', pattern.pattern_type);
-      return;
+    const patternTimestamp: number | null = pattern.start_time ?? null;
+    
+    console.log('[Pattern] Drawing overlay:', {
+      pattern_type: pattern.pattern_type,
+      has_visual_config: !!pattern.visual_config,
+      has_chart_metadata: !!pattern.chart_metadata,
+      timestamp: patternTimestamp,
+    });
+
+    // Verify pattern sits inside the visible range; if not, schedule a focus
+    if (patternTimestamp) {
+      const visibleRange = enhancedChartControl.getVisibleTimeRange?.();
+      if (visibleRange) {
+        if (patternTimestamp < visibleRange.from || patternTimestamp > visibleRange.to) {
+          console.warn('[Pattern] Pattern outside visible range - scheduling focus');
+          pendingPatternFocusRef.current = patternTimestamp;
+        }
+      }
     }
-    
-    const { trendlines, levels } = pattern.chart_metadata;
-    console.log('[Pattern] Drawing overlay:', { pattern_type: pattern.pattern_type, trendlines, levels });
-    
-    // Draw trendlines
-    trendlines?.forEach((trendline: any) => {
-      const color = trendline.type === 'upper_trendline' ? '#ef4444' : '#3b82f6';
-      enhancedChartControl.drawTrendline(
-        trendline.start.time,
-        trendline.start.price,
-        trendline.end.time,
-        trendline.end.price,
-        color
-      );
-      console.log('[Pattern] Drew trendline:', trendline.type);
-    });
-    
-    // Draw support/resistance levels
-    levels?.forEach((level: any) => {
-      const color = level.type === 'support' ? '#10b981' : '#ef4444';
-      const label = level.type === 'support' ? 'Support' : 'Resistance';
-      enhancedChartControl.drawHorizontalLine(level.price, color, label);
-      console.log('[Pattern] Drew level:', level.type, level.price);
-    });
+
+    // PHASE 2C: Use visual_config if available (new enhanced rendering)
+    const visualConfig = pattern.visual_config;
+    if (visualConfig) {
+      console.log('[Pattern] Using visual_config for enhanced rendering');
+      
+      // Draw boundary box around pattern
+      if (visualConfig.boundary_box) {
+        console.log('[Pattern] Drawing boundary box');
+        enhancedChartControl.drawPatternBoundaryBox(visualConfig.boundary_box);
+      }
+      
+      // Note: Candle highlighting omitted as it requires chart data access
+      // and Lightweight Charts has limited support for candle color overlays.
+      // The boundary box and markers provide sufficient visual indication.
+      
+      // Draw pattern markers (arrows, circles, etc.)
+      if (visualConfig.markers && visualConfig.markers.length > 0) {
+        console.log('[Pattern] Drawing', visualConfig.markers.length, 'markers');
+        visualConfig.markers.forEach((marker: any) => {
+          enhancedChartControl.drawPatternMarker(marker);
+        });
+      }
+    }
+
+    // Draw trendlines and levels from chart_metadata (existing Phase 1 behavior)
+    if (pattern.chart_metadata) {
+      const { trendlines, levels } = pattern.chart_metadata;
+      
+      trendlines?.forEach((trendline: any, idx: number) => {
+        const color = trendline.type === 'upper_trendline' ? '#ef4444' : '#3b82f6';
+        console.log('[Pattern] Drawing trendline', idx, trendline);
+        enhancedChartControl.drawTrendline(
+          trendline.start.time,
+          trendline.start.price,
+          trendline.end.time,
+          trendline.end.price,
+          color
+        );
+      });
+
+      levels?.forEach((level: any, idx: number) => {
+        const color = level.type === 'support' ? '#10b981' : '#ef4444';
+        const label = level.type === 'support' ? 'Support' : 'Resistance';
+        console.log('[Pattern] Drawing level', idx, level);
+        
+        // Fix for single-day patterns: ensure endTime > startTime
+        const startTime = pattern.start_time || patternTimestamp || Date.now() / 1000;
+        let endTime = pattern.end_time || startTime;
+        if (endTime <= startTime) {
+          endTime = startTime + 86400; // Add 1 day for single-day patterns
+        }
+        
+        console.log(`[Pattern] Time range for level: ${new Date(startTime * 1000).toISOString()} → ${new Date(endTime * 1000).toISOString()}`);
+        enhancedChartControl.drawHorizontalLine(level.price, startTime, endTime, color, label);
+      });
+    }
+
+    const chartControl = enhancedChartControl as any;
+    try {
+      if (typeof chartControl.update === 'function') {
+        chartControl.update();
+      } else if (typeof chartControl.render === 'function') {
+        chartControl.render();
+      } else if (typeof chartControl.invalidate === 'function') {
+        chartControl.invalidate();
+      } else if (chartControl.timeScale && typeof chartControl.timeScale().fitContent === 'function') {
+        chartControl.timeScale().fitContent();
+      }
+    } catch (error) {
+      console.error('[Pattern] Error triggering chart refresh:', error);
+    }
   }, []);
 
-  const togglePatternVisibility = useCallback((pattern: any) => {
-    const patternId = pattern.pattern_id || pattern.id || pattern.pattern_type;
-    
-    setVisiblePatterns(prev => {
-      const next = new Set(prev);
-      if (next.has(patternId)) {
-        // Hide pattern - clear all drawings and redraw remaining visible patterns
-        next.delete(patternId);
-        enhancedChartControl.clearDrawings();
-        
-        // Redraw other visible patterns
-        backendPatterns.forEach(p => {
-          const pid = p.pattern_id || p.id || p.pattern_type;
-          if (next.has(pid) && pid !== patternId) {
-            drawPatternOverlay(p);
-          }
-        });
-      } else {
-        // Show pattern - draw overlay
-        next.add(patternId);
-        drawPatternOverlay(pattern);
-      }
-      return next;
-    });
-  }, [backendPatterns, drawPatternOverlay]);
-  
   // Cleanup on provider switch
   useEffect(() => {
     const previousProvider = previousProviderRef.current;
@@ -829,7 +940,8 @@ export const TradingDashboardSimple: React.FC = () => {
         if (chatKitControl?.sendMessage) {
           console.log('📤 Sending text to ChatKit Agent Builder:', text);
           try {
-            await chatKitControl.sendMessage(text);
+            // Don't use await here as we're not in an async context
+            chatKitControl.sendMessage(text);
             console.log('✅ Message sent to ChatKit Agent Builder');
           } catch (error) {
             console.error('❌ ChatKit send error:', error);
@@ -1237,25 +1349,24 @@ export const TradingDashboardSimple: React.FC = () => {
       console.log(`[Pattern API] Fetched ${patterns.length} patterns from backend for ${symbol}`);
       
       if (patterns.length > 0) {
-        // Sort by confidence descending
-        const sortedPatterns = [...patterns].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0));
-        
-        // Store ALL backend patterns (not just top 3) for visualization
-        setBackendPatterns(sortedPatterns);
-        console.log(`[Pattern API] Set ${sortedPatterns.length} backend patterns with chart_metadata`);
-        
-        // Also keep top 3 in detectedPatterns for backward compatibility
-        setDetectedPatterns(sortedPatterns.slice(0, 3));
+        const now = Date.now();
+        const filterDays = 365;
+        const filterDate = now - filterDays * 24 * 60 * 60 * 1000;
 
-        const primary = sortedPatterns[0];
-        enhancedChartControl.clearDrawings();
-        enhancedChartControl.revealPattern(primary?.type || 'Pattern', {
-          title: primary?.description || primary?.type,
-          description: primary?.agent_explanation || primary?.summary,
-          indicator: primary?.related_indicator,
+        const recentPatterns = patterns.filter((p: any) => {
+          if (!p.start_time) return true;
+          const patternTime = p.start_time * 1000;
+          return patternTime >= filterDate;
         });
+
+        console.log('[Pattern API] Retained', recentPatterns.length, 'patterns out of', patterns.length, 'within', filterDays, 'days');
+
+        const sortedPatterns = [...recentPatterns].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0));
+        setBackendPatterns(sortedPatterns);
+        setDetectedPatterns(sortedPatterns.slice(0, 3));
+        
+        // Patterns will be drawn by the pattern rendering useEffect based on visibility state
       } else {
-        console.log('[Pattern API] No patterns returned from backend');
         setBackendPatterns([]);
         setDetectedPatterns([]);
         enhancedChartControl.clearDrawings();
@@ -1413,17 +1524,9 @@ export const TradingDashboardSimple: React.FC = () => {
   
   // Process backend chart commands when snapshot is updated
   useEffect(() => {
-    const commands = currentSnapshot?.chart_commands;
-    if (commands && commands.length > 0) {
-      console.log('Executing backend chart commands:', commands);
-      enhancedChartControl.processEnhancedResponse(
-        commands.join(' ')
-      ).catch(err => {
-        console.error('Failed to execute backend chart commands:', err);
-      });
-    }
+    applyChartSnapshot(currentSnapshot);
   }, [currentSnapshot]);
-  
+
   // Auto-start voice recording when connected - DISABLED to prevent text/audio conflicts
   // Users should manually start voice recording when needed
   useEffect(() => {
@@ -1444,6 +1547,36 @@ export const TradingDashboardSimple: React.FC = () => {
   // The ConnectionManager is a singleton that persists across component re-renders
   // and handles its own lifecycle. Cleaning up here causes issues with React StrictMode
   // which double-invokes effects in development.
+
+  // Phase 1: Smart pattern drawing based on visibility state
+  useEffect(() => {
+    console.log('[Pattern Rendering] Re-rendering patterns based on visibility state');
+    
+    // Clear all existing pattern overlays
+    enhancedChartControl.clearDrawings();
+    
+    if (backendPatterns.length === 0) {
+      return;
+    }
+
+    // Draw only patterns that should be visible
+    backendPatterns.forEach(pattern => {
+      if (shouldDrawPattern(pattern)) {
+        const patternId = getPatternId(pattern);
+        const isHovered = hoveredPatternId === patternId;
+        
+        console.log(`[Pattern Rendering] Drawing pattern ${patternId} (hovered: ${isHovered})`);
+        drawPatternOverlay(pattern);
+      }
+    });
+  }, [backendPatterns, hoveredPatternId, patternVisibility, showAllPatterns, shouldDrawPattern, drawPatternOverlay, getPatternId]);
+
+  useEffect(() => {
+    if (pendingPatternFocusRef.current !== null) {
+      enhancedChartControl.focusOnTime?.(pendingPatternFocusRef.current, 60 * 60 * 24 * 5);
+      pendingPatternFocusRef.current = null;
+    }
+  }, [backendPatterns, enhancedChartControl]);
 
   return (
     <div ref={containerRef} className="trading-dashboard-simple" data-testid="trading-dashboard">
@@ -1547,7 +1680,7 @@ export const TradingDashboardSimple: React.FC = () => {
                         onClick={() => handleNewsToggle(index)}
                       >
                         <div className="analysis-header">
-                          <h3>{selectedSymbol}</h3>
+                          <h3>{news.tickers?.[0] || selectedSymbol}</h3>
                           <span className="time">{news.published || news.time || `${index * 3 + 2} min ago`}</span>
                         </div>
                         <p className="news-title">{news.title}</p>
@@ -1614,20 +1747,122 @@ export const TradingDashboardSimple: React.FC = () => {
                   {backendPatterns.length === 0 && detectedPatterns.length === 0 ? (
                     <div className="pattern-empty">No patterns detected. Try different timeframes or symbols.</div>
                   ) : (
-                    <div className="pattern-list">
-                      {backendPatterns.map((pattern, index) => {
-                        const patternId = pattern.pattern_id || pattern.id || pattern.pattern_type || `pattern-${index}`;
-                        const isVisible = visiblePatterns.has(patternId);
-                        const isHovered = hoveredPattern === patternId;
+                    <>
+                      {/* Phase 1: Master "Show All" Toggle */}
+                      <div style={{ 
+                        marginBottom: '12px', 
+                        display: 'flex', 
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '8px',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        borderRadius: '4px',
+                        border: '1px solid rgba(59, 130, 246, 0.3)'
+                      }}>
+                        <label style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '6px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          flex: 1
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={showAllPatterns}
+                            onChange={handleShowAllToggle}
+                            style={{ cursor: 'pointer' }}
+                          />
+                          <span>Show All Patterns</span>
+                        </label>
+                        <span style={{ fontSize: '11px', color: '#666' }}>
+                          {backendPatterns.length} detected
+                        </span>
+                      </div>
+                      
+                      {/* Test button for pattern overlay debugging */}
+                      <button
+                        onClick={() => {
+                          console.log('🧪 [TEST] Drawing test pattern overlay...');
+                          try {
+                            // Draw obvious bright magenta line for testing
+                            const currentStock = stocksData.find(s => s.symbol === selectedSymbol);
+                            const testPrice = currentStock?.price || 250;
+                            
+                            // Use current time and extend 7 days for test line
+                            const nowSeconds = Math.floor(Date.now() / 1000);
+                            const sevenDaysSeconds = 7 * 24 * 60 * 60;
+                            
+                            enhancedChartControl.drawHorizontalLine(
+                              testPrice, 
+                              nowSeconds - sevenDaysSeconds,  // 7 days ago
+                              nowSeconds,                      // now
+                              '#FF00FF', 
+                              'TEST LINE'
+                            );
+                            console.log(`🧪 [TEST] Drew bright magenta line at price ${testPrice} for 7-day range`);
+                            
+                            // Try to call update/refresh methods
+                            const chartControl = enhancedChartControl as any;
+                            if (typeof chartControl.update === 'function') {
+                              chartControl.update();
+                              console.log('🧪 [TEST] Called chart.update()');
+                            } else if (chartControl.timeScale && typeof chartControl.timeScale().fitContent === 'function') {
+                              chartControl.timeScale().fitContent();
+                              console.log('🧪 [TEST] Called chart.timeScale().fitContent()');
+                            }
+                            
+                            setToastCommand?.({ 
+                              command: '🧪 Test line drawn - Check chart for bright magenta line!', 
+                              type: 'info' 
+                            });
+                            setTimeout(() => setToastCommand?.(null), 5000);
+                          } catch (error) {
+                            console.error('🧪 [TEST] Error drawing test line:', error);
+                            setToastCommand?.({ 
+                              command: `❌ Test failed: ${(error as Error).message}`, 
+                              type: 'error' 
+                            });
+                            setTimeout(() => setToastCommand?.(null), 5000);
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px',
+                          marginBottom: '12px',
+                          background: '#FF00FF',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '12px'
+                        }}
+                      >
+                        🧪 TEST PATTERN OVERLAY (Draw Magenta Line)
+                      </button>
+                      
+                      <div className="pattern-list">
+                        {backendPatterns.map((pattern, index) => {
+                        const patternId = getPatternId(pattern);
+                        const isVisible = patternVisibility[patternId] || false;
+                        const isHovered = hoveredPatternId === patternId;
                         const signal = pattern.signal || 'neutral';
                         
                         return (
                           <div
                             key={patternId}
-                            className={`pattern-item ${isHovered ? 'hovered' : ''}`}
-                            onMouseEnter={() => setHoveredPattern(patternId)}
-                            onMouseLeave={() => setHoveredPattern(null)}
-                            onClick={() => togglePatternVisibility(pattern)}
+                            className={`pattern-item ${isHovered ? 'hovered' : ''} ${isVisible ? 'selected' : ''}`}
+                            onMouseEnter={() => handlePatternCardHover(pattern)}
+                            onMouseLeave={handlePatternCardLeave}
+                            onClick={() => handlePatternToggle(pattern)}
+                            style={{
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              border: isHovered ? '1px solid rgba(59, 130, 246, 0.5)' : undefined,
+                              background: isHovered ? 'rgba(59, 130, 246, 0.05)' : undefined
+                            }}
                           >
                             <div className="pattern-header">
                               <span className="pattern-name">{pattern.pattern_type || pattern.type}</span>
@@ -1638,7 +1873,7 @@ export const TradingDashboardSimple: React.FC = () => {
                                 <input
                                   type="checkbox"
                                   checked={isVisible}
-                                  onChange={() => togglePatternVisibility(pattern)}
+                                  onChange={() => handlePatternToggle(pattern)}
                                 />
                               </label>
                             </div>
@@ -1657,6 +1892,17 @@ export const TradingDashboardSimple: React.FC = () => {
                                 </Tooltip>
                               )}
                             </div>
+                            {/* Phase 1: Hover hint */}
+                            {!isVisible && !isHovered && (
+                              <div style={{
+                                fontSize: '10px',
+                                color: '#999',
+                                marginTop: '4px',
+                                fontStyle: 'italic'
+                              }}>
+                                Hover to preview · Click to pin
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1676,7 +1922,8 @@ export const TradingDashboardSimple: React.FC = () => {
                           </div>
                         );
                       })}
-                    </div>
+                      </div>
+                    </>
                   )}
                 </div>
               </>

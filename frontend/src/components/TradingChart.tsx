@@ -207,6 +207,54 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
     }
   }, [days])
   
+  // Apply timeframe-based zoom after loading data
+  const applyTimeframeZoom = useCallback((chartData: any[]) => {
+    if (!chartRef.current || !chartData || chartData.length === 0) {
+      return
+    }
+
+    const chart = chartRef.current
+    const now = Math.floor(Date.now() / 1000)
+
+    // Map days to actual timeframe filter (in seconds)
+    // If days < 200, it's a short-term view that needs filtering
+    const timeframeInSeconds = (() => {
+      if (days <= 1) return 86400 // 1D
+      if (days <= 5) return 5 * 86400 // 5D
+      if (days <= 30) return 30 * 86400 // 1M
+      if (days <= 180) return 180 * 86400 // 6M
+      if (days <= 365) return 365 * 86400 // 1Y
+      if (days <= 730) return 730 * 86400 // 2Y
+      if (days <= 1095) return 1095 * 86400 // 3Y
+      return null // MAX/YTD - show all data
+    })()
+
+    if (timeframeInSeconds) {
+      // Filter to specific timeframe
+      const fromTime = now - timeframeInSeconds
+      const firstValidIndex = chartData.findIndex(d => d.time >= fromTime)
+      
+      if (firstValidIndex >= 0) {
+        try {
+          chart.timeScale().setVisibleLogicalRange({
+            from: firstValidIndex,
+            to: chartData.length - 1
+          })
+          console.log(`✅ Applied ${days}-day timeframe filter: showing ${chartData.length - firstValidIndex} of ${chartData.length} candles`)
+        } catch (error) {
+          console.warn('Failed to set visible range, falling back to fitContent:', error)
+          chart.timeScale().fitContent()
+        }
+      } else {
+        // If no data in range, show all
+        chart.timeScale().fitContent()
+      }
+    } else {
+      // For MAX/YTD or large ranges, show all data
+      chart.timeScale().fitContent()
+    }
+  }, [days])
+
   // Update only the chart data without recreating the chart
   const updateChartData = useCallback(async (symbolToUpdate: string) => {
     if (isChartDisposedRef.current || !candlestickSeriesRef.current) {
@@ -220,13 +268,14 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
         candlestickSeriesRef.current.setData(chartData)
         
         if (chartRef.current) {
-          chartRef.current.timeScale().fitContent()
+          // Apply smart timeframe-based zoom instead of fitContent()
+          applyTimeframeZoom(chartData)
         }
       } catch (error) {
         console.debug('Error updating chart data:', error)
       }
     }
-  }, [fetchChartData])
+  }, [fetchChartData, applyTimeframeZoom])
   
   // Update technical level lines without recreating the chart
   const updateTechnicalLevels = useCallback(() => {
@@ -561,6 +610,17 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
       updateChartData(symbol)
     }
   }, [symbol, updateChartData])
+
+  // Re-apply zoom when days/timeframe changes (without fetching new data)
+  useEffect(() => {
+    if (chartRef.current && candlestickSeriesRef.current && !isChartDisposedRef.current) {
+      const currentData = (candlestickSeriesRef.current as any).data?.()
+      if (currentData && currentData.length > 0) {
+        console.log(`⏱️  Timeframe changed to ${days} days, re-applying zoom...`)
+        applyTimeframeZoom(currentData)
+      }
+    }
+  }, [days, applyTimeframeZoom])
   
   // Update technical levels when they change (without recreating chart)
   useEffect(() => {

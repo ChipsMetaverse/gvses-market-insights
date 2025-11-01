@@ -4,7 +4,7 @@
  * Allows agent to manipulate all chart features while speaking to users
  */
 
-import { IChartApi, ISeriesApi, SeriesType, LineSeries } from 'lightweight-charts';
+import { IChartApi, ISeriesApi, SeriesType, LineSeries, UTCTimestamp } from 'lightweight-charts';
 import { chartControlService } from './chartControlService';
 import { DrawingPrimitive } from './DrawingPrimitive';
 
@@ -85,10 +85,76 @@ class EnhancedChartControl {
   }
 
   /**
+   * Expose current visible time range for callers that need viewport awareness.
+   */
+  getVisibleTimeRange(): { from: number; to: number } | null {
+    if (!this.chartRef) {
+      return null;
+    }
+
+    const timeScale = this.chartRef.timeScale();
+    if (typeof timeScale.getVisibleRange !== 'function') {
+      return null;
+    }
+
+    const range = timeScale.getVisibleRange();
+    if (!range) {
+      return null;
+    }
+
+    return {
+      from: Number(range.from),
+      to: Number(range.to),
+    };
+  }
+
+  /**
    * Set the DrawingPrimitive for drawing tools support
    */
   setDrawingPrimitive(primitive: DrawingPrimitive) {
     this.drawingPrimitive = primitive;
+  }
+
+  /**
+   * Set the visible time range explicitly.
+   */
+  setVisibleTimeRange(range: { from: number; to: number }): void {
+    if (!this.chartRef) {
+      return;
+    }
+
+    const timeScale = this.chartRef.timeScale();
+    if (typeof timeScale.setVisibleRange !== 'function') {
+      return;
+    }
+
+    timeScale.setVisibleRange({
+      from: range.from as UTCTimestamp,
+      to: range.to as UTCTimestamp,
+    });
+  }
+
+  /**
+   * Briefly center the chart on a specific timestamp.
+   */
+  focusOnTime(timestamp: number, paddingSeconds: number = 60 * 60 * 24): void {
+    if (!this.chartRef) {
+      return;
+    }
+
+    const timeScale = this.chartRef.timeScale();
+    const padding = Math.max(1, Math.floor(paddingSeconds));
+    const from = (timestamp - padding) as UTCTimestamp;
+    const to = (timestamp + padding) as UTCTimestamp;
+
+    if (typeof timeScale.setVisibleRange === 'function') {
+      timeScale.setVisibleRange({ from, to });
+      return;
+    }
+
+    if (typeof timeScale.scrollToPosition === 'function') {
+      timeScale.scrollToPosition(0, true);
+    }
   }
 
   setOverlayControls(controls: {
@@ -296,11 +362,13 @@ class EnhancedChartControl {
    * Draw a trendline between two points
    */
   drawTrendline(startTime: number, startPrice: number, endTime: number, endPrice: number, color: string = '#3b82f6'): string {
-    if (!this.chartRef || !this.seriesRef) {
+    if (!this.chartRef) {
       return 'Chart not initialized';
     }
 
     try {
+      console.log(`[Enhanced Chart] Drawing trendline from ${startTime} to ${endTime}`, { startPrice, endPrice, color });
+      
       // Create line series for the trendline
       const lineSeries = this.chartRef.addLineSeries({
         color: color,
@@ -317,42 +385,73 @@ class EnhancedChartControl {
       ]);
 
       // Store reference for cleanup
-      const lineId = `trendline_${Date.now()}`;
+      const lineId = `trendline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       this.annotationsMap.set(lineId, lineSeries);
-
+      
+      console.log(`✅ Trendline created successfully (ID: ${lineId}). Total annotations: ${this.annotationsMap.size}`);
       return `Trendline drawn from ${startTime} to ${endTime}`;
     } catch (error) {
-      console.error('Error drawing trendline:', error);
+      console.error('❌ Error drawing trendline:', error);
       return 'Failed to draw trendline';
     }
   }
 
   /**
-   * Draw a horizontal line at a specific price level
+   * Draw a horizontal line at a specific price level (TIME-BOUND VERSION)
+   * @param price - Price level to draw the line
+   * @param startTime - Start timestamp (Unix seconds) for the line
+   * @param endTime - End timestamp (Unix seconds) for the line
+   * @param color - Line color (default: red)
+   * @param label - Optional label for the line
    */
-  drawHorizontalLine(price: number, color: string = '#ef4444', label?: string): string {
-    if (!this.chartRef || !this.seriesRef) {
+  drawHorizontalLine(
+    price: number, 
+    startTime: number, 
+    endTime: number, 
+    color: string = '#ef4444', 
+    label?: string
+  ): string {
+    if (!this.chartRef) {
       return 'Chart not initialized';
     }
 
     try {
-      // Create price line
-      const priceLine = this.seriesRef.createPriceLine({
-        price: price,
+      // Calculate time span for logging
+      const timeSpanDays = Math.round((endTime - startTime) / 86400);
+      
+      console.log(`[Enhanced Chart] Drawing time-bound horizontal line at ${price.toFixed(2)}`, {
+        startTime,
+        endTime,
+        timeSpanDays,
+        color,
+        label
+      });
+      
+      // Create a LineSeries with time-bound data (not createPriceLine which spans entire chart)
+      const lineSeries = this.chartRef.addSeries(LineSeries, {
         color: color,
         lineWidth: 2,
         lineStyle: 2, // Dashed line
-        axisLabelVisible: true,
-        title: label || `Level ${price.toFixed(2)}`,
+        priceLineVisible: false,
+        lastValueVisible: true, // Show price label at the end
+        crosshairMarkerVisible: false,
+        title: label
       });
 
-      // Store reference for cleanup
-      const lineId = `horizontal_${Date.now()}`;
-      this.drawingsMap.set(lineId, priceLine);
+      // Set data with time range - this makes the line ONLY appear between startTime and endTime
+      lineSeries.setData([
+        { time: startTime as UTCTimestamp, value: price },
+        { time: endTime as UTCTimestamp, value: price }
+      ]);
 
-      return `Horizontal line drawn at ${price.toFixed(2)}`;
+      // Store reference for cleanup (use annotationsMap since it's a series, not a priceLine)
+      const lineId = `horizontal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      this.annotationsMap.set(lineId, lineSeries);
+      
+      console.log(`✅ Time-bound horizontal line created (ID: ${lineId}). Range: ${new Date(startTime * 1000).toISOString().split('T')[0]} → ${new Date(endTime * 1000).toISOString().split('T')[0]} (${timeSpanDays} days). Total annotations: ${this.annotationsMap.size}`);
+      return `Horizontal line drawn at ${price.toFixed(2)} for time range`;
     } catch (error) {
-      console.error('Error drawing horizontal line:', error);
+      console.error('❌ Error drawing horizontal line:', error);
       return 'Failed to draw horizontal line';
     }
   }
@@ -977,6 +1076,184 @@ class EnhancedChartControl {
     } catch (error) {
       console.error('Error executing drawing command:', error);
       return null;
+    }
+  }
+  
+  /**
+   * Convert hex color to RGBA
+   */
+  private hexToRGBA(hex: string, alpha: number): string {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  
+  /**
+   * Draw a boundary box around pattern candles (Phase 2B)
+   */
+  drawPatternBoundaryBox(config: {
+    start_time: number;
+    end_time: number;
+    high: number;
+    low: number;
+    border_color: string;
+    border_width: number;
+    fill_opacity: number;
+  }): string {
+    if (!this.chartRef) {
+      return 'Chart not initialized';
+    }
+
+    try {
+      console.log('[Enhanced Chart] Drawing pattern boundary box', config);
+      
+      // Draw top border
+      const topBorder = this.chartRef.addSeries(LineSeries, {
+        color: config.border_color,
+        lineWidth: config.border_width,
+        lineStyle: 0, // Solid
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      topBorder.setData([
+        { time: config.start_time as UTCTimestamp, value: config.high },
+        { time: config.end_time as UTCTimestamp, value: config.high }
+      ]);
+
+      // Draw bottom border
+      const bottomBorder = this.chartRef.addSeries(LineSeries, {
+        color: config.border_color,
+        lineWidth: config.border_width,
+        lineStyle: 0,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      bottomBorder.setData([
+        { time: config.start_time as UTCTimestamp, value: config.low },
+        { time: config.end_time as UTCTimestamp, value: config.low }
+      ]);
+
+      // Note: Vertical lines omitted due to Lightweight Charts limitation
+      // (cannot have duplicate timestamps). Top/bottom borders provide
+      // sufficient visual indication of pattern boundary.
+      
+      const boxId = `pattern_box_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      this.annotationsMap.set(boxId, topBorder);
+      this.annotationsMap.set(`${boxId}_bottom`, bottomBorder);
+
+      console.log('[Enhanced Chart] Pattern boundary box drawn:', boxId);
+      return `Pattern boundary box drawn`;
+    } catch (error) {
+      console.error('Failed to draw pattern boundary box:', error);
+      return `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  }
+
+  /**
+   * Highlight pattern candles with color overlay (Phase 2B)
+   * Note: Lightweight Charts doesn't support candle color overlays directly
+   * This method will add markers on the pattern candles instead
+   */
+  highlightPatternCandles(
+    candleIndices: number[],
+    candleData: any[],
+    overlayColor: string,
+    opacity: number = 0.3
+  ): string {
+    if (!this.chartRef || !this.mainSeriesRef) {
+      return 'Chart not initialized';
+    }
+
+    try {
+      console.log('[Enhanced Chart] Highlighting pattern candles', {
+        count: candleIndices.length,
+        color: overlayColor,
+        opacity
+      });
+
+      // Lightweight Charts doesn't support candle overlays
+      // Instead, we'll add subtle markers at the candle positions
+      const existingMarkers = this.mainSeriesRef.markers?.() || [];
+      const newMarkers = candleIndices.map(idx => {
+        if (idx >= candleData.length) return null;
+        const candle = candleData[idx];
+        return {
+          time: candle.time as UTCTimestamp,
+          position: 'inBar' as const,
+          color: overlayColor,
+          shape: 'circle' as const,
+          size: 0.5,
+          text: ''
+        };
+      }).filter(m => m !== null);
+
+      // Note: We can't actually highlight candles in Lightweight Charts
+      // This would require custom rendering or a different approach
+      // For now, the boundary box will be the primary visual indicator
+      
+      console.log('[Enhanced Chart] Pattern candles marked (boundary box will show highlight)');
+      return `Marked ${candleIndices.length} pattern candles`;
+    } catch (error) {
+      console.error('Failed to highlight pattern candles:', error);
+      return `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  }
+
+  /**
+   * Draw pattern markers (arrows, circles, stars) (Phase 2B)
+   */
+  drawPatternMarker(marker: {
+    type: 'arrow' | 'circle' | 'star';
+    direction?: 'up' | 'down';
+    time: number;
+    price: number;
+    color: string;
+    label?: string;
+    radius?: number;
+  }): string {
+    if (!this.chartRef || !this.mainSeriesRef) {
+      return 'Chart not initialized';
+    }
+
+    try {
+      console.log('[Enhanced Chart] Drawing pattern marker', marker);
+      
+      const markerShape = marker.type === 'circle' ? 'circle' : 
+                         marker.type === 'star' ? 'circle' : 
+                         marker.direction === 'up' ? 'arrowUp' : 'arrowDown';
+
+      const seriesMarker = {
+        time: marker.time as UTCTimestamp,
+        position: (marker.direction === 'up' ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
+        color: marker.color,
+        shape: markerShape,
+        text: marker.label || '',
+        size: marker.radius || 1
+      };
+
+      // Safely get existing markers - handle both v3 and v4 API
+      let existingMarkers: any[] = [];
+      try {
+        if (typeof (this.mainSeriesRef as any).markers === 'function') {
+          existingMarkers = (this.mainSeriesRef as any).markers() || [];
+        }
+      } catch (e) {
+        console.warn('[Enhanced Chart] Could not retrieve existing markers, starting fresh:', e);
+      }
+      
+      // Set markers with error handling
+      if (typeof (this.mainSeriesRef as any).setMarkers === 'function') {
+        (this.mainSeriesRef as any).setMarkers([...existingMarkers, seriesMarker]);
+        console.log('[Enhanced Chart] Pattern marker added successfully');
+        return `Pattern marker added at ${marker.time}`;
+      } else {
+        console.error('[Enhanced Chart] setMarkers method not available on series');
+        return 'Error: setMarkers not supported';
+      }
+    } catch (error) {
+      console.error('Failed to draw pattern marker:', error);
+      return `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
   }
   

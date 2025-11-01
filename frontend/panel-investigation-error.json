@@ -1,0 +1,669 @@
+{
+  "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"5D\")')\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"time-range-button \">5D</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div class=\"onboarding-overlay\"></div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div class=\"onboarding-overlay\"></div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    58 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <div class=\"onboarding-overlay\"></div> intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n",
+  "stack": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"5D\")')\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"time-range-button \">5D</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div class=\"onboarding-overlay\"></div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div class=\"onboarding-overlay\"></div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    58 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <div class=\"onboarding-overlay\"></div> intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\n    at investigateAllPanels (/Volumes/WD My Passport 264F Media/claude-voice-mcp/frontend/test_all_panels_comprehensive.cjs:195:29)",
+  "logs": {
+    "console": [
+      {
+        "time": "2025-10-29T00:48:48.226Z",
+        "text": "[vite] connecting..."
+      },
+      {
+        "time": "2025-10-29T00:48:48.260Z",
+        "text": "[vite] connected."
+      },
+      {
+        "time": "2025-10-29T00:48:48.299Z",
+        "text": "%cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold"
+      },
+      {
+        "time": "2025-10-29T00:48:48.300Z",
+        "text": "[AGENT ORCHESTRATOR] SDK rollout percentage: 100%"
+      },
+      {
+        "time": "2025-10-29T00:48:48.325Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:48.326Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:48.326Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:48:48.327Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:48:48.422Z",
+        "text": "Enhanced chart control initialized"
+      },
+      {
+        "time": "2025-10-29T00:48:48.422Z",
+        "text": "Chart ready for enhanced agent control"
+      },
+      {
+        "time": "2025-10-29T00:48:48.422Z",
+        "text": "🌐 OpenAIRealtimeService initialized"
+      },
+      {
+        "time": "2025-10-29T00:48:48.422Z",
+        "text": "🔍 Config.relayServerUrl: undefined"
+      },
+      {
+        "time": "2025-10-29T00:48:48.422Z",
+        "text": "✅ RealtimeChatKit initialized with Agent Builder integration"
+      },
+      {
+        "time": "2025-10-29T00:48:48.425Z",
+        "text": "💾 Saved 0 messages to localStorage"
+      },
+      {
+        "time": "2025-10-29T00:48:48.426Z",
+        "text": "🌐 OpenAIRealtimeService initialized"
+      },
+      {
+        "time": "2025-10-29T00:48:48.426Z",
+        "text": "🔍 Config.relayServerUrl: undefined"
+      },
+      {
+        "time": "2025-10-29T00:48:48.426Z",
+        "text": "%c🔔 [STATE CHANGE] isConnected changed to: background: #ff6b6b; color: white; font-size: 14px; font-weight: bold; false"
+      },
+      {
+        "time": "2025-10-29T00:48:48.426Z",
+        "text": "🌐 OpenAIRealtimeService initialized"
+      },
+      {
+        "time": "2025-10-29T00:48:48.426Z",
+        "text": "🔍 Config.relayServerUrl: undefined"
+      },
+      {
+        "time": "2025-10-29T00:48:48.426Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:48:48.428Z",
+        "text": "IndicatorContext not available - agent indicator control disabled"
+      },
+      {
+        "time": "2025-10-29T00:48:48.450Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:48.450Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:48.450Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:48:48.450Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:48:48.463Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:48:48.946Z",
+        "text": "[TradingChart] Attaching DrawingPrimitive after data load"
+      },
+      {
+        "time": "2025-10-29T00:48:48.946Z",
+        "text": "[DrawingPrimitive] Attached to series {hasChart: true, hasSeries: true, hasRequestUpdate: true}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.972Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.972Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.972Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.975Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.976Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.976Z",
+        "text": "[DrawingPaneView] renderer called, creating DrawingRenderer with 0 drawings"
+      },
+      {
+        "time": "2025-10-29T00:48:48.976Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.977Z",
+        "text": "[DrawingPaneView] renderer called, creating DrawingRenderer with 0 drawings"
+      },
+      {
+        "time": "2025-10-29T00:48:48.977Z",
+        "text": "[DrawingRenderer] draw called with 0 drawings"
+      },
+      {
+        "time": "2025-10-29T00:48:48.977Z",
+        "text": "[DrawingRenderer] Processing drawings in canvas context"
+      },
+      {
+        "time": "2025-10-29T00:48:48.984Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.984Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.985Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.985Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.986Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.986Z",
+        "text": "[DrawingPaneView] renderer called, creating DrawingRenderer with 0 drawings"
+      },
+      {
+        "time": "2025-10-29T00:48:48.987Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.987Z",
+        "text": "[DrawingPaneView] renderer called, creating DrawingRenderer with 0 drawings"
+      },
+      {
+        "time": "2025-10-29T00:48:48.988Z",
+        "text": "[DrawingRenderer] draw called with 0 drawings"
+      },
+      {
+        "time": "2025-10-29T00:48:48.988Z",
+        "text": "[DrawingRenderer] Processing drawings in canvas context"
+      },
+      {
+        "time": "2025-10-29T00:48:48.992Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.993Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.993Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.993Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.993Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.993Z",
+        "text": "[DrawingPaneView] renderer called, creating DrawingRenderer with 0 drawings"
+      },
+      {
+        "time": "2025-10-29T00:48:48.993Z",
+        "text": "[DrawingPrimitive] paneViews called {hasChart: true, hasSeries: true, drawingCount: 0}"
+      },
+      {
+        "time": "2025-10-29T00:48:48.993Z",
+        "text": "[DrawingPaneView] renderer called, creating DrawingRenderer with 0 drawings"
+      },
+      {
+        "time": "2025-10-29T00:48:48.994Z",
+        "text": "[DrawingRenderer] draw called with 0 drawings"
+      },
+      {
+        "time": "2025-10-29T00:48:48.995Z",
+        "text": "[DrawingRenderer] Processing drawings in canvas context"
+      },
+      {
+        "time": "2025-10-29T00:48:49.854Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:49.855Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:49.855Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:48:49.855Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:48:49.855Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:48:49.862Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:49.862Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:49.867Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:48:49.867Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:48:49.867Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:48:50.029Z",
+        "text": "[DataPersistence] Created conversation: 62a6f22b-2b41-4744-ab1a-df856c28490e"
+      },
+      {
+        "time": "2025-10-29T00:48:50.031Z",
+        "text": "Chart snapshot captured for TSLA"
+      },
+      {
+        "time": "2025-10-29T00:48:50.036Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:50.037Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:50.037Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:48:50.037Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:48:50.042Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:48:50.043Z",
+        "text": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+      },
+      {
+        "time": "2025-10-29T00:48:50.043Z",
+        "text": "Auto-fetch failed: AxiosError"
+      },
+      {
+        "time": "2025-10-29T00:48:50.304Z",
+        "text": "[Pattern API] Fetched 0 patterns from backend for TSLA"
+      },
+      {
+        "time": "2025-10-29T00:48:50.304Z",
+        "text": "[Pattern API] No patterns returned from backend"
+      },
+      {
+        "time": "2025-10-29T00:48:50.304Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:50.304Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:48:50.304Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:48:50.305Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:48:50.305Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:48:50.654Z",
+        "text": "✅ ChatKit session established with Agent Builder"
+      },
+      {
+        "time": "2025-10-29T00:49:18.430Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:49:18.430Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:49:18.430Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:49:18.430Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:49:18.431Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:49:18.431Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:49:18.431Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:49:18.431Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:49:18.432Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:49:18.926Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:49:18.926Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:49:18.926Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:49:18.926Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:49:18.926Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:49:48.432Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:49:48.433Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:49:48.438Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:49:48.438Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:49:48.444Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:49:48.918Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:49:48.918Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:49:48.918Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:49:48.919Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:49:48.919Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:50:18.430Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:50:18.430Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:50:18.430Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:50:18.431Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:50:18.431Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:50:18.914Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:50:18.914Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:50:18.914Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:50:18.915Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:50:18.915Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:50:48.432Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:50:48.432Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:50:48.433Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:50:48.433Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:50:48.433Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:50:48.433Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:50:48.435Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:50:48.435Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:50:48.435Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:50:48.915Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:50:48.915Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:50:48.915Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:50:48.915Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:50:48.917Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:51:18.431Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:18.431Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:18.432Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:51:18.432Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:51:18.432Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:51:18.432Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:18.432Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:18.433Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:51:18.433Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:51:18.896Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:18.896Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:18.896Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:51:18.896Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:51:18.897Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:51:48.432Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:48.432Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:48.432Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:51:48.432Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:51:48.433Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      },
+      {
+        "time": "2025-10-29T00:51:48.433Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:48.433Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:48.433Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:51:48.433Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:51:48.890Z",
+        "text": "%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering... background: #4CAF50; color: white; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:48.890Z",
+        "text": "%c🎯 [HOOK INIT] useOpenAIRealtimeConversation HOOK CALLED background: #222; color: #bada55; font-size: 16px; font-weight: bold;"
+      },
+      {
+        "time": "2025-10-29T00:51:48.890Z",
+        "text": "%c🎯 [HOOK INIT] Initial isConnected state: background: #222; color: #bada55 false"
+      },
+      {
+        "time": "2025-10-29T00:51:48.890Z",
+        "text": "🔄 [RENDER] Component rendered with isConnected: false isRecording: false"
+      },
+      {
+        "time": "2025-10-29T00:51:48.891Z",
+        "text": "Voice provider switched from chatkit to: chatkit"
+      }
+    ],
+    "errors": [],
+    "warnings": [],
+    "network": [
+      {
+        "time": "2025-10-29T00:48:50.042Z",
+        "url": "http://localhost:8000/api/technical-indicators?symbol=AAPL&indicators=moving_averages&days=200",
+        "status": 500,
+        "statusText": "Internal Server Error"
+      }
+    ],
+    "interactions": [
+      {
+        "panel": "leftSidebar",
+        "action": "screenshot",
+        "time": "2025-10-29T00:51:21.876Z"
+      }
+    ]
+  }
+}

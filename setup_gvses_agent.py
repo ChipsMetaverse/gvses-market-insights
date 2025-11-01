@@ -53,9 +53,8 @@ if idealagent_path.exists():
             personality_lines.append(line)
 
     personality_text = '\n'.join(personality_lines)
-    print(f"✅ Extracted {len(personality_text)} character personality section")
-else:
-    print("⚠️  idealagent.md not found, using fallback")
+    print(f"✅ Extracted {len(personality_text)} character What is going on out here why a medical smell language nothing no can you please shut up
+    print("⚠️  idealagent.md not found, using fallback") no
     personality_text = """
 # Personality
 

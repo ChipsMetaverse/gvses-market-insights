@@ -240,7 +240,7 @@ export function RealtimeChatKit({
       <div className="mb-2 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            AI Trading Assistant
+            G'sves Trading Assistant
           </div>
           {conversationId && (
             <div className="text-xs text-gray-500">

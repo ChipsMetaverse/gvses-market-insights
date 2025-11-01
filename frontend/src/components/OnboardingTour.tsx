@@ -40,7 +40,7 @@ const TOUR_STEPS: Step[] = [
   },
   {
     id: 4,
-    title: '🤖 AI Trading Assistant',
+    title: '🤖 G\'sves Trading Assistant',
     description: 'Ask anything! Examples:\n• "What\'s AAPL price?"\n• "Analyze TSLA chart"\n• "Show me tech stocks"\n• "Is there a bull flag forming?"\n\nUse voice or text - your choice!',
     target: '.chatkit-container',
     position: 'left',

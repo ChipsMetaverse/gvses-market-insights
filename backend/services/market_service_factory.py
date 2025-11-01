@@ -302,6 +302,68 @@ class MarketServiceWrapper:
                                 if chart_overlay:
                                     pattern["chart_metadata"] = chart_overlay
 
+                            # Add visual_config for pattern rendering (Phase 2A)
+                            if start_idx is not None and end_idx is not None and start_idx < len(candles):
+                                try:
+                                    # Clamp end_idx to available data to prevent index out of range
+                                    end_idx = min(end_idx, len(candles) - 1)
+                                    
+                                    pattern_type = pattern.get("pattern_type", pattern.get("type", ""))
+                                    signal = pattern.get("signal", "neutral")
+                                    confidence = pattern.get("confidence", 0)
+                                    
+                                    # Calculate boundary box
+                                    candle_indices = list(range(start_idx, end_idx + 1))
+                                    candle_highs = [candles[i].get("high", 0) for i in candle_indices if i < len(candles)]
+                                    candle_lows = [candles[i].get("low", 0) for i in candle_indices if i < len(candles)]
+                                    
+                                    # Better default price handling - avoid None values
+                                    default_price = (
+                                        pattern.get("start_price") or 
+                                        pattern.get("end_price") or 
+                                        candles[start_idx].get("close", 0)
+                                    )
+                                    pattern_high = max(candle_highs) if candle_highs else default_price
+                                    pattern_low = min(candle_lows) if candle_lows else default_price
+                                    
+                                    # Get timestamps
+                                    start_time = pattern.get("start_time", candles[start_idx].get("time"))
+                                    end_time = pattern.get("end_time", candles[end_idx].get("time"))
+                                    
+                                    # Fix for single-day patterns (Doji, Hammer, etc.)
+                                    if end_time <= start_time:
+                                        end_time = start_time + 86400  # Add 1 day
+                                    
+                                    pattern_color = self._get_pattern_color(pattern_type, signal)
+                                    
+                                    pattern["visual_config"] = {
+                                        "candle_indices": candle_indices,
+                                        "candle_overlay_color": pattern_color,
+                                        "boundary_box": {
+                                            "start_time": start_time,
+                                            "end_time": end_time,
+                                            "high": float(pattern_high),
+                                            "low": float(pattern_low),
+                                            "border_color": pattern_color,
+                                            "border_width": 2,
+                                            "fill_opacity": 0.1
+                                        },
+                                        "label": {
+                                            "text": f"{pattern_type.replace('_', ' ').title()} ({confidence}%)",
+                                            "position": "top_right",
+                                            "background_color": pattern_color,
+                                            "text_color": "#FFFFFF",
+                                            "font_size": 12
+                                        },
+                                        "markers": self._generate_pattern_markers(pattern, candles, start_idx, end_idx)
+                                    }
+                                    
+                                    logger.info(f"[{symbol}] Added visual_config to {pattern_type}: {len(candle_indices)} candles, {len(pattern['visual_config']['markers'])} markers")
+                                except Exception as visual_error:
+                                    logger.error(f"[{symbol}] Failed to add visual_config to {pattern.get('pattern_type', 'unknown')}: {visual_error}")
+                                    # Continue without visual_config for this pattern - don't crash entire response
+                                    pass
+
                             augmented_patterns.append(pattern)
                         detected_patterns["detected"] = augmented_patterns
                         logger.info(f"[{symbol}] Returning top {len(augmented_patterns)} patterns with metadata")
@@ -465,6 +527,163 @@ class MarketServiceWrapper:
         chart_data = {k: v for k, v in chart_data.items() if v}
 
         return chart_data or None
+
+    def _get_pattern_color(self, pattern_type: str, signal: str) -> str:
+        """Return color based on pattern bias."""
+        if signal == "bullish":
+            return "#10b981"  # Green
+        elif signal == "bearish":
+            return "#ef4444"  # Red
+        else:
+            return "#3b82f6"  # Blue (neutral)
+
+    def _generate_pattern_markers(
+        self,
+        pattern: Dict[str, Any],
+        candles: List[Dict[str, Any]],
+        start_idx: int,
+        end_idx: int
+    ) -> List[Dict[str, Any]]:
+        """Generate visual markers (arrows, circles) for pattern education."""
+        markers = []
+        pattern_type = pattern.get("pattern_type", pattern.get("type", ""))
+        metadata = pattern.get("metadata", {})
+        
+        # Doji - circle marker at center
+        if "doji" in pattern_type.lower():
+            if start_idx < len(candles):
+                candle = candles[start_idx]
+                markers.append({
+                    "type": "circle",
+                    "time": candle.get("time"),
+                    "price": candle.get("close"),
+                    "color": "#3b82f6",
+                    "radius": 8,
+                    "label": "Doji (Indecision)"
+                })
+        
+        # Bullish Engulfing - arrow up on engulfing candle
+        elif pattern_type == "bullish_engulfing":
+            if end_idx < len(candles):
+                candle = candles[end_idx]
+                markers.append({
+                    "type": "arrow",
+                    "direction": "up",
+                    "time": candle.get("time"),
+                    "price": candle.get("high"),
+                    "color": "#10b981",
+                    "label": "Engulfing Candle"
+                })
+        
+        # Bearish Engulfing - arrow down on engulfing candle
+        elif pattern_type == "bearish_engulfing":
+            if end_idx < len(candles):
+                candle = candles[end_idx]
+                markers.append({
+                    "type": "arrow",
+                    "direction": "down",
+                    "time": candle.get("time"),
+                    "price": candle.get("low"),
+                    "color": "#ef4444",
+                    "label": "Engulfing Candle"
+                })
+        
+        # Hammer - arrow up below candle
+        elif "hammer" in pattern_type.lower():
+            if start_idx < len(candles):
+                candle = candles[start_idx]
+                markers.append({
+                    "type": "arrow",
+                    "direction": "up",
+                    "time": candle.get("time"),
+                    "price": candle.get("low"),
+                    "color": "#10b981",
+                    "label": "Hammer"
+                })
+        
+        # Shooting Star - arrow down above candle
+        elif "shooting_star" in pattern_type.lower():
+            if start_idx < len(candles):
+                candle = candles[start_idx]
+                markers.append({
+                    "type": "arrow",
+                    "direction": "down",
+                    "time": candle.get("time"),
+                    "price": candle.get("high"),
+                    "color": "#ef4444",
+                    "label": "Shooting Star"
+                })
+        
+        # Head and Shoulders - mark left shoulder, head, right shoulder
+        elif "head_shoulders" in pattern_type.lower() or "head_and_shoulders" in pattern_type.lower():
+            if "left_shoulder" in metadata and "head" in metadata and "right_shoulder" in metadata:
+                # Left shoulder
+                ls_idx = metadata["left_shoulder"].get("candle") if isinstance(metadata["left_shoulder"], dict) else None
+                if ls_idx is not None and 0 <= ls_idx < len(candles):
+                    markers.append({
+                        "type": "circle",
+                        "time": candles[ls_idx].get("time"),
+                        "price": candles[ls_idx].get("high"),
+                        "color": "#ef4444",
+                        "radius": 6,
+                        "label": "Left Shoulder"
+                    })
+                
+                # Head
+                head_idx = metadata["head"].get("candle") if isinstance(metadata["head"], dict) else None
+                if head_idx is not None and 0 <= head_idx < len(candles):
+                    markers.append({
+                        "type": "circle",
+                        "time": candles[head_idx].get("time"),
+                        "price": candles[head_idx].get("high"),
+                        "color": "#ef4444",
+                        "radius": 10,
+                        "label": "Head"
+                    })
+                
+                # Right shoulder
+                rs_idx = metadata["right_shoulder"].get("candle") if isinstance(metadata["right_shoulder"], dict) else None
+                if rs_idx is not None and 0 <= rs_idx < len(candles):
+                    markers.append({
+                        "type": "circle",
+                        "time": candles[rs_idx].get("time"),
+                        "price": candles[rs_idx].get("high"),
+                        "color": "#ef4444",
+                        "radius": 6,
+                        "label": "Right Shoulder"
+                    })
+        
+        # Double Top - mark both peaks
+        elif "double_top" in pattern_type.lower():
+            troughs = metadata.get("peaks") or metadata.get("troughs", [])
+            for i, peak in enumerate(troughs[:2]):
+                peak_idx = peak.get("candle") if isinstance(peak, dict) else None
+                if peak_idx is not None and 0 <= peak_idx < len(candles):
+                    markers.append({
+                        "type": "circle",
+                        "time": candles[peak_idx].get("time"),
+                        "price": candles[peak_idx].get("high"),
+                        "color": "#ef4444",
+                        "radius": 8,
+                        "label": f"Peak {i+1}"
+                    })
+        
+        # Double Bottom - mark both bottoms
+        elif "double_bottom" in pattern_type.lower():
+            troughs = metadata.get("troughs") or metadata.get("peaks", [])
+            for i, trough in enumerate(troughs[:2]):
+                trough_idx = trough.get("candle") if isinstance(trough, dict) else None
+                if trough_idx is not None and 0 <= trough_idx < len(candles):
+                    markers.append({
+                        "type": "circle",
+                        "time": candles[trough_idx].get("time"),
+                        "price": candles[trough_idx].get("low"),
+                        "color": "#10b981",
+                        "radius": 8,
+                        "label": f"Bottom {i+1}"
+                    })
+        
+        return markers
 
     async def _calculate_technical_levels(self, symbol: str, candles: list, quote: dict) -> dict:
         """

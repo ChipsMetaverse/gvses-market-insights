@@ -119,6 +119,7 @@ export interface StockNews {
   source?: string;
   published?: string;
   summary?: string;
+  tickers?: string[];
 }
 
 export interface AnalystRating {

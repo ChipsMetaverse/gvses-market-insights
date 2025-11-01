@@ -225,7 +225,7 @@ class PatternDetector:
             candles: List of dicts with keys: time, open, high, low, close, volume
             cache_seconds: How long to cache results
         """
-        self.candles = candles[-100:] if len(candles) > 100 else candles  # Process last 100 only
+        self.candles = candles[-200:] if len(candles) > 200 else candles  # Process last 200 for better pattern detection
         self.cache_seconds = cache_seconds
         self._last_detection_time = None
         self._cached_results = None
@@ -353,6 +353,7 @@ class PatternDetector:
         # Detect candlestick patterns
         candlestick_patterns = self._detect_candlestick_patterns()
         detected_patterns.extend(candlestick_patterns)
+        logger.info(f"🔍 Detected {len(candlestick_patterns)} candlestick patterns (before filtering)")
 
         # Detect multi-candle candlestick formations (3-candle etc.)
         advanced_candles = self._detect_multi_candle_patterns()
@@ -388,6 +389,9 @@ class PatternDetector:
         detected_patterns.extend(self._detect_diamond())
         detected_patterns.extend(self._detect_rounding_bottom())
         
+        logger.info(f"📊 Total detected patterns (before enrichment): {len(detected_patterns)}")
+        logger.info(f"📈 Using {len(self.candles)} candles for detection")
+        
         # Enrich patterns with knowledge base guidance and validation
         validated_patterns: List[Pattern] = []
 
@@ -395,13 +399,19 @@ class PatternDetector:
             # Apply knowledge-driven enrichment and validation
             enriched = self._enrich_with_knowledge(pattern)
             
-            # Only include patterns with confidence >= 65 after enrichment
-            if enriched.confidence >= 65:
+            # Only include patterns with confidence >= 55 after enrichment (lowered from 65 for better detection)
+            if enriched.confidence >= 55:
                 validated_patterns.append(enriched)
             else:
-                logger.debug("Pattern %s filtered (confidence %s < 65)", pattern.pattern_type, enriched.confidence)
+                logger.debug("Pattern %s filtered (confidence %s < 55)", pattern.pattern_type, enriched.confidence)
 
-        high_confidence_patterns = [p for p in validated_patterns if p.confidence >= 70]
+        # Filter for high confidence patterns (lowered from 70 to 65 for better detection)
+        high_confidence_patterns = [p for p in validated_patterns if p.confidence >= 65]
+        
+        logger.info(f"✅ Validated patterns (>= 55 confidence): {len(validated_patterns)}")
+        logger.info(f"⭐ High confidence patterns (>= 65): {len(high_confidence_patterns)}")
+        if high_confidence_patterns:
+            logger.info(f"   Patterns: {[p.pattern_type for p in high_confidence_patterns]}")
         
         results = {
             "detected": [self._pattern_to_dict(p) for p in high_confidence_patterns],
