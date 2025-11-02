@@ -143,6 +143,28 @@
     flex-direction: column;
     overflow: visible;  /* Ensure input is always visible */
   }
+  
+  /* Ensure ChatKit iframe has proper height on mobile */
+  .mobile-chat-section .realtime-chatkit {
+    height: 100%;
+    min-height: 250px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .mobile-chat-section .realtime-chatkit > div:last-child {
+    flex: 1 1 auto;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Force ChatKit iframe to be visible and take full space */
+  .mobile-chat-section iframe {
+    min-height: 200px !important;
+    height: 100% !important;
+    flex: 1 1 auto !important;
+  }
 
   .mobile-chat-section .panel-title {
     font-size: 12px;

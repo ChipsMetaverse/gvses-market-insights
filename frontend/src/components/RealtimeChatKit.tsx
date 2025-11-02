@@ -307,7 +307,7 @@ export function RealtimeChatKit({
       )}
 
       {/* Unified ChatKit + Agent Builder Interface */}
-      <div className="flex-grow border rounded-lg overflow-hidden shadow-sm">
+      <div className="flex-grow border rounded-lg overflow-hidden shadow-sm" style={{ minHeight: '200px', display: 'flex', flexDirection: 'column' }}>
         {chatKitControl ? (
           <ChatKit 
             control={chatKitControl}
@@ -315,7 +315,11 @@ export function RealtimeChatKit({
             className="h-full w-full"
             style={{
               height: '100%',
+              minHeight: '200px',
               width: '100%',
+              flex: '1 1 auto',
+              display: 'flex',
+              flexDirection: 'column',
               colorScheme: 'light',
               backgroundColor: '#ffffff',
               fontFamily: 'system-ui, -apple-system, sans-serif'
