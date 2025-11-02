@@ -285,8 +285,22 @@ class MarketServiceWrapper:
                     logger.info(f"[{symbol}] Patterns found: {total_detected} total")
                     if isinstance(detected_patterns, dict):
                         detected = detected_patterns.get("detected", [])
+                        
+                        # Sort patterns by end_candle (most recent first, right to left on chart)
+                        detected_sorted = sorted(
+                            detected,
+                            key=lambda p: p.get("end_candle", p.get("start_candle", 0)),
+                            reverse=True  # Most recent first
+                        )
+                        
                         augmented_patterns = []
-                        for pattern in detected[:5]:
+                        # Limit patterns to avoid overwhelming the frontend
+                        # Can be configured via MAX_PATTERNS_PER_SYMBOL env var (default: 10)
+                        max_patterns = int(os.getenv("MAX_PATTERNS_PER_SYMBOL", "10"))
+                        patterns_to_process = detected_sorted[:max_patterns]
+                        print(f"📊 [{symbol}] Processing {len(patterns_to_process)} of {len(detected)} detected patterns (limit: {max_patterns}, sorted by recency)")
+                        
+                        for pattern in patterns_to_process:
                             start_idx = pattern.get("start_candle")
                             end_idx = pattern.get("end_candle")
                             if start_idx is not None and 0 <= start_idx < len(candles):
@@ -364,6 +378,15 @@ class MarketServiceWrapper:
                                     # Continue without visual_config for this pattern - don't crash entire response
                                     pass
 
+                            # Add pattern category (Reversal, Continuation, Neutral)
+                            pattern_type = pattern.get("pattern_type", "").lower()
+                            if any(x in pattern_type for x in ["engulfing", "hammer", "star", "head", "shoulders", "double", "triple", "reversal"]):
+                                pattern["category"] = "Reversal"
+                            elif any(x in pattern_type for x in ["flag", "pennant", "triangle", "channel", "cup"]):
+                                pattern["category"] = "Continuation"
+                            else:
+                                pattern["category"] = "Neutral"
+                            
                             augmented_patterns.append(pattern)
                         detected_patterns["detected"] = augmented_patterns
                         logger.info(f"[{symbol}] Returning top {len(augmented_patterns)} patterns with metadata")
@@ -536,6 +559,7 @@ class MarketServiceWrapper:
             return "#ef4444"  # Red
         else:
             return "#3b82f6"  # Blue (neutral)
+    
 
     def _generate_pattern_markers(
         self,

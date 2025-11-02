@@ -908,17 +908,11 @@ export function TradingChart({ symbol, days = 100, displayDays, technicalLevels,
     }
   }
 
-  const handleChartTypeChange = (type: string) => {
-    console.log('Chart type changed:', type)
-    // Chart type change functionality can be added later
-  }
-
   return (
     <div className="trading-chart-container">
       <ChartToolbar
         onIndicatorToggle={handleIndicatorToggle}
         onDrawingToolSelect={handleDrawingToolSelect}
-        onChartTypeChange={handleChartTypeChange}
       />
 
       {isLoading && (

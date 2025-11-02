@@ -186,6 +186,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [patternVisibility, setPatternVisibility] = useState<{ [patternId: string]: boolean }>({});
   const [hoveredPatternId, setHoveredPatternId] = useState<string | null>(null);
   const [showAllPatterns, setShowAllPatterns] = useState(false);
+  const [showMorePatterns, setShowMorePatterns] = useState(false);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -1795,148 +1796,157 @@ export const TradingDashboardSimple: React.FC = () => {
                         </span>
                       </div>
                       
-                      {/* Test button for pattern overlay debugging */}
-                      <button
-                        onClick={() => {
-                          console.log('🧪 [TEST] Drawing test pattern overlay...');
-                          try {
-                            // Draw obvious bright magenta line for testing
-                            const currentStock = stocksData.find(s => s.symbol === selectedSymbol);
-                            const testPrice = currentStock?.price || 250;
-                            
-                            // Use current time and extend 7 days for test line
-                            const nowSeconds = Math.floor(Date.now() / 1000);
-                            const sevenDaysSeconds = 7 * 24 * 60 * 60;
-                            
-                            enhancedChartControl.drawHorizontalLine(
-                              testPrice, 
-                              nowSeconds - sevenDaysSeconds,  // 7 days ago
-                              nowSeconds,                      // now
-                              '#FF00FF', 
-                              'TEST LINE'
-                            );
-                            console.log(`🧪 [TEST] Drew bright magenta line at price ${testPrice} for 7-day range`);
-                            
-                            // Try to call update/refresh methods
-                            const chartControl = enhancedChartControl as any;
-                            if (typeof chartControl.update === 'function') {
-                              chartControl.update();
-                              console.log('🧪 [TEST] Called chart.update()');
-                            } else if (chartControl.timeScale && typeof chartControl.timeScale().fitContent === 'function') {
-                              chartControl.timeScale().fitContent();
-                              console.log('🧪 [TEST] Called chart.timeScale().fitContent()');
-                            }
-                            
-                            setToastCommand?.({ 
-                              command: '🧪 Test line drawn - Check chart for bright magenta line!', 
-                              type: 'info' 
-                            });
-                            setTimeout(() => setToastCommand?.(null), 5000);
-                          } catch (error) {
-                            console.error('🧪 [TEST] Error drawing test line:', error);
-                            setToastCommand?.({ 
-                              command: `❌ Test failed: ${(error as Error).message}`, 
-                              type: 'error' 
-                            });
-                            setTimeout(() => setToastCommand?.(null), 5000);
-                          }
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '8px',
-                          marginBottom: '12px',
-                          background: '#FF00FF',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontWeight: 'bold',
-                          fontSize: '12px'
-                        }}
-                      >
-                        🧪 TEST PATTERN OVERLAY (Draw Magenta Line)
-                      </button>
-                      
-                      <div className="pattern-list">
-                        {backendPatterns.map((pattern, index) => {
-                        const patternId = getPatternId(pattern);
-                        const isVisible = patternVisibility[patternId] || false;
-                        const isHovered = hoveredPatternId === patternId;
-                        const signal = pattern.signal || 'neutral';
+                      {/* Organize patterns by category */}
+                      {(() => {
+                        const reversalPatterns = backendPatterns.filter(p => p.category === 'Reversal');
+                        const continuationPatterns = backendPatterns.filter(p => p.category === 'Continuation');
+                        const neutralPatterns = backendPatterns.filter(p => p.category === 'Neutral');
+                        const INITIAL_VISIBLE = 5;
+                        const totalPatterns = backendPatterns.length;
+                        const visiblePatterns = showMorePatterns ? backendPatterns : backendPatterns.slice(0, INITIAL_VISIBLE);
+                        
+                        const renderPattern = (pattern: any) => {
+                          const patternId = getPatternId(pattern);
+                          const isVisible = patternVisibility[patternId] || false;
+                          const isHovered = hoveredPatternId === patternId;
+                          const signal = pattern.signal || 'neutral';
+                          
+                          return (
+                            <div
+                              key={patternId}
+                              className={`pattern-item ${isHovered ? 'hovered' : ''} ${isVisible ? 'selected' : ''}`}
+                              onMouseEnter={() => handlePatternCardHover(pattern)}
+                              onMouseLeave={handlePatternCardLeave}
+                              onClick={() => handlePatternToggle(pattern)}
+                              style={{
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                border: isHovered ? '1px solid rgba(59, 130, 246, 0.5)' : undefined,
+                                background: isHovered ? 'rgba(59, 130, 246, 0.05)' : undefined
+                              }}
+                            >
+                              <div className="pattern-header">
+                                <span className="pattern-name">{pattern.pattern_type || pattern.type}</span>
+                                <span className={`pattern-signal ${signal}`}>
+                                  {signal === 'bullish' ? '↑' : signal === 'bearish' ? '↓' : '•'} {signal}
+                                </span>
+                                <label className="pattern-toggle" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isVisible}
+                                    onChange={() => handlePatternToggle(pattern)}
+                                  />
+                                </label>
+                              </div>
+                              <div className="pattern-details">
+                                <span className="confidence">
+                                  {pattern.confidence ? `${Math.round(pattern.confidence)}%` : 'N/A'}
+                                </span>
+                                {pattern.entry_guidance && (
+                                  <Tooltip content={pattern.entry_guidance}>
+                                    <span className="guidance-label">Entry</span>
+                                  </Tooltip>
+                                )}
+                                {pattern.risk_notes && (
+                                  <Tooltip content={pattern.risk_notes}>
+                                    <span className="risk-icon">⚠️</span>
+                                  </Tooltip>
+                                )}
+                              </div>
+                              {!isVisible && !isHovered && (
+                                <div style={{ fontSize: '10px', color: '#999', marginTop: '4px', fontStyle: 'italic' }}>
+                                  Hover to preview · Click to pin
+                                </div>
+                              )}
+                            </div>
+                          );
+                        };
                         
                         return (
-                          <div
-                            key={patternId}
-                            className={`pattern-item ${isHovered ? 'hovered' : ''} ${isVisible ? 'selected' : ''}`}
-                            onMouseEnter={() => handlePatternCardHover(pattern)}
-                            onMouseLeave={handlePatternCardLeave}
-                            onClick={() => handlePatternToggle(pattern)}
-                            style={{
-                              cursor: 'pointer',
-                              transition: 'all 0.2s ease',
-                              border: isHovered ? '1px solid rgba(59, 130, 246, 0.5)' : undefined,
-                              background: isHovered ? 'rgba(59, 130, 246, 0.05)' : undefined
-                            }}
-                          >
-                            <div className="pattern-header">
-                              <span className="pattern-name">{pattern.pattern_type || pattern.type}</span>
-                              <span className={`pattern-signal ${signal}`}>
-                                {signal === 'bullish' ? '↑' : signal === 'bearish' ? '↓' : '•'} {signal}
-                              </span>
-                              <label className="pattern-toggle" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={isVisible}
-                                  onChange={() => handlePatternToggle(pattern)}
-                                />
-                              </label>
-                            </div>
-                            <div className="pattern-details">
-                              <span className="confidence">
-                                {pattern.confidence ? `${Math.round(pattern.confidence)}%` : 'N/A'}
-                              </span>
-                              {pattern.entry_guidance && (
-                                <Tooltip content={pattern.entry_guidance}>
-                                  <span className="guidance-label">Entry</span>
-                                </Tooltip>
-                              )}
-                              {pattern.risk_notes && (
-                                <Tooltip content={pattern.risk_notes}>
-                                  <span className="risk-icon">⚠️</span>
-                                </Tooltip>
-                              )}
-                            </div>
-                            {/* Phase 1: Hover hint */}
-                            {!isVisible && !isHovered && (
-                              <div style={{
-                                fontSize: '10px',
-                                color: '#999',
-                                marginTop: '4px',
-                                fontStyle: 'italic'
-                              }}>
-                                Hover to preview · Click to pin
+                          <div className="pattern-list">
+                            {/* Reversal Patterns */}
+                            {reversalPatterns.length > 0 && (
+                              <div style={{ marginBottom: '16px' }}>
+                                <div style={{ 
+                                  fontSize: '12px', 
+                                  fontWeight: '700', 
+                                  color: '#ef4444',
+                                  marginBottom: '8px',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  🔄 REVERSAL ({reversalPatterns.length})
+                                </div>
+                                {reversalPatterns.filter(p => visiblePatterns.includes(p)).map(renderPattern)}
                               </div>
+                            )}
+                            
+                            {/* Continuation Patterns */}
+                            {continuationPatterns.length > 0 && (
+                              <div style={{ marginBottom: '16px' }}>
+                                <div style={{ 
+                                  fontSize: '12px', 
+                                  fontWeight: '700', 
+                                  color: '#10b981',
+                                  marginBottom: '8px',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  ➡️ CONTINUATION ({continuationPatterns.length})
+                                </div>
+                                {continuationPatterns.filter(p => visiblePatterns.includes(p)).map(renderPattern)}
+                              </div>
+                            )}
+                            
+                            {/* Neutral Patterns */}
+                            {neutralPatterns.length > 0 && (
+                              <div style={{ marginBottom: '16px' }}>
+                                <div style={{ 
+                                  fontSize: '12px', 
+                                  fontWeight: '700', 
+                                  color: '#6b7280',
+                                  marginBottom: '8px',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  ⚪ NEUTRAL ({neutralPatterns.length})
+                                </div>
+                                {neutralPatterns.filter(p => visiblePatterns.includes(p)).map(renderPattern)}
+                              </div>
+                            )}
+                            
+                            {/* Show More / Show Less Button */}
+                            {totalPatterns > INITIAL_VISIBLE && (
+                              <button
+                                onClick={() => setShowMorePatterns(!showMorePatterns)}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px',
+                                  marginTop: '8px',
+                                  background: 'rgba(59, 130, 246, 0.1)',
+                                  color: '#3b82f6',
+                                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: '600',
+                                  fontSize: '12px',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+                                  e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                                  e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                                }}
+                              >
+                                {showMorePatterns ? 'Show Less' : `Show ${totalPatterns - INITIAL_VISIBLE} More Patterns`}
+                              </button>
                             )}
                           </div>
                         );
-                      })}
-                      {detectedPatterns.map((pattern, index) => {
-                        const patternId = `local-${pattern.type}-${index}`;
-                        return (
-                          <div key={patternId} className="pattern-item local-pattern">
-                            <div className="pattern-header">
-                              <span className="pattern-name">{pattern.description || pattern.type}</span>
-                              <span className="pattern-source">Local</span>
-                            </div>
-                            <div className="pattern-details">
-                              <span className="confidence">
-                                {pattern.confidence ? `${Math.round(pattern.confidence)}%` : 'N/A'}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      </div>
+                      })()}
                     </>
                   )}
                 </div>

@@ -4,18 +4,15 @@ import './ChartToolbar.css'
 export interface ChartToolbarProps {
   onIndicatorToggle?: (indicator: string) => void
   onDrawingToolSelect?: (tool: string) => void
-  onChartTypeChange?: (type: string) => void
   onTimeframeChange?: (timeframe: string) => void
 }
 
 export function ChartToolbar({
   onIndicatorToggle,
   onDrawingToolSelect,
-  onChartTypeChange,
   onTimeframeChange
 }: ChartToolbarProps) {
   const [activeDrawingTool, setActiveDrawingTool] = useState<string | null>(null)
-  const [chartType, setChartType] = useState('candlestick')
   const [showIndicators, setShowIndicators] = useState(false)
   const [showDrawingTools, setShowDrawingTools] = useState(false)
   
@@ -43,22 +40,10 @@ export function ChartToolbar({
     { id: 'stochastic', label: 'Stochastic' },
   ]
 
-  const chartTypes = [
-    { id: 'candlestick', icon: '📊', label: 'Candlestick' },
-    { id: 'line', icon: '📉', label: 'Line' },
-    { id: 'area', icon: '📈', label: 'Area' },
-    { id: 'bars', icon: '▅', label: 'Bars' },
-  ]
-
   const handleDrawingToolClick = (toolId: string) => {
     const newTool = activeDrawingTool === toolId ? null : toolId
     setActiveDrawingTool(newTool)
     onDrawingToolSelect?.(newTool || 'none')
-  }
-
-  const handleChartTypeClick = (typeId: string) => {
-    setChartType(typeId)
-    onChartTypeChange?.(typeId)
   }
 
   // Auto-hide functionality
@@ -114,31 +99,6 @@ export function ChartToolbar({
 
   return (
     <div className="chart-toolbar">
-      {/* Chart Type Selector */}
-      <div className="toolbar-section">
-        <div className="toolbar-dropdown">
-          <button className="toolbar-button chart-type-button">
-            <span className="button-icon">{chartTypes.find(t => t.id === chartType)?.icon}</span>
-            <span className="button-label">{chartTypes.find(t => t.id === chartType)?.label}</span>
-            <span className="dropdown-arrow">▼</span>
-          </button>
-          <div className="dropdown-menu chart-type-menu">
-            {chartTypes.map(type => (
-              <button
-                key={type.id}
-                className={`dropdown-item ${chartType === type.id ? 'active' : ''}`}
-                onClick={() => handleChartTypeClick(type.id)}
-              >
-                <span className="item-icon">{type.icon}</span>
-                <span>{type.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="toolbar-divider" />
-
       {/* Drawing Tools */}
       <div className="toolbar-section">
         <button
