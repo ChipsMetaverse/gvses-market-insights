@@ -211,6 +211,12 @@ export const TradingDashboardSimple: React.FC = () => {
     const saved = localStorage.getItem('rightPanelWidth');
     return saved ? parseInt(saved) : 350;
   });
+  
+  // Mobile chart/chat split ratio (percentage for chart)
+  const [mobileChartRatio, setMobileChartRatio] = useState(() => {
+    const saved = localStorage.getItem('mobileChartRatio');
+    return saved ? parseFloat(saved) : 35;
+  });
 
   // Update CSS variables when panel widths change
   useEffect(() => {
@@ -230,6 +236,35 @@ export const TradingDashboardSimple: React.FC = () => {
 
   const handleRightPanelResize = useCallback((delta: number) => {
     setRightPanelWidth(prev => Math.max(300, Math.min(500, prev - delta)));
+  }, []);
+  
+  // Mobile chart/chat divider resize handler
+  const handleMobileDividerDrag = useCallback((startY: number) => {
+    const containerHeight = window.innerHeight - 200; // Account for header and tab bar
+    
+    const handleMove = (moveEvent: TouchEvent | MouseEvent) => {
+      const currentY = 'touches' in moveEvent ? (moveEvent as TouchEvent).touches[0].clientY : (moveEvent as MouseEvent).clientY;
+      const deltaY = currentY - startY;
+      const deltaPercent = (deltaY / containerHeight) * 100;
+      
+      setMobileChartRatio(prev => {
+        const newRatio = Math.max(20, Math.min(70, prev + deltaPercent));
+        localStorage.setItem('mobileChartRatio', newRatio.toString());
+        return newRatio;
+      });
+    };
+    
+    const handleEnd = () => {
+      document.removeEventListener('mousemove', handleMove as any);
+      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('touchmove', handleMove as any, { passive: false });
+      document.removeEventListener('touchend', handleEnd);
+    };
+    
+    document.addEventListener('mousemove', handleMove as any);
+    document.addEventListener('mouseup', handleEnd);
+    document.addEventListener('touchmove', handleMove as any, { passive: false });
+    document.addEventListener('touchend', handleEnd);
   }, []);
 
   // Message persistence storage keys
@@ -1966,7 +2001,10 @@ export const TradingDashboardSimple: React.FC = () => {
           data-active={!isMobile || activePanel === 'chart'}
         >
           {/* Chart Section */}
-          <div className="chart-section chart-container">
+          <div 
+            className="chart-section chart-container"
+            style={isMobile ? { flex: `0 0 ${mobileChartRatio}%`, maxHeight: `${mobileChartRatio}%` } : undefined}
+          >
             {/* Timeframe Selector */}
             <TimeRangeSelector
               selected={selectedTimeframe}
@@ -2004,7 +2042,47 @@ export const TradingDashboardSimple: React.FC = () => {
 
           {/* Mobile: Voice/Chat Section (below chart on mobile only) */}
           {isMobile && activePanel === 'chart' && (
-            <div className="mobile-chat-section">
+            <>
+              {/* Mobile Divider for Chart/Chat Split */}
+              <div 
+                className="mobile-divider"
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  const startY = e.touches[0].clientY;
+                  handleMobileDividerDrag(startY);
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const startY = e.clientY;
+                  handleMobileDividerDrag(startY);
+                }}
+                style={{
+                  height: '12px',
+                  background: 'linear-gradient(to bottom, #e5e7eb 0%, #d1d5db 50%, #e5e7eb 100%)',
+                  cursor: 'ns-resize',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  touchAction: 'none',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  position: 'relative',
+                  zIndex: 10
+                }}
+              >
+                <div style={{
+                  width: '40px',
+                  height: '4px',
+                  background: '#9ca3af',
+                  borderRadius: '2px'
+                }} />
+              </div>
+              
+              <div 
+                className="mobile-chat-section"
+                style={{ flex: `1 1 ${100 - mobileChartRatio}%`, maxHeight: `${100 - mobileChartRatio}%`, minHeight: '200px' }}
+              >
               {voiceProvider === 'chatkit' ? (
                 <RealtimeChatKit 
                   className="h-full w-full"
@@ -2085,7 +2163,8 @@ export const TradingDashboardSimple: React.FC = () => {
                   </div>
                 </div>
               )}
-            </div>
+              </div>
+            </>
           )}
         </main>
 

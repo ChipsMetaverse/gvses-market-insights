@@ -101,17 +101,16 @@
   }
 
   .mobile-chart-voice-merged .chart-section {
-    flex: 0 0 35%;  /* Reduced from 60% to 35% to make room for chat */
-    min-height: 250px;
-    max-height: 40%;  /* Don't let chart take too much space */
+    /* Flex values now controlled by inline styles for dynamic resizing */
+    min-height: 150px;  /* Minimum height when fully collapsed */
     overflow: hidden;
     touch-action: pan-x pan-y pinch-zoom;  /* Allow all gestures on chart */
+    transition: flex 0.1s ease-out;  /* Smooth resize animation */
   }
 
   .mobile-chat-section {
-    flex: 1 1 65%;  /* Increased from 40% to 65% */
-    min-height: 300px;  /* Increased min-height for better usability */
-    max-height: 65%;
+    /* Flex values now controlled by inline styles for dynamic resizing */
+    min-height: 200px;  /* Minimum height when fully collapsed */
     overflow: visible;  /* Changed from hidden to visible */
     display: flex;
     flex-direction: column;
@@ -120,6 +119,22 @@
     padding: 12px;
     padding-bottom: 8px;  /* Reduced padding since we need more space */
     touch-action: pan-y;  /* Only allow vertical scrolling in chat */
+    transition: flex 0.1s ease-out;  /* Smooth resize animation */
+  }
+  
+  /* Mobile divider for resizing chart/chat split */
+  .mobile-divider {
+    cursor: ns-resize;
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+  }
+  
+  .mobile-divider:hover {
+    background: linear-gradient(to bottom, #d1d5db 0%, #9ca3af 50%, #d1d5db 100%) !important;
+  }
+  
+  .mobile-divider:active {
+    background: linear-gradient(to bottom, #9ca3af 0%, #6b7280 50%, #9ca3af 100%) !important;
   }
 
   .mobile-chat-section .voice-conversation-section {
