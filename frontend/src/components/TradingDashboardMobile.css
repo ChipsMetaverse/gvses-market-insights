@@ -81,6 +81,58 @@
     height: 100%;
   }
 
+  /* Mobile merged chart + voice layout */
+  .mobile-chart-voice-merged[data-active="true"] {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 200px);
+    overflow: hidden;
+  }
+
+  .mobile-chart-voice-merged .chart-section {
+    flex: 0 0 60%;
+    min-height: 300px;
+    overflow: hidden;
+  }
+
+  .mobile-chat-section {
+    flex: 1 1 40%;
+    min-height: 200px;
+    max-height: 45%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border-top: 2px solid rgba(148, 163, 184, 0.2);
+    padding: 12px;
+  }
+
+  .mobile-chat-section .voice-conversation-section {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mobile-chat-section .panel-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .mobile-chat-section .conversation-messages-compact {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 8px;
+  }
+
+  .mobile-chat-section .voice-input-container {
+    flex-shrink: 0;
+    padding-top: 0;
+  }
+
   .voice-panel-right {
     padding: 0 12px 12px;
   }
@@ -119,6 +171,11 @@
     grid-template-columns: repeat(3, 1fr);
     width: 100%;
     gap: 12px;
+  }
+
+  /* 2-tab layout for merged chart+voice */
+  .mobile-tab-bar__list--two-tabs {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .mobile-tab-bar__button {

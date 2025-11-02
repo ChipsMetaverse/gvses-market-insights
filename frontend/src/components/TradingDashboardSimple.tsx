@@ -274,7 +274,8 @@ export const TradingDashboardSimple: React.FC = () => {
       return undefined;
     }
 
-    const tabs: Array<'analysis' | 'chart' | 'voice'> = ['analysis', 'chart', 'voice'];
+    // Mobile tabs: only 2 tabs now (analysis | chart+voice merged)
+    const tabs: Array<'analysis' | 'chart' | 'voice'> = ['analysis', 'chart'];
     let touchStartX: number | null = null;
 
     const handleTouchStart = (event: TouchEvent) => {
@@ -1958,13 +1959,13 @@ export const TradingDashboardSimple: React.FC = () => {
         {/* Left Panel Divider - Desktop only */}
         {!isMobile && <PanelDivider onDrag={handleLeftPanelResize} />}
 
-        {/* Center - Chart Always Visible */}
+        {/* Center - Chart + Voice (merged on mobile, separate on desktop) */}
         <main
-          className="main-content panel"
+          className={`main-content panel ${isMobile ? 'mobile-chart-voice-merged' : ''}`}
           data-panel="chart"
           data-active={!isMobile || activePanel === 'chart'}
         >
-          {/* Chart Section - Always Visible */}
+          {/* Chart Section */}
           <div className="chart-section chart-container">
             {/* Timeframe Selector */}
             <TimeRangeSelector
@@ -1987,17 +1988,103 @@ export const TradingDashboardSimple: React.FC = () => {
                 }}
               />
             </div>
+
+            {/* Voice Status Indicator (desktop only - minimal) */}
+            {!isMobile && isConversationConnected && (
+              <div className="voice-status-bar" data-testid="voice-interface">
+                <div className="audio-level-mini">
+                  <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
+                  <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 400)}%` }}></div>
+                  <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 600)}%` }}></div>
+                </div>
+                <span className="voice-status-text">{isListening ? 'Listening...' : 'Connected'}</span>
+              </div>
+            )}
           </div>
 
-          {/* Voice Status Bar - Minimal */}
-          {isConversationConnected && (
-            <div className="voice-status-bar" data-testid="voice-interface">
-              <div className="audio-level-mini">
-                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
-                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 400)}%` }}></div>
-                <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 600)}%` }}></div>
-              </div>
-              <span className="voice-status-text">{isListening ? 'Listening...' : 'Connected'}</span>
+          {/* Mobile: Voice/Chat Section (below chart on mobile only) */}
+          {isMobile && activePanel === 'chart' && (
+            <div className="mobile-chat-section">
+              {voiceProvider === 'chatkit' ? (
+                <RealtimeChatKit 
+                  className="h-full w-full"
+                  onMessage={(message) => {
+                    console.log('ChatKit message:', message);
+                    const newMessage: Message = {
+                      ...message,
+                      provider: 'chatkit'
+                    };
+                    setMessages((prev: Message[]) => [...prev, newMessage]);
+                  }}
+                  onChartCommand={(command) => {
+                    console.log('ChatKit chart command:', command);
+                    enhancedChartControl.processEnhancedResponse(command).catch(err => {
+                      console.error('Failed to execute ChatKit chart command:', err);
+                    });
+                  }}
+                />
+              ) : (
+                <div className="voice-conversation-section" style={{ height: '100%' }}>
+                  <h2 className="panel-title">VOICE ASSISTANT</h2>
+                  <div className="conversation-messages-compact">
+                    {unifiedMessages.length === 0 ? (
+                      <div className="no-messages-state">
+                        <p>🎤 {isConversationConnected ? 'Listening...' : 'Click mic to start'}</p>
+                      </div>
+                    ) : (
+                      unifiedMessages.map((msg) => (
+                        <div key={msg.id} className="conversation-message-enhanced" data-role={msg.role}>
+                          <div className="message-avatar">
+                            {msg.role === 'user' ? '👤' : '🤖'}
+                          </div>
+                          <div className="message-bubble">
+                            {msg.role === 'assistant' ? (
+                              <StructuredResponse content={msg.content} className="message-text-enhanced" />
+                            ) : (
+                              <div className="message-text-enhanced">{msg.content}</div>
+                            )}
+                            {msg.timestamp && (
+                              <div className="message-timestamp">
+                                {new Date(msg.timestamp).toLocaleTimeString([], { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  
+                  <div className="voice-input-container">
+                    <input
+                      type="text"
+                      className="voice-text-input"
+                      placeholder={isConversationConnected ? "Type a message..." : "Connect to send messages"}
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendTextMessage();
+                        }
+                      }}
+                      disabled={false}
+                    />
+                    <button
+                      className="voice-send-button"
+                      onClick={handleSendTextMessage}
+                      disabled={!inputText.trim()}
+                      title="Send message"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </main>
@@ -2100,7 +2187,7 @@ export const TradingDashboardSimple: React.FC = () => {
       </div>
 
       
-      {/* Voice FAB - Different position on mobile */}
+      {/* Voice FAB - Hidden on mobile chart+voice tab (chat already visible), shown on desktop */}
         <button
           className={`voice-fab ${isConversationConnected ? 'active' : ''} ${isConversationConnecting ? 'connecting' : ''} ${isMobile ? 'mobile-position' : ''}`}
           onClick={() => {
@@ -2120,7 +2207,7 @@ export const TradingDashboardSimple: React.FC = () => {
           }}
           title={isConversationConnected ? 'Disconnect Voice' : 'Connect Voice'}
           data-testid="voice-fab"
-          style={isMobile && activePanel === 'voice' ? { display: 'none' } : undefined}
+          style={(isMobile && activePanel === 'chart') ? { display: 'none' } : undefined}
         >
           {isConversationConnecting ? '⌛' : isConversationConnected ? '🎤' : '🎙️'}
         </button>
@@ -2137,10 +2224,10 @@ export const TradingDashboardSimple: React.FC = () => {
         <OnboardingTour onComplete={() => setShowOnboarding(false)} />
       )}
       
-      {/* Mobile Tab Bar - Fixed at bottom */}
+      {/* Mobile Tab Bar - Fixed at bottom (2 tabs: Analysis | Chart+Voice) */}
         {isMobile && (
           <nav className="mobile-tab-bar" aria-label="Dashboard navigation">
-            <ul className="mobile-tab-bar__list">
+            <ul className="mobile-tab-bar__list mobile-tab-bar__list--two-tabs">
               <li>
                 <button
                   type="button"
@@ -2149,7 +2236,7 @@ export const TradingDashboardSimple: React.FC = () => {
                   aria-label="Analysis"
                   onClick={() => setActivePanel('analysis')}
                 >
-                  <span>Analysis</span>
+                  <span>📊 Analysis</span>
                   {stockNews.length > 0 && (
                     <span className="mobile-tab-bar__badge">{stockNews.length > 9 ? '9+' : stockNews.length}</span>
                   )}
@@ -2160,21 +2247,10 @@ export const TradingDashboardSimple: React.FC = () => {
                   type="button"
                   className={`mobile-tab-bar__button ${activePanel === 'chart' ? 'mobile-tab-bar__button--active' : ''}`}
                   aria-pressed={activePanel === 'chart'}
-                  aria-label="Chart"
+                  aria-label="Chart + Voice"
                   onClick={() => setActivePanel('chart')}
                 >
-                  <span>Chart</span>
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  className={`mobile-tab-bar__button ${activePanel === 'voice' ? 'mobile-tab-bar__button--active' : ''}`}
-                  aria-pressed={activePanel === 'voice'}
-                  aria-label="Voice"
-                  onClick={() => setActivePanel('voice')}
-                >
-                  <span>Voice</span>
+                  <span>📈 Chart + Voice</span>
                   {unifiedMessages.length > 0 && (
                     <span className="mobile-tab-bar__badge">{unifiedMessages.length > 9 ? '9+' : unifiedMessages.length}</span>
                   )}
