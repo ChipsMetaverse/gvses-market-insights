@@ -34,6 +34,11 @@ interface UseAgentVoiceConfig {
   onThinking?: (thinking: boolean) => void;
   apiUrl?: string;
   sessionId?: string;
+  chartContext?: {       // NEW: Chart context to pass to agent
+    symbol?: string;
+    timeframe?: string;
+    snapshot_id?: string;
+  };
 }
 
 export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
@@ -43,7 +48,8 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
     onError,
     onThinking,
     apiUrl = getApiUrl(),
-    sessionId
+    sessionId,
+    chartContext  // Extract chart context
   } = config;
 
   const [isConnected, setIsConnected] = useState(false);
@@ -221,7 +227,8 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
 
       const agentResponse: AgentResponse = await agentOrchestratorService.sendQuery(
         userTranscript,
-        conversationHistoryRef.current.slice(-10) // Last 10 messages for context
+        conversationHistoryRef.current.slice(-10), // Last 10 messages for context
+        chartContext  // Pass chart context to backend
       );
 
       console.log('[AGENT VOICE] 📦 Received agent response:', {

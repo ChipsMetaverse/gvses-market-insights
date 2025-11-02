@@ -5,12 +5,20 @@
 
 import { getApiUrl } from '../utils/apiConfig';
 
+interface ChartContext {
+  symbol?: string;
+  timeframe?: string;
+  snapshot_id?: string;
+  has_analysis?: boolean;
+}
+
 interface AgentQuery {
   query: string;
   conversation_history?: Array<{ role: string; content: string }>;
   stream?: boolean;
   session_id?: string;
   user_id?: string;
+  chart_context?: ChartContext;  // NEW: Current chart state
 }
 
 interface AgentResponse {
@@ -124,14 +132,16 @@ class AgentOrchestratorService {
    */
   async sendQuery(
     query: string,
-    conversationHistory?: Array<{ role: string; content: string }>
+    conversationHistory?: Array<{ role: string; content: string }>,
+    chartContext?: ChartContext
   ): Promise<AgentResponse> {
     const endpoint = this.getOrchestratorEndpoint();
     const payload: AgentQuery = {
       query,
       conversation_history: conversationHistory,
       stream: false,
-      session_id: this.sessionId
+      session_id: this.sessionId,
+      chart_context: chartContext  // Pass chart context if provided
     };
 
     console.log(`[AGENT ORCHESTRATOR SERVICE] 🌐 Making HTTP request to ${endpoint}`);
@@ -403,4 +413,4 @@ interface StreamChunk {
 
 // Export singleton instance
 export const agentOrchestratorService = new AgentOrchestratorService();
-export type { AgentResponse, AgentQuery, AgentHealth, StructuredMarketAnalysis, StreamChunk, ChartSnapshot };
+export type { AgentResponse, AgentQuery, AgentHealth, StructuredMarketAnalysis, StreamChunk, ChartSnapshot, ChartContext };

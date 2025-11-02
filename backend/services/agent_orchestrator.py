@@ -3212,6 +3212,40 @@ TOOL USAGE:
 - Base EVERY recommendation on actual tool data, never generic advice
 - Calculate risk/reward ratios from real support/resistance levels in the data
 
+CHART DRAWING & VISUALIZATION:
+When user requests chart analysis, support/resistance levels, trendlines, or pattern identification:
+
+1. **Check for Chart Context**: Look for [CHART: symbol=X, timeframe=Y] in the query
+   - If present, you KNOW what chart is loaded - DO NOT ask for the symbol!
+   - Reference the loaded symbol naturally: "I'll draw these levels on your TSLA chart"
+
+2. **Drawing Commands Syntax**: To draw on the chart, embed commands in your response:
+   SUPPORT:<price> "<description>"
+   RESISTANCE:<price> "<description>"
+   TRENDLINE:<start_price>,<start_date>:<end_price>,<end_date> "<description>"
+   FIBONACCI:<high_price>,<high_date>:<low_price>,<low_date> "<description>"
+
+3. **Example Response with Drawing**:
+   "I'll draw the key support and resistance levels on your TSLA chart.
+   
+   SUPPORT:430.00 "200-day moving average - strong institutional support"
+   SUPPORT:448.00 "Recent consolidation zone from last week"
+   RESISTANCE:460.00 "Previous breakout level - watch for rejection"
+   RESISTANCE:472.00 "All-time high resistance from September"
+   
+   Currently TSLA is trading at $456.51, right between support at $448 
+   and resistance at $460. This is a consolidation zone..."
+
+4. **Commands are Auto-Executed**: Drawing commands are extracted and executed automatically
+   - Embed them naturally in your response text
+   - They will appear as lines/labels on the user's chart
+   - No need to explain the command syntax to the user
+
+5. **Pattern Detection**: For complex patterns (head & shoulders, triangles, wedges):
+   - Call the detect_chart_patterns tool for vision-based analysis
+
+6. **Chart Snapshot Context**: If query mentions [SNAPSHOT: available], you can reference the current chart state
+
 RESPONSE FORMAT:
 - Start with the specific answer to the question (entry points, levels, etc.)
 - Include structured JSON data for swing trades when applicable
@@ -4561,7 +4595,8 @@ Remember to cite sources when using this knowledge and maintain educational tone
         self,
         query: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        stream: bool = False
+        stream: bool = False,
+        chart_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Public entry point with intent-based routing for optimal performance."""
         # Early validation for empty queries
@@ -4572,6 +4607,25 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 "structured_data": {},
                 "error": "empty_query"
             }
+        
+        # Inject chart context if available
+        if chart_context:
+            symbol = chart_context.get('symbol', '')
+            timeframe = chart_context.get('timeframe', '')
+            has_snapshot = bool(chart_context.get('snapshot_id'))
+            
+            context_tags = []
+            if symbol:
+                context_tags.append(f"symbol={symbol}")
+            if timeframe:
+                context_tags.append(f"timeframe={timeframe}")
+            if has_snapshot:
+                context_tags.append("SNAPSHOT: available")
+            
+            if context_tags:
+                chart_info = f" [CHART: {', '.join(context_tags)}]"
+                query = query + chart_info
+                logger.info(f"Injected chart context: {chart_info}")
         
         # Classify intent for fast-path routing
         intent = self.intent_router.classify_intent(query)

@@ -2086,6 +2086,9 @@ export const TradingDashboardSimple: React.FC = () => {
               {voiceProvider === 'chatkit' ? (
                 <RealtimeChatKit 
                   className="h-full w-full"
+                  symbol={selectedSymbol}
+                  timeframe={selectedTimeframe}
+                  snapshotId={currentSnapshot?.symbol === selectedSymbol ? currentSnapshot?.metadata?.snapshot_id : undefined}
                   onMessage={(message) => {
                     console.log('ChatKit message:', message);
                     const newMessage: Message = {
@@ -2182,6 +2185,9 @@ export const TradingDashboardSimple: React.FC = () => {
             // Render RealtimeChatKit when using ChatKit provider - no wrapper needed
             <RealtimeChatKit 
               className="h-full w-full"
+              symbol={selectedSymbol}
+              timeframe={selectedTimeframe}
+              snapshotId={currentSnapshot?.symbol === selectedSymbol ? currentSnapshot?.metadata?.snapshot_id : undefined}
               onMessage={(message) => {
                 console.log('ChatKit message:', message);
                 // Add message to messages array

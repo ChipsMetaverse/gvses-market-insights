@@ -8,6 +8,9 @@ interface RealtimeChatKitProps {
   className?: string;
   onMessage?: (message: Message) => void;
   onChartCommand?: (command: any) => void;
+  symbol?: string;          // NEW: Current chart symbol
+  timeframe?: string;       // NEW: Current chart timeframe
+  snapshotId?: string;      // NEW: Current snapshot ID if available
 }
 
 interface Message {
@@ -21,7 +24,10 @@ interface Message {
 export function RealtimeChatKit({ 
   className = "h-[600px] w-full", 
   onMessage,
-  onChartCommand 
+  onChartCommand,
+  symbol,
+  timeframe,
+  snapshotId
 }: RealtimeChatKitProps) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,6 +52,7 @@ export function RealtimeChatKit({
 
   // Use the existing Agent Voice conversation hook for proper integration
   const agentVoice = useAgentVoiceConversation({
+    chartContext: { symbol, timeframe, snapshot_id: snapshotId },  // Pass chart context
     onMessage: (agentMessage) => {
       // Convert AgentVoiceMessage to Message format for compatibility
       const message: Message = {

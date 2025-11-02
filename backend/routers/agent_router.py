@@ -26,6 +26,7 @@ class AgentQuery(BaseModel):
     stream: bool = False
     session_id: Optional[str] = None
     user_id: Optional[str] = None
+    chart_context: Optional[Dict[str, Any]] = None  # NEW: Current chart state
 
 class AgentResponse(BaseModel):
     """Response model for agent queries."""
@@ -104,7 +105,8 @@ async def orchestrate_query(request: AgentQuery):
         result = await orchestrator.process_query(
             query=request.query,
             conversation_history=request.conversation_history,
-            stream=False  # Streaming handled separately
+            stream=False,  # Streaming handled separately
+            chart_context=request.chart_context  # Pass chart context if provided
         )
 
         # Add session ID if provided
@@ -415,7 +417,8 @@ async def process_voice_query(request: AgentQuery):
         
         result = await orchestrator.process_query(
             query=request.query,
-            conversation_history=request.conversation_history
+            conversation_history=request.conversation_history,
+            chart_context=request.chart_context  # Pass chart context if provided
         )
         
         # Send the response text to TTS if session_id provided
