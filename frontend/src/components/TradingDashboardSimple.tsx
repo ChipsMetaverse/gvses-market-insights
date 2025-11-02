@@ -107,39 +107,53 @@ const PanelDivider: React.FC<{
 // Two distinct categories:
 // - Intraday (<1D): Recent high-resolution data (1-7 days)
 // - Daily+ (>=1D): Historical long-term data (3+ years)
-const timeframeToDays = (timeframe: TimeRange): number => {
-  const map: Record<TimeRange, number> = {
+const timeframeToDays = (timeframe: TimeRange): { fetch: number, display: number } => {
+  const map: Record<TimeRange, { fetch: number, display: number }> = {
     // Intraday - Recent data only (high resolution)
-    '10S': 1, '30S': 1, '1m': 1, '3m': 1, '5m': 1,
-    '10m': 7, '15m': 7, '30m': 7,
+    '10S': { fetch: 1, display: 1 },
+    '30S': { fetch: 1, display: 1 },
+    '1m': { fetch: 1, display: 1 },
+    '3m': { fetch: 1, display: 1 },
+    '5m': { fetch: 1, display: 1 },
+    '10m': { fetch: 7, display: 7 },
+    '15m': { fetch: 7, display: 7 },
+    '30m': { fetch: 7, display: 7 },
     
     // Hours - Week of data for context
-    '1H': 7, '2H': 7, '3H': 7, '4H': 7, 
-    '6H': 7, '8H': 7, '12H': 7,
+    '1H': { fetch: 7, display: 7 },
+    '2H': { fetch: 7, display: 7 },
+    '3H': { fetch: 7, display: 7 },
+    '4H': { fetch: 7, display: 7 },
+    '6H': { fetch: 7, display: 7 },
+    '8H': { fetch: 7, display: 7 },
+    '12H': { fetch: 7, display: 7 },
     
-    // Daily+ - Historical data (fetch more than needed for technical indicators)
-    '1D': 200,   // Fetch 200 days but display 1
-    '2D': 200,   // Fetch 200 days but display 2
-    '3D': 200,   // Fetch 200 days but display 3
-    '5D': 200,   // Fetch 200 days but display 5
-    '1W': 200,   // Fetch 200 days but display 7
+    // Daily+ - Fetch extra historical data for technical indicators (MA200, etc.)
+    '1D': { fetch: 200, display: 1 },    // Fetch 200, display 1
+    '2D': { fetch: 200, display: 2 },    // Fetch 200, display 2
+    '3D': { fetch: 200, display: 3 },    // Fetch 200, display 3
+    '5D': { fetch: 200, display: 5 },    // Fetch 200, display 5
+    '1W': { fetch: 200, display: 7 },    // Fetch 200, display 7
     
     // Months - Fetch extra for MA200 but display only requested range
-    '1M': 250,   // Fetch 250 days but display 30
-    '3M': 300,   // Fetch 300 days but display 90
-    '6M': 380,   // Fetch 380 days but display 180
+    '1M': { fetch: 250, display: 30 },   // Fetch 250, display 30
+    '3M': { fetch: 300, display: 90 },   // Fetch 300, display 90
+    '6M': { fetch: 380, display: 180 },  // Fetch 380, display 180
     
     // Years - Fetch all needed data
-    '1Y': 365,   // 1 year
-    '2Y': 730,   // 2 years
-    '3Y': 1095,  // 3 years
-    '5Y': 1825,  // 5 years
+    '1Y': { fetch: 365, display: 365 },     // 1 year
+    '2Y': { fetch: 730, display: 730 },     // 2 years
+    '3Y': { fetch: 1095, display: 1095 },   // 3 years
+    '5Y': { fetch: 1825, display: 1825 },   // 5 years
     
     // Special
-    'YTD': Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24)),
-    'MAX': 9125   // 25 years
+    'YTD': (() => {
+      const ytdDays = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24));
+      return { fetch: Math.max(ytdDays + 50, 250), display: ytdDays };  // Fetch extra for indicators
+    })(),
+    'MAX': { fetch: 9125, display: 9125 }   // 25 years
   };
-  return map[timeframe] || 365;
+  return map[timeframe] || { fetch: 365, display: 365 };
 };
 
 export const TradingDashboardSimple: React.FC = () => {
@@ -1952,7 +1966,8 @@ export const TradingDashboardSimple: React.FC = () => {
             <div className="chart-wrapper">
               <TradingChart
                 symbol={selectedSymbol}
-                days={timeframeToDays(selectedTimeframe)}
+                days={timeframeToDays(selectedTimeframe).fetch}
+                displayDays={timeframeToDays(selectedTimeframe).display}
                 technicalLevels={technicalLevels}
                 onChartReady={(chart: any) => {
                   chartRef.current = chart;

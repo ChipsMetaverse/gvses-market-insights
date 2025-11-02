@@ -1,0 +1,4319 @@
+{
+  "version": "2.0",
+  "created": "2025-01-01",
+  "total_patterns": 123,
+  "sources": [
+    "Encyclopedia of Chart Patterns (Bulkowski)",
+    "The Candlestick Trading Bible",
+    "Price Action Patterns"
+  ],
+  "pattern_counts": {
+    "bulkowski_chart_patterns": 63,
+    "candlestick_patterns": 35,
+    "price_action_patterns": 25
+  },
+  "patterns": {
+    "broadening_bottom": {
+      "name": "Broadening_Bottom",
+      "aliases": [
+        "Broadening Bottom",
+        "Broadening-Bottom"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 1,
+      "statistics": {
+        "bull_market_success_rate": 18,
+        "bear_market_success_rate": null,
+        "average_rise": 27,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "AM   Page 11\n\n1 Broadening Bottoms\n\nRESULTS SNAPSHOT Upward Breakouts Appearance                      Price trend is downward leading to the formation.",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "broadening_right_angled_ascending": {
+      "name": "Broadening_Right_Angled_Ascending",
+      "aliases": [
+        "Broadening Right Angled Ascending",
+        "Broadening-Right-Angled-Ascending"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 2,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "broadening_right_angled_descending": {
+      "name": "Broadening_Right_Angled_Descending",
+      "aliases": [
+        "Broadening Right Angled Descending",
+        "Broadening-Right-Angled-Descending"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 3,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 10,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "broadening_top": {
+      "name": "Broadening_Top",
+      "aliases": [
+        "Broadening Top",
+        "Broadening-Top"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 4,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 5,
+        "average_rise": null,
+        "average_decline": 27,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Broadening Bottoms                                    11 2   Broadening Formations, Right-Angled and Ascending     28 3   Broadening Formations, Right-Angled and Descending    45 4   Broadening Tops                                       63 5   Broadening Wedges, Ascending                          81 6   Broadening Wedges, Descending                         98 7   Bump-and-Run Reversal Bottoms                        115 8   Bump-and-Run Reversal Tops                           132 9   Cup with Han",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "broadening_wedge_ascending": {
+      "name": "Broadening_Wedge_Ascending",
+      "aliases": [
+        "Broadening Wedge Ascending",
+        "Broadening-Wedge-Ascending"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 5,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "broadening_wedge_descending": {
+      "name": "Broadening_Wedge_Descending",
+      "aliases": [
+        "Broadening Wedge Descending",
+        "Broadening-Wedge-Descending"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 6,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "bump_and_run_reversal_bottom": {
+      "name": "Bump_and_Run_Reversal_Bottom",
+      "aliases": [
+        "Bump and Run Reversal Bottom",
+        "Bump-and-Run-Reversal-Bottom"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 7,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "bump_and_run_reversal_top": {
+      "name": "Bump_and_Run_Reversal_Top",
+      "aliases": [
+        "Bump and Run Reversal Top",
+        "Bump-and-Run-Reversal-Top"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 8,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "cup_with_handle": {
+      "name": "Cup_with_Handle",
+      "aliases": [
+        "Cup with Handle",
+        "Cup-with-Handle"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 9,
+      "statistics": {
+        "bull_market_success_rate": 30,
+        "bear_market_success_rate": null,
+        "average_rise": 38,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Broadening Bottoms                                    11 2   Broadening Formations, Right-Angled and Ascending     28 3   Broadening Formations, Right-Angled and Descending    45 4   Broadening Tops                                       63 5   Broadening Wedges, Ascending                          81 6   Broadening Wedges, Descending                         98 7   Bump-and-Run Reversal Bottoms                        115 8   Bump-and-Run Reversal Tops                           132 9   Cup with Han",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "cup_with_handle_inverted": {
+      "name": "Cup_with_Handle_Inverted",
+      "aliases": [
+        "Cup with Handle Inverted",
+        "Cup-with-Handle-Inverted"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 10,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "diamond_bottom": {
+      "name": "Diamond_Bottom",
+      "aliases": [
+        "Diamond Bottom",
+        "Diamond-Bottom"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 11,
+      "statistics": {
+        "bull_market_success_rate": 80,
+        "bear_market_success_rate": null,
+        "average_rise": 36,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Broadening Bottoms                                    11 2   Broadening Formations, Right-Angled and Ascending     28 3   Broadening Formations, Right-Angled and Descending    45 4   Broadening Tops                                       63 5   Broadening Wedges, Ascending                          81 6   Broadening Wedges, Descending                         98 7   Bump-and-Run Reversal Bottoms                        115 8   Bump-and-Run Reversal Tops                           132 9   Cup with Han",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "diamond_top": {
+      "name": "Diamond_Top",
+      "aliases": [
+        "Diamond Top",
+        "Diamond-Top"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 12,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 80,
+        "average_rise": null,
+        "average_decline": 36,
+        "failure_rate": 0,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Broadening Bottoms                                    11 2   Broadening Formations, Right-Angled and Ascending     28 3   Broadening Formations, Right-Angled and Descending    45 4   Broadening Tops                                       63 5   Broadening Wedges, Ascending                          81 6   Broadening Wedges, Descending                         98 7   Bump-and-Run Reversal Bottoms                        115 8   Bump-and-Run Reversal Tops                           132 9   Cup with Han",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "double_bottom_adam_adam": {
+      "name": "Double_Bottom_Adam_Adam",
+      "aliases": [
+        "Double Bottom Adam Adam",
+        "Double-Bottom-Adam-Adam"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 13,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "double_bottom_adam_eve": {
+      "name": "Double_Bottom_Adam_Eve",
+      "aliases": [
+        "Double Bottom Adam Eve",
+        "Double-Bottom-Adam-Eve"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 14,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "double_bottom_eve_adam": {
+      "name": "Double_Bottom_Eve_Adam",
+      "aliases": [
+        "Double Bottom Eve Adam",
+        "Double-Bottom-Eve-Adam"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 15,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "double_bottom_eve_eve": {
+      "name": "Double_Bottom_Eve_Eve",
+      "aliases": [
+        "Double Bottom Eve Eve",
+        "Double-Bottom-Eve-Eve"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 16,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "double_top_adam_adam": {
+      "name": "Double_Top_Adam_Adam",
+      "aliases": [
+        "Double Top Adam Adam",
+        "Double-Top-Adam-Adam"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 17,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "double_top_adam_eve": {
+      "name": "Double_Top_Adam_Eve",
+      "aliases": [
+        "Double Top Adam Eve",
+        "Double-Top-Adam-Eve"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 18,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "double_top_eve_adam": {
+      "name": "Double_Top_Eve_Adam",
+      "aliases": [
+        "Double Top Eve Adam",
+        "Double-Top-Eve-Adam"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 19,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "double_top_eve_eve": {
+      "name": "Double_Top_Eve_Eve",
+      "aliases": [
+        "Double Top Eve Eve",
+        "Double-Top-Eve-Eve"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 20,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "flag": {
+      "name": "Flag",
+      "aliases": [
+        "Flag",
+        "Flag"
+      ],
+      "category": "chart_pattern",
+      "signal": "continuation",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 21,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 25,
+        "average_rise": null,
+        "average_decline": 69,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "flag_high_and_tight": {
+      "name": "Flag_High_and_Tight",
+      "aliases": [
+        "Flag High and Tight",
+        "Flag-High-and-Tight"
+      ],
+      "category": "chart_pattern",
+      "signal": "continuation",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 22,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "gap": {
+      "name": "Gap",
+      "aliases": [
+        "Gap",
+        "Gap"
+      ],
+      "category": "price_action",
+      "signal": "neutral",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 23,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 50,
+        "average_rise": null,
+        "average_decline": 69,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "PM   Page viii\n\nviii     Preface to the Second Edition 19    Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bo",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "head_and_shoulders_bottom": {
+      "name": "Head_and_Shoulders_Bottom",
+      "aliases": [
+        "Head and Shoulders Bottom",
+        "Head-and-Shoulders-Bottom"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 24,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "PM     Page 402\n\n402       Head-and-Shoulders Bottoms, Complex Glossary and Methodology Warning: The statistics in this book are based on perfect trades.",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "head_and_shoulders_bottom_complex": {
+      "name": "Head_and_Shoulders_Bottom_Complex",
+      "aliases": [
+        "Head and Shoulders Bottom Complex",
+        "Head-and-Shoulders-Bottom-Complex"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 25,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "head_and_shoulders_top": {
+      "name": "Head_and_Shoulders_Top",
+      "aliases": [
+        "Head and Shoulders Top",
+        "Head-and-Shoulders-Top"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 26,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "head_and_shoulders_top_complex": {
+      "name": "Head_and_Shoulders_Top_Complex",
+      "aliases": [
+        "Head and Shoulders Top Complex",
+        "Head-and-Shoulders-Top-Complex"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 27,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "horn_bottom": {
+      "name": "Horn_Bottom",
+      "aliases": [
+        "Horn Bottom",
+        "Horn-Bottom"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 28,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": 39,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "horn_top": {
+      "name": "Horn_Top",
+      "aliases": [
+        "Horn Top",
+        "Horn-Top"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 29,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": 23,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "island_reversal": {
+      "name": "Island_Reversal",
+      "aliases": [
+        "Island Reversal",
+        "Island-Reversal"
+      ],
+      "category": "chart_pattern",
+      "signal": "reversal",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 30,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": 31,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "island_long": {
+      "name": "Island_Long",
+      "aliases": [
+        "Island Long",
+        "Island-Long"
+      ],
+      "category": "chart_pattern",
+      "signal": "neutral",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 31,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "measured_move_down": {
+      "name": "Measured_Move_Down",
+      "aliases": [
+        "Measured Move Down",
+        "Measured-Move-Down"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 32,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 45,
+        "average_rise": null,
+        "average_decline": 46,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "measured_move_up": {
+      "name": "Measured_Move_Up",
+      "aliases": [
+        "Measured Move Up",
+        "Measured-Move-Up"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 33,
+      "statistics": {
+        "bull_market_success_rate": 20,
+        "bear_market_success_rate": null,
+        "average_rise": 39,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "pennant": {
+      "name": "Pennant",
+      "aliases": [
+        "Pennant",
+        "Pennant"
+      ],
+      "category": "chart_pattern",
+      "signal": "continuation",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 34,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 18,
+        "average_rise": null,
+        "average_decline": 69,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "pipe_bottom": {
+      "name": "Pipe_Bottom",
+      "aliases": [
+        "Pipe Bottom",
+        "Pipe-Bottom"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 35,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": 35,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "pipe_top": {
+      "name": "Pipe_Top",
+      "aliases": [
+        "Pipe Top",
+        "Pipe-Top"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 36,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 27,
+        "average_rise": null,
+        "average_decline": 21,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "rectangle_bottom": {
+      "name": "Rectangle_Bottom",
+      "aliases": [
+        "Rectangle Bottom",
+        "Rectangle-Bottom"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 37,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": 23,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "rectangle_top": {
+      "name": "Rectangle_Top",
+      "aliases": [
+        "Rectangle Top",
+        "Rectangle-Top"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 38,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": 23,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "rounding_bottom": {
+      "name": "Rounding_Bottom",
+      "aliases": [
+        "Rounding Bottom",
+        "Rounding-Bottom"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 39,
+      "statistics": {
+        "bull_market_success_rate": 32,
+        "bear_market_success_rate": null,
+        "average_rise": 38,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "rounding_top": {
+      "name": "Rounding_Top",
+      "aliases": [
+        "Rounding Top",
+        "Rounding-Top"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 40,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": 16,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "scallop_ascending": {
+      "name": "Scallop_Ascending",
+      "aliases": [
+        "Scallop Ascending",
+        "Scallop-Ascending"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 41,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "scallop_ascending_inverted": {
+      "name": "Scallop_Ascending_Inverted",
+      "aliases": [
+        "Scallop Ascending Inverted",
+        "Scallop-Ascending-Inverted"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 42,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "scallop_descending": {
+      "name": "Scallop_Descending",
+      "aliases": [
+        "Scallop Descending",
+        "Scallop-Descending"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 43,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "scallop_descending_inverted": {
+      "name": "Scallop_Descending_Inverted",
+      "aliases": [
+        "Scallop Descending Inverted",
+        "Scallop-Descending-Inverted"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 44,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "three_falling_peaks": {
+      "name": "Three_Falling_Peaks",
+      "aliases": [
+        "Three Falling Peaks",
+        "Three-Falling-Peaks"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 45,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 20,
+        "average_rise": null,
+        "average_decline": 17,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "three_rising_valleys": {
+      "name": "Three_Rising_Valleys",
+      "aliases": [
+        "Three Rising Valleys",
+        "Three-Rising-Valleys"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 46,
+      "statistics": {
+        "bull_market_success_rate": 16,
+        "bear_market_success_rate": null,
+        "average_rise": 41,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Double Tops, Eve & Adam               307 20    Double Tops, Eve & Eve                321 21    Flags                                 335 22    Flags, High and Tight                 350 23    Gaps                                  362 24    Head-and-Shoulders Bottoms            374 25    Head-and-Shoulders Bottoms, Complex   390 26    Head-and-Shoulders Tops               405 27    Head-and-Shoulders Tops, Complex      421 28    Horn Bottoms                          438 29    Horn Tops           ",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "triangle_ascending": {
+      "name": "Triangle_Ascending",
+      "aliases": [
+        "Triangle Ascending",
+        "Triangle-Ascending"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 47,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "triangle_descending": {
+      "name": "Triangle_Descending",
+      "aliases": [
+        "Triangle Descending",
+        "Triangle-Descending"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 48,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "triangle_symmetrical": {
+      "name": "Triangle_Symmetrical",
+      "aliases": [
+        "Triangle Symmetrical",
+        "Triangle-Symmetrical"
+      ],
+      "category": "chart_pattern",
+      "signal": "neutral",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 49,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "triple_bottom": {
+      "name": "Triple_Bottom",
+      "aliases": [
+        "Triple Bottom",
+        "Triple-Bottom"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 50,
+      "statistics": {
+        "bull_market_success_rate": 2,
+        "bear_market_success_rate": null,
+        "average_rise": 41,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Contents   xvii\n\n49   Triangles, Symmetrical                    748 50   Triple Bottoms                             765 51   Triple Tops                                779 52   Wedges, Falling                           795 53   Wedges, Rising                             811\n\nPART TWO Event Patterns                        827\n\n54   Dead-Cat Bounce                            829 55   Dead-Cat Bounce, Inverted                  844 56   Earnings Surprise, Bad                     855 57   Earnings Su",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "triple_top": {
+      "name": "Triple_Top",
+      "aliases": [
+        "Triple Top",
+        "Triple-Top"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 51,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 17,
+        "average_rise": null,
+        "average_decline": 23,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Contents   xvii\n\n49   Triangles, Symmetrical                    748 50   Triple Bottoms                             765 51   Triple Tops                                779 52   Wedges, Falling                           795 53   Wedges, Rising                             811\n\nPART TWO Event Patterns                        827\n\n54   Dead-Cat Bounce                            829 55   Dead-Cat Bounce, Inverted                  844 56   Earnings Surprise, Bad                     855 57   Earnings Su",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "wedge_falling": {
+      "name": "Wedge_Falling",
+      "aliases": [
+        "Wedge Falling",
+        "Wedge-Falling"
+      ],
+      "category": "chart_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 52,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "wedge_rising": {
+      "name": "Wedge_Rising",
+      "aliases": [
+        "Wedge Rising",
+        "Wedge-Rising"
+      ],
+      "category": "chart_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 53,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "dead_cat_bounce": {
+      "name": "Dead_Cat_Bounce",
+      "aliases": [
+        "Dead Cat Bounce",
+        "Dead-Cat-Bounce"
+      ],
+      "category": "event_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 54,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "dead_cat_bounce_inverted": {
+      "name": "Dead_Cat_Bounce_Inverted",
+      "aliases": [
+        "Dead Cat Bounce Inverted",
+        "Dead-Cat-Bounce-Inverted"
+      ],
+      "category": "event_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 55,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "earnings_surprise_bad": {
+      "name": "Earnings_Surprise_Bad",
+      "aliases": [
+        "Earnings Surprise Bad",
+        "Earnings-Surprise-Bad"
+      ],
+      "category": "event_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 56,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "earnings_surprise_good": {
+      "name": "Earnings_Surprise_Good",
+      "aliases": [
+        "Earnings Surprise Good",
+        "Earnings-Surprise-Good"
+      ],
+      "category": "event_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 57,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "fda_drug_approval": {
+      "name": "FDA_Drug_Approval",
+      "aliases": [
+        "FDA Drug Approval",
+        "FDA-Drug-Approval"
+      ],
+      "category": "event_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 58,
+      "statistics": {
+        "bull_market_success_rate": 13,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Contents   xvii\n\n49   Triangles, Symmetrical                    748 50   Triple Bottoms                             765 51   Triple Tops                                779 52   Wedges, Falling                           795 53   Wedges, Rising                             811\n\nPART TWO Event Patterns                        827\n\n54   Dead-Cat Bounce                            829 55   Dead-Cat Bounce, Inverted                  844 56   Earnings Surprise, Bad                     855 57   Earnings Su",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "flag_earnings": {
+      "name": "Flag_Earnings",
+      "aliases": [
+        "Flag Earnings",
+        "Flag-Earnings"
+      ],
+      "category": "event_pattern",
+      "signal": "neutral",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 59,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "same_store_sales_bad": {
+      "name": "Same_Store_Sales_Bad",
+      "aliases": [
+        "Same Store Sales Bad",
+        "Same-Store-Sales-Bad"
+      ],
+      "category": "event_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 60,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "same_store_sales_good": {
+      "name": "Same_Store_Sales_Good",
+      "aliases": [
+        "Same Store Sales Good",
+        "Same-Store-Sales-Good"
+      ],
+      "category": "event_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 61,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "stock_downgrade": {
+      "name": "Stock_Downgrade",
+      "aliases": [
+        "Stock Downgrade",
+        "Stock-Downgrade"
+      ],
+      "category": "event_pattern",
+      "signal": "bearish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 62,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": 10,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "Contents   xvii\n\n49   Triangles, Symmetrical                    748 50   Triple Bottoms                             765 51   Triple Tops                                779 52   Wedges, Falling                           795 53   Wedges, Rising                             811\n\nPART TWO Event Patterns                        827\n\n54   Dead-Cat Bounce                            829 55   Dead-Cat Bounce, Inverted                  844 56   Earnings Surprise, Bad                     855 57   Earnings Su",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "stock_upgrade": {
+      "name": "Stock_Upgrade",
+      "aliases": [
+        "Stock Upgrade",
+        "Stock-Upgrade"
+      ],
+      "category": "event_pattern",
+      "signal": "bullish",
+      "source": "Bulkowski Encyclopedia",
+      "chapter": 63,
+      "statistics": {
+        "bull_market_success_rate": null,
+        "bear_market_success_rate": null,
+        "average_rise": null,
+        "average_decline": null,
+        "failure_rate": null,
+        "breakout_performance": null,
+        "pullback_rate": null
+      },
+      "identification": {
+        "guidelines": [],
+        "visual_characteristics": [],
+        "minimum_criteria": []
+      },
+      "trading": {
+        "entry_rules": [],
+        "exit_rules": [],
+        "stop_loss_guidance": "",
+        "target_guidance": "",
+        "risk_reward_ratio": null,
+        "typical_duration": "",
+        "best_market_conditions": []
+      },
+      "invalidation": {
+        "conditions": [],
+        "warning_signs": []
+      },
+      "bulkowski_rank": null,
+      "bulkowski_tier": null,
+      "description": "PM   Page ix\n\nPreface to the First Edition Contents   xvii\n\n49   Triangles, Symmetrical                    748 50   Triple Bottoms                             765 51   Triple Tops                                779 52   Wedges, Falling                           795 53   Wedges, Rising                             811\n\nPART TWO Event Patterns                        827\n\n54   Dead-Cat Bounce                            829 55   Dead-Cat Bounce, Inverted                  844 56   Earnings Surprise, B",
+      "psychology": "",
+      "common_mistakes": [],
+      "examples": []
+    },
+    "bullish_engulfing": {
+      "name": "Bullish_Engulfing",
+      "aliases": [
+        "Bullish Engulfing"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "bearish_engulfing": {
+      "name": "Bearish_Engulfing",
+      "aliases": [
+        "Bearish Engulfing"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "doji": {
+      "name": "Doji",
+      "aliases": [
+        "Doji"
+      ],
+      "category": "candlestick",
+      "signal": "neutral",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "THE CANDLESTICK TRADING BIBLE\n\n1 THE CANDLESTICK TRADING BIBLE\n\nContent\n\nIntroduction                                     4\n\nOverview                                         6\n\nHistory of Candlesticks                          8\n\nWhat is a Candlestick                            11\n\nCandlestick Patterns                             14 The Engulfing Bar Candlestick                   16 The Doji Candlestick Pattern                    20 The Dragon Fly Doji Pattern                     22 The Graveston"
+    },
+    "dragonfly_doji": {
+      "name": "Dragonfly_Doji",
+      "aliases": [
+        "Dragonfly Doji"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "When it is found at the bottom or at the top of a trend, it is considered as a sign that a prior trend is losing its strengths.\n\n21 THE CANDLESTICK TRADING BIBLE\n\nSo if you are already riding that trend it\u2019s time to take profits, it can also be used as an entry signal if it is combined with other technical analysis\n\n22 THE CANDLESTICK TRADING BIBLE The Dragonfly Doji pattern The Dragonfly Doji is a bullish candlestick pattern which is formed when the open high and close are the same or about the"
+    },
+    "gravestone_doji": {
+      "name": "Gravestone_Doji",
+      "aliases": [
+        "Gravestone Doji"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "THE CANDLESTICK TRADING BIBLE\n\n1 THE CANDLESTICK TRADING BIBLE\n\nContent\n\nIntroduction                                     4\n\nOverview                                         6\n\nHistory of Candlesticks                          8\n\nWhat is a Candlestick                            11\n\nCandlestick Patterns                             14 The Engulfing Bar Candlestick                   16 The Doji Candlestick Pattern                    20 The Dragon Fly Doji Pattern                     22 The Graveston"
+    },
+    "morning_star": {
+      "name": "Morning_Star",
+      "aliases": [
+        "Morning Star"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "THE CANDLESTICK TRADING BIBLE\n\n1 THE CANDLESTICK TRADING BIBLE\n\nContent\n\nIntroduction                                     4\n\nOverview                                         6\n\nHistory of Candlesticks                          8\n\nWhat is a Candlestick                            11\n\nCandlestick Patterns                             14 The Engulfing Bar Candlestick                   16 The Doji Candlestick Pattern                    20 The Dragon Fly Doji Pattern                     22 The Graveston"
+    },
+    "evening_star": {
+      "name": "Evening_Star",
+      "aliases": [
+        "Evening Star"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "THE CANDLESTICK TRADING BIBLE\n\n1 THE CANDLESTICK TRADING BIBLE\n\nContent\n\nIntroduction                                     4\n\nOverview                                         6\n\nHistory of Candlesticks                          8\n\nWhat is a Candlestick                            11\n\nCandlestick Patterns                             14 The Engulfing Bar Candlestick                   16 The Doji Candlestick Pattern                    20 The Dragon Fly Doji Pattern                     22 The Graveston"
+    },
+    "hammer": {
+      "name": "Hammer",
+      "aliases": [
+        "Hammer"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "THE CANDLESTICK TRADING BIBLE\n\n1 THE CANDLESTICK TRADING BIBLE\n\nContent\n\nIntroduction                                     4\n\nOverview                                         6\n\nHistory of Candlesticks                          8\n\nWhat is a Candlestick                            11\n\nCandlestick Patterns                             14 The Engulfing Bar Candlestick                   16 The Doji Candlestick Pattern                    20 The Dragon Fly Doji Pattern                     22 The Graveston"
+    },
+    "shooting_star": {
+      "name": "Shooting_Star",
+      "aliases": [
+        "Shooting Star"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "THE CANDLESTICK TRADING BIBLE\n\n1 THE CANDLESTICK TRADING BIBLE\n\nContent\n\nIntroduction                                     4\n\nOverview                                         6\n\nHistory of Candlesticks                          8\n\nWhat is a Candlestick                            11\n\nCandlestick Patterns                             14 The Engulfing Bar Candlestick                   16 The Doji Candlestick Pattern                    20 The Dragon Fly Doji Pattern                     22 The Graveston"
+    },
+    "bullish_harami": {
+      "name": "Bullish_Harami",
+      "aliases": [
+        "Bullish Harami"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "bearish_harami": {
+      "name": "Bearish_Harami",
+      "aliases": [
+        "Bearish Harami"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "tweezers_top": {
+      "name": "Tweezers_Top",
+      "aliases": [
+        "Tweezers Top"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "THE CANDLESTICK TRADING BIBLE\n\n1 THE CANDLESTICK TRADING BIBLE\n\nContent\n\nIntroduction                                     4\n\nOverview                                         6\n\nHistory of Candlesticks                          8\n\nWhat is a Candlestick                            11\n\nCandlestick Patterns                             14 The Engulfing Bar Candlestick                   16 The Doji Candlestick Pattern                    20 The Dragon Fly Doji Pattern                     22 The Graveston"
+    },
+    "tweezers_bottom": {
+      "name": "Tweezers_Bottom",
+      "aliases": [
+        "Tweezers Bottom"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "pin_bar": {
+      "name": "Pin_Bar",
+      "aliases": [
+        "Pin Bar"
+      ],
+      "category": "candlestick",
+      "signal": "reversal",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "THE CANDLESTICK TRADING BIBLE\n\n1 THE CANDLESTICK TRADING BIBLE\n\nContent\n\nIntroduction                                     4\n\nOverview                                         6\n\nHistory of Candlesticks                          8\n\nWhat is a Candlestick                            11\n\nCandlestick Patterns                             14 The Engulfing Bar Candlestick                   16 The Doji Candlestick Pattern                    20 The Dragon Fly Doji Pattern                     22 The Graveston"
+    },
+    "inside_bar": {
+      "name": "Inside_Bar",
+      "aliases": [
+        "Inside Bar"
+      ],
+      "category": "candlestick",
+      "signal": "continuation",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "THE CANDLESTICK TRADING BIBLE\n\n1 THE CANDLESTICK TRADING BIBLE\n\nContent\n\nIntroduction                                     4\n\nOverview                                         6\n\nHistory of Candlesticks                          8\n\nWhat is a Candlestick                            11\n\nCandlestick Patterns                             14 The Engulfing Bar Candlestick                   16 The Doji Candlestick Pattern                    20 The Dragon Fly Doji Pattern                     22 The Graveston"
+    },
+    "inside_bar_false_breakout": {
+      "name": "Inside_Bar_False_Breakout",
+      "aliases": [
+        "Inside Bar False Breakout"
+      ],
+      "category": "candlestick",
+      "signal": "reversal",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": "THE CANDLESTICK TRADING BIBLE\n\n1 THE CANDLESTICK TRADING BIBLE\n\nContent\n\nIntroduction                                     4\n\nOverview                                         6\n\nHistory of Candlesticks                          8\n\nWhat is a Candlestick                            11\n\nCandlestick Patterns                             14 The Engulfing Bar Candlestick                   16 The Doji Candlestick Pattern                    20 The Dragon Fly Doji Pattern                     22 The Graveston"
+    },
+    "marubozu_bullish": {
+      "name": "Marubozu_Bullish",
+      "aliases": [
+        "Marubozu Bullish"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "marubozu_bearish": {
+      "name": "Marubozu_Bearish",
+      "aliases": [
+        "Marubozu Bearish"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "spinning_top": {
+      "name": "Spinning_Top",
+      "aliases": [
+        "Spinning Top"
+      ],
+      "category": "candlestick",
+      "signal": "neutral",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "hanging_man": {
+      "name": "Hanging_Man",
+      "aliases": [
+        "Hanging Man"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "inverted_hammer": {
+      "name": "Inverted_Hammer",
+      "aliases": [
+        "Inverted Hammer"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "piercing_line": {
+      "name": "Piercing_Line",
+      "aliases": [
+        "Piercing Line"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "dark_cloud_cover": {
+      "name": "Dark_Cloud_Cover",
+      "aliases": [
+        "Dark Cloud Cover"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "three_white_soldiers": {
+      "name": "Three_White_Soldiers",
+      "aliases": [
+        "Three White Soldiers"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "three_black_crows": {
+      "name": "Three_Black_Crows",
+      "aliases": [
+        "Three Black Crows"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "three_inside_up": {
+      "name": "Three_Inside_Up",
+      "aliases": [
+        "Three Inside Up"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "three_inside_down": {
+      "name": "Three_Inside_Down",
+      "aliases": [
+        "Three Inside Down"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "three_outside_up": {
+      "name": "Three_Outside_Up",
+      "aliases": [
+        "Three Outside Up"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "three_outside_down": {
+      "name": "Three_Outside_Down",
+      "aliases": [
+        "Three Outside Down"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "abandoned_baby_bullish": {
+      "name": "Abandoned_Baby_Bullish",
+      "aliases": [
+        "Abandoned Baby Bullish"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "abandoned_baby_bearish": {
+      "name": "Abandoned_Baby_Bearish",
+      "aliases": [
+        "Abandoned Baby Bearish"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "kicking_bullish": {
+      "name": "Kicking_Bullish",
+      "aliases": [
+        "Kicking Bullish"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "kicking_bearish": {
+      "name": "Kicking_Bearish",
+      "aliases": [
+        "Kicking Bearish"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "belt_hold_bullish": {
+      "name": "Belt_Hold_Bullish",
+      "aliases": [
+        "Belt Hold Bullish"
+      ],
+      "category": "candlestick",
+      "signal": "bullish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "belt_hold_bearish": {
+      "name": "Belt_Hold_Bearish",
+      "aliases": [
+        "Belt Hold Bearish"
+      ],
+      "category": "candlestick",
+      "signal": "bearish",
+      "source": "Candlestick Trading Bible",
+      "statistics": {
+        "success_rate": null
+      },
+      "identification": {
+        "body_requirements": [],
+        "shadow_requirements": [],
+        "context_requirements": []
+      },
+      "trading": {
+        "entry_trigger": "",
+        "stop_loss": "",
+        "targets": [],
+        "timeframes": [
+          "all"
+        ],
+        "confluence_factors": []
+      },
+      "psychology": "",
+      "description": ""
+    },
+    "support_bounce": {
+      "name": "Support_Bounce",
+      "aliases": [
+        "Support Bounce"
+      ],
+      "category": "price_action",
+      "signal": "bullish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "resistance_rejection": {
+      "name": "Resistance_Rejection",
+      "aliases": [
+        "Resistance Rejection"
+      ],
+      "category": "price_action",
+      "signal": "bearish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "breakout_bullish": {
+      "name": "Breakout_Bullish",
+      "aliases": [
+        "Breakout Bullish"
+      ],
+      "category": "price_action",
+      "signal": "bullish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "breakdown_bearish": {
+      "name": "Breakdown_Bearish",
+      "aliases": [
+        "Breakdown Bearish"
+      ],
+      "category": "price_action",
+      "signal": "bearish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "false_breakout": {
+      "name": "False_Breakout",
+      "aliases": [
+        "False Breakout"
+      ],
+      "category": "price_action",
+      "signal": "reversal",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "fakeout": {
+      "name": "Fakeout",
+      "aliases": [
+        "Fakeout"
+      ],
+      "category": "price_action",
+      "signal": "reversal",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "market_structure_break_bullish": {
+      "name": "Market_Structure_Break_Bullish",
+      "aliases": [
+        "Market Structure Break Bullish"
+      ],
+      "category": "price_action",
+      "signal": "bullish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "market_structure_break_bearish": {
+      "name": "Market_Structure_Break_Bearish",
+      "aliases": [
+        "Market Structure Break Bearish"
+      ],
+      "category": "price_action",
+      "signal": "bearish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "swing_failure_pattern_bullish": {
+      "name": "Swing_Failure_Pattern_Bullish",
+      "aliases": [
+        "Swing Failure Pattern Bullish"
+      ],
+      "category": "price_action",
+      "signal": "bullish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "swing_failure_pattern_bearish": {
+      "name": "Swing_Failure_Pattern_Bearish",
+      "aliases": [
+        "Swing Failure Pattern Bearish"
+      ],
+      "category": "price_action",
+      "signal": "bearish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "liquidity_grab_above": {
+      "name": "Liquidity_Grab_Above",
+      "aliases": [
+        "Liquidity Grab Above"
+      ],
+      "category": "price_action",
+      "signal": "bearish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "liquidity_grab_below": {
+      "name": "Liquidity_Grab_Below",
+      "aliases": [
+        "Liquidity Grab Below"
+      ],
+      "category": "price_action",
+      "signal": "bullish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "supply_zone_test": {
+      "name": "Supply_Zone_Test",
+      "aliases": [
+        "Supply Zone Test"
+      ],
+      "category": "price_action",
+      "signal": "bearish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "demand_zone_test": {
+      "name": "Demand_Zone_Test",
+      "aliases": [
+        "Demand Zone Test"
+      ],
+      "category": "price_action",
+      "signal": "bullish",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "trend_acceleration": {
+      "name": "Trend_Acceleration",
+      "aliases": [
+        "Trend Acceleration"
+      ],
+      "category": "price_action",
+      "signal": "continuation",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "trend_exhaustion": {
+      "name": "Trend_Exhaustion",
+      "aliases": [
+        "Trend Exhaustion"
+      ],
+      "category": "price_action",
+      "signal": "reversal",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "gap_breakaway": {
+      "name": "Gap_Breakaway",
+      "aliases": [
+        "Gap Breakaway"
+      ],
+      "category": "price_action",
+      "signal": "continuation",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "gap_runaway": {
+      "name": "Gap_Runaway",
+      "aliases": [
+        "Gap Runaway"
+      ],
+      "category": "price_action",
+      "signal": "continuation",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "gap_exhaustion": {
+      "name": "Gap_Exhaustion",
+      "aliases": [
+        "Gap Exhaustion"
+      ],
+      "category": "price_action",
+      "signal": "reversal",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "gap_common": {
+      "name": "Gap_Common",
+      "aliases": [
+        "Gap Common"
+      ],
+      "category": "price_action",
+      "signal": "neutral",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "pullback_to_trend": {
+      "name": "Pullback_To_Trend",
+      "aliases": [
+        "Pullback To Trend"
+      ],
+      "category": "price_action",
+      "signal": "continuation",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "retest_of_breakout": {
+      "name": "Retest_Of_Breakout",
+      "aliases": [
+        "Retest Of Breakout"
+      ],
+      "category": "price_action",
+      "signal": "continuation",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "trendline_break": {
+      "name": "Trendline_Break",
+      "aliases": [
+        "Trendline Break"
+      ],
+      "category": "price_action",
+      "signal": "reversal",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "channel_break": {
+      "name": "Channel_Break",
+      "aliases": [
+        "Channel Break"
+      ],
+      "category": "price_action",
+      "signal": "reversal",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    },
+    "consolidation_breakout": {
+      "name": "Consolidation_Breakout",
+      "aliases": [
+        "Consolidation Breakout"
+      ],
+      "category": "price_action",
+      "signal": "breakout",
+      "source": "Price Action Patterns",
+      "statistics": {},
+      "identification": {
+        "price_structure": [],
+        "volume_characteristics": [],
+        "context": []
+      },
+      "trading": {
+        "entry": "",
+        "stop_loss": "",
+        "targets": [],
+        "risk_reward": null
+      },
+      "description": ""
+    }
+  }
+}

@@ -31,17 +31,29 @@ class VectorRetriever:
     Uses cosine similarity to find semantically similar content.
     """
     
-    def __init__(self, embedded_file: str = None):
+    def __init__(self, embedded_file: str = None, include_enhanced_patterns: bool = True):
         """
         Initialize the vector retriever.
         
         Args:
             embedded_file: Path to the embedded knowledge base JSON file
+            include_enhanced_patterns: Whether to load enhanced pattern knowledge (default: True)
         """
         if embedded_file is None:
             embedded_file = Path(__file__).parent.parent / "knowledge_base_embedded.json"
         
+        # Load main knowledge base
         self.knowledge_base = self._load_embedded_knowledge(embedded_file)
+        
+        # Load enhanced pattern knowledge base and merge
+        if include_enhanced_patterns:
+            enhanced_patterns_file = Path(__file__).parent.parent / "enhanced_pattern_knowledge_embedded.json"
+            enhanced_patterns = self._load_embedded_knowledge(enhanced_patterns_file)
+            if enhanced_patterns:
+                logger.info(f"✅ Loaded {len(enhanced_patterns)} enhanced pattern chunks")
+                self.knowledge_base.extend(enhanced_patterns)
+                logger.info(f"📊 Total knowledge base: {len(self.knowledge_base)} chunks")
+        
         self.embeddings_matrix = None
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         
@@ -69,7 +81,7 @@ class VectorRetriever:
         # Build embeddings matrix for efficient search
         if self.knowledge_base:
             self._build_embeddings_matrix()
-            logger.info(f"Loaded {len(self.knowledge_base)} embedded chunks")
+            logger.info(f"Loaded {len(self.knowledge_base)} total embedded chunks")
             logger.info(f"Embeddings matrix shape: {self.embeddings_matrix.shape}")
         
     def _load_embedded_knowledge(self, embedded_file: Path) -> List[Dict[str, Any]]:

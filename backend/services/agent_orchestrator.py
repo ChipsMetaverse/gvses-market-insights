@@ -1304,6 +1304,7 @@ class AgentOrchestrator:
         tool_results: Optional[Dict[str, Any]]
     ) -> List[str]:
         """Derive chart control commands based on query intent and tool outputs."""
+        logger.info(f"[BUILD_CMD] Building chart commands for query: '{query[:80]}...'")
         if not query:
             return []
 
@@ -1556,6 +1557,7 @@ class AgentOrchestrator:
         if not commands and needs_technical:
             commands.append("ANALYZE:TECHNICAL")
         
+        logger.info(f"[BUILD_CMD] Final command list: {len(commands)} commands - {commands}")
         return commands
     
     async def _perform_technical_analysis(
@@ -1647,6 +1649,13 @@ class AgentOrchestrator:
                 if trend_lines:
                     analysis_results['trend_lines'] = trend_lines
             
+            # Log comprehensive TA results
+            logger.info(f"[TA] Technical analysis complete for {symbol}:")
+            logger.info(f"[TA]   - Support levels: {len(analysis_results.get('support_levels', []))}")
+            logger.info(f"[TA]   - Resistance levels: {len(analysis_results.get('resistance_levels', []))}")
+            logger.info(f"[TA]   - Patterns detected: {len(analysis_results.get('patterns', []))}")
+            logger.info(f"[TA]   - Trend lines: {len(analysis_results.get('trend_lines', []))}")
+            
             return analysis_results
             
         except Exception as e:
@@ -1732,7 +1741,7 @@ class AgentOrchestrator:
         # Simple trend line: connect recent swing points
         highs = [c.get('high', 0) for c in candles]
         lows = [c.get('low', 0) for c in candles]
-        times = [i for i in range(len(candles))]  # Use indices as time
+        times = [c.get('time', 0) for c in candles]  # Use actual Unix timestamps from candles
         
         # Find two recent lows for uptrend line
         if len(lows) >= 20:
@@ -1748,9 +1757,9 @@ class AgentOrchestrator:
                     trend_lines.append({
                         'type': 'uptrend',
                         'start_price': lows[i1],
-                        'start_time': i1,
+                        'start_time': times[i1],  # Use actual timestamp from candles
                         'end_price': lows[i2],
-                        'end_time': i2
+                        'end_time': times[i2]  # Use actual timestamp from candles
                     })
         
         # Find two recent highs for downtrend line
@@ -1767,9 +1776,9 @@ class AgentOrchestrator:
                     trend_lines.append({
                         'type': 'downtrend',
                         'start_price': highs[i1],
-                        'start_time': i1,
+                        'start_time': times[i1],  # Use actual timestamp from candles
                         'end_price': highs[i2],
-                        'end_time': i2
+                        'end_time': times[i2]  # Use actual timestamp from candles
                     })
         
         return trend_lines[:2]  # Return max 2 trend lines
@@ -1781,11 +1790,14 @@ class AgentOrchestrator:
     ) -> List[str]:
         """Generate chart commands from technical analysis data."""
         commands = []
+        logger.info(f"[CHART_CMD] Generating chart commands for {symbol} from TA data")
         
         # Generate support level commands
         if 'support_levels' in technical_analysis_data:
             for level in technical_analysis_data['support_levels'][:3]:  # Max 3 levels
                 commands.append(f"SUPPORT:{level}")
+        
+        logger.debug(f"[CHART_CMD] Added {len(technical_analysis_data.get('support_levels', []))} support commands")
         
         # Generate resistance level commands  
         if 'resistance_levels' in technical_analysis_data:
@@ -1805,6 +1817,7 @@ class AgentOrchestrator:
                     f"TRENDLINE:{line['start_price']}:{line['start_time']}:"
                     f"{line['end_price']}:{line['end_time']}"
                 )
+            logger.debug(f"[CHART_CMD] Added {len(technical_analysis_data['trend_lines'][:2])} trendline commands")
         
         # Generate pattern highlight commands
         if 'patterns' in technical_analysis_data:
@@ -2535,39 +2548,91 @@ class AgentOrchestrator:
                         top_k=15  # Get comprehensive pattern definitions
                     )
 
-                    # Build enhanced context with pattern knowledge
+                    # Build enhanced context with pattern knowledge (147 patterns from enhanced KB)
                     pattern_context = f"""Analyze {symbol} {timeframe} chart for technical patterns.
 
-PATTERN TYPES TO LOOK FOR:
+COMPREHENSIVE PATTERN LIBRARY (147 PATTERNS):
 
-**Chart Patterns**:
-- Triangles (ascending, descending, symmetrical)
-- Head and shoulders (regular, inverse)
-- Double tops/bottoms, triple tops/bottoms
-- Flags and pennants
-- Wedges (rising, falling)
-- Rectangles and channels
-- Cup and handle
-- Rounding tops/bottoms
+**CANDLESTICK PATTERNS (36)**:
+Core Reversals: Bullish/Bearish Engulfing, Doji (Standard/Dragonfly/Gravestone), Hammer, Hanging Man, Inverted Hammer, Shooting Star
+Stars: Morning Star, Evening Star
+Harami: Bullish/Bearish Harami
+Cloud: Piercing Line, Dark Cloud Cover
+Soldiers/Crows: Three White Soldiers, Three Black Crows
+Inside/Outside: Three Inside Up/Down, Three Outside Up/Down
+Marubozu: Bullish/Bearish Marubozu
+Advanced: Tweezers Top/Bottom, Pin Bar, Inside Bar, Inside Bar False Breakout, Kicking Bullish/Bearish, Belt Hold Bullish/Bearish, Abandoned Baby Bullish/Bearish, Spinning Top
 
-**Candlestick Patterns**:
-- Doji (indicates indecision)
-- Engulfing (bullish/bearish)
-- Hammer and shooting star
-- Harami patterns
-- Morning/evening stars
+**BULKOWSKI CHART PATTERNS (68)**:
+Broadening: Bottom, Top, Right-Angled Ascending/Descending, Wedge Ascending/Descending (6)
+Bump & Run: Reversal Bottom/Top (2)
+Cup: With Handle, With Handle Inverted (2)
+Diamond: Bottom, Top (2)
+Double Bottom: Adam-Adam, Adam-Eve, Eve-Adam, Eve-Eve (5 inc. standard)
+Double Top: Adam-Adam, Adam-Eve, Eve-Adam, Eve-Eve (5 inc. standard)
+Flags: Standard, High and Tight, Earnings (3)
+Head & Shoulders: Top, Bottom, Complex Top, Complex Bottom, Inverse (5)
+Horn: Bottom, Top (2)
+Island: Reversal, Long (2)
+Measured Move: Down, Up (2)
+Pennant: Standard, Bullish, Bearish (3)
+Pipe: Bottom, Top (2)
+Rectangle: Bottom, Top, Range (3)
+Rounding: Bottom, Top (2)
+Scallop: Ascending, Ascending Inverted, Descending, Descending Inverted (4)
+Three Peaks/Valleys: Falling Peaks, Rising Valleys (2)
+Triangle: Ascending, Descending, Symmetrical (3)
+Triple: Bottom, Top (2)
+Wedge: Falling, Rising (2)
+Event Patterns: Dead Cat Bounce (std/inverted), Earnings Surprise (good/bad), FDA Drug Approval, Same Store Sales (good/bad), Stock Upgrade/Downgrade (10)
 
-**Price Action**:
-- Support and resistance levels
-- Breakouts and breakdowns
-- Trend reversals
-- Consolidation zones
-- Volume divergences
+**PRICE ACTION PATTERNS (33)**:
+Support/Resistance: Support Bounce, Resistance Rejection
+Breakouts: Breakout Bullish, Breakdown Bearish, False Breakout, Fakeout, Retest of Breakout, Consolidation Breakout (8)
+Market Structure: Break Bullish/Bearish, Swing Failure Bullish/Bearish (4)
+Liquidity: Grab Above/Below, Supply Zone Test, Demand Zone Test (4)
+Trend: Acceleration, Exhaustion, Pullback to Trend, Trendline Break (4)
+Channel: Up, Down, Break (3)
+Gaps: Breakaway, Runaway, Exhaustion, Common (4)
 
-KNOWLEDGE:
-{pattern_knowledge[:2000] if pattern_knowledge else "Use standard pattern recognition"}
+**CONFIDENCE SCORING (REQUIRED FOR EACH PATTERN)**:
+Rate each pattern 0-100 based on:
+1. Volume Confirmation (0-20): Strong volume on key candles/breakout
+2. Price Symmetry (0-30): Clean formation, all elements present, textbook quality
+3. S/R Alignment (0-25): Matches historical support/resistance levels
+4. Timeframe Fit (0-25): Pattern size appropriate for {timeframe} timeframe
 
-Return JSON with detected patterns, confidence levels, and key support/resistance."""
+**JSON FORMAT**:
+{{
+  "patterns": [
+    {{
+      "type": "Head_and_Shoulders_Top",
+      "category": "chart_pattern",
+      "confidence": 85,
+      "confidence_breakdown": {{
+        "volume_confirmation": 18,
+        "price_symmetry": 28,
+        "sr_alignment": 22,
+        "timeframe_fit": 17
+      }},
+      "signal": "bearish",
+      "start_time": <unix_timestamp>,
+      "end_time": <unix_timestamp>,
+      "start_price": <float>,
+      "end_price": <float>,
+      "description": "Classic head and shoulders top with declining volume on right shoulder",
+      "key_levels": {{"neckline": 285.50, "support": 280.00, "resistance": 295.00}},
+      "target": 275.00,
+      "stop_loss": 290.00
+    }}
+  ],
+  "summary": "Bearish reversal pattern forming with declining momentum"
+}}
+
+**BULKOWSKI STATISTICAL KNOWLEDGE**:
+{pattern_knowledge[:3000] if pattern_knowledge else "Apply professional pattern recognition standards"}
+
+Return JSON with ALL detected patterns (use exact pattern names from list above), confidence scores, timeframes, price levels, and actionable support/resistance zones."""
 
                     # Analyze using vision model with enhanced context
                     analysis = await self.chart_image_analyzer.analyze_chart(
@@ -2589,6 +2654,13 @@ Return JSON with detected patterns, confidence levels, and key support/resistanc
                         "symbol": symbol,
                         "timeframe": timeframe
                     }
+                    
+                    # Ensure pattern lifecycle commands are included in response
+                    if lifecycle_result and lifecycle_result.get('chart_commands'):
+                        logger.info(f"[PATTERN_LIFECYCLE] Generated {len(lifecycle_result['chart_commands'])} chart commands from pattern detection")
+                        result.setdefault('chart_commands', []).extend(
+                            lifecycle_result['chart_commands']
+                        )
             elif tool_name == "generate_daily_watchlist":
                 # Enhanced watchlist with REAL data
                 from datetime import timedelta
@@ -3533,7 +3605,10 @@ Remember to cite sources when using this knowledge and maintain educational tone
             technical_triggers = [
                 'swing', 'entry', 'exit', 'target', 'stop',
                 'support', 'resistance', 'fibonacci', 'fib', 'trend line', 'trendline',
-                'technical', 'levels', 'analysis', 'pattern', 'chart'
+                'technical', 'levels', 'analysis', 'pattern', 'chart',
+                # Add general query triggers for proactive analysis
+                'what', 'how', 'show', 'tell me', 'analyze', 'look', 'check',
+                'buy', 'sell', 'trade', 'price', 'stock', 'bullish', 'bearish'
             ]
             needs_ta = any(k in query_lower for k in technical_triggers)
             if needs_ta and tool_results is not None:
@@ -3542,6 +3617,12 @@ Remember to cite sources when using this knowledge and maintain educational tone
                     ta_data = await self._perform_technical_analysis(primary_symbol, tool_results)
                     if ta_data:
                         tool_results['technical_analysis'] = ta_data
+                        # Generate chart commands from technical analysis
+                        ta_commands = self._generate_chart_commands(ta_data, primary_symbol)
+                        if ta_commands:
+                            # Store commands for later extraction
+                            tool_results.setdefault('chart_commands', []).extend(ta_commands)
+                            logger.info(f"[TA] Generated {len(ta_commands)} chart commands from technical analysis")
         except Exception as ta_exc:
             logger.warning(f"Technical analysis integration skipped due to error: {ta_exc}")
 

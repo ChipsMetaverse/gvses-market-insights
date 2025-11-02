@@ -38,6 +38,7 @@ from services.openai_relay_server import openai_relay_server
 from chart_control_api import router as chart_control_router
 from services.agents_sdk_service import agents_sdk_service, AgentQuery, AgentResponse
 from services.database_service import get_database_service
+from websocket_server import chart_streamer  # Real-time chart command streaming
 
 # Load environment variables from .env if present
 load_dotenv()

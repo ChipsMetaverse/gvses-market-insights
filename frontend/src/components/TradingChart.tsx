@@ -12,12 +12,13 @@ import './TradingChart.css'
 
 interface TradingChartProps {
   symbol: string
-  days?: number  // Number of days of historical data to display
+  days?: number  // Number of days of historical data to FETCH (for indicators)
+  displayDays?: number  // Number of days to DISPLAY on chart
   technicalLevels?: any
   onChartReady?: (chart: any) => void
 }
 
-export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady }: TradingChartProps) {
+export function TradingChart({ symbol, days = 100, displayDays, technicalLevels, onChartReady }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -216,17 +217,13 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
     const chart = chartRef.current
     const now = Math.floor(Date.now() / 1000)
 
-    // Map days to actual timeframe filter (in seconds)
-    // If days < 200, it's a short-term view that needs filtering
+    // Use displayDays if provided, otherwise fall back to days
+    const daysToDisplay = displayDays !== undefined ? displayDays : days
+
+    // Convert display days to seconds
     const timeframeInSeconds = (() => {
-      if (days <= 1) return 86400 // 1D
-      if (days <= 5) return 5 * 86400 // 5D
-      if (days <= 30) return 30 * 86400 // 1M
-      if (days <= 180) return 180 * 86400 // 6M
-      if (days <= 365) return 365 * 86400 // 1Y
-      if (days <= 730) return 730 * 86400 // 2Y
-      if (days <= 1095) return 1095 * 86400 // 3Y
-      return null // MAX/YTD - show all data
+      if (daysToDisplay <= 0) return null // Show all data
+      return daysToDisplay * 86400 // Convert days to seconds
     })()
 
     if (timeframeInSeconds) {
@@ -240,20 +237,22 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
             from: firstValidIndex,
             to: chartData.length - 1
           })
-          console.log(`✅ Applied ${days}-day timeframe filter: showing ${chartData.length - firstValidIndex} of ${chartData.length} candles`)
+          console.log(`✅ Applied ${daysToDisplay}-day timeframe: showing ${chartData.length - firstValidIndex} of ${chartData.length} candles (fetched ${days} days for indicators)`)
         } catch (error) {
           console.warn('Failed to set visible range, falling back to fitContent:', error)
           chart.timeScale().fitContent()
         }
       } else {
         // If no data in range, show all
+        console.log(`⚠️  No data in ${daysToDisplay}-day range, showing all available data`)
         chart.timeScale().fitContent()
       }
     } else {
       // For MAX/YTD or large ranges, show all data
+      console.log(`📊 Showing all available data (${chartData.length} candles)`)
       chart.timeScale().fitContent()
     }
-  }, [days])
+  }, [days, displayDays])
 
   // Update only the chart data without recreating the chart
   const updateChartData = useCallback(async (symbolToUpdate: string) => {
@@ -515,7 +514,7 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
                 symbol,
                 timeframe: '1D',
                 image_base64: imageBase64,
-                auto_analyze: false // Don't auto-analyze, wait for voice command
+                auto_analyze: true // Enable automatic pattern detection on chart load
               })
             })
             console.log(`Chart snapshot captured for ${symbol}`)
@@ -616,11 +615,12 @@ export function TradingChart({ symbol, days = 100, technicalLevels, onChartReady
     if (chartRef.current && candlestickSeriesRef.current && !isChartDisposedRef.current) {
       const currentData = (candlestickSeriesRef.current as any).data?.()
       if (currentData && currentData.length > 0) {
-        console.log(`⏱️  Timeframe changed to ${days} days, re-applying zoom...`)
+        const daysToDisplay = displayDays !== undefined ? displayDays : days
+        console.log(`⏱️  Timeframe changed to ${daysToDisplay} days (fetching ${days} days), re-applying zoom...`)
         applyTimeframeZoom(currentData)
       }
     }
-  }, [days, applyTimeframeZoom])
+  }, [days, displayDays, applyTimeframeZoom])
   
   // Update technical levels when they change (without recreating chart)
   useEffect(() => {

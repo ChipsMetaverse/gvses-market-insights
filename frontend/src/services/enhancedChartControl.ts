@@ -734,33 +734,64 @@ class EnhancedChartControl {
   
   /**
    * Process enhanced response - combines chart commands and indicator commands
+   * FIX: Execute LOAD commands first, wait for chart to stabilize, then draw
    */
   async processEnhancedResponse(response: string): Promise<any[]> {
+    console.log('[Enhanced Chart] 🔥 processEnhancedResponse called with:', response);
     const commands = [];
     
-    // Process drawing commands first (SUPPORT:, RESISTANCE:, FIBONACCI:, TRENDLINE:)
+    // STEP 1: Extract and execute LOAD commands FIRST (to avoid race condition)
+    const loadCommands = response.match(/LOAD:\w+/g) || [];
+    console.log('[Enhanced Chart] 📍 Found LOAD commands:', loadCommands);
+    
+    if (loadCommands.length > 0) {
+      for (const loadCmd of loadCommands) {
+        console.log('[Enhanced Chart] 🔄 Executing LOAD command:', loadCmd);
+        if (this.baseService.executeCommand(loadCmd)) {
+          commands.push({ type: 'symbol_change', command: loadCmd });
+        }
+      }
+      
+      // Wait for chart to fully remount and stabilize
+      console.log('[Enhanced Chart] ⏳ Waiting 2.5 seconds for chart to stabilize after symbol change...');
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      console.log('[Enhanced Chart] ✅ Chart should be stable now, proceeding with drawings');
+    }
+    
+    // STEP 2: Process drawing commands (SUPPORT:, RESISTANCE:, FIBONACCI:, TRENDLINE:)
     const drawingCommands = this.parseDrawingCommands(response);
+    console.log('[Enhanced Chart] 📊 Parsed drawing commands:', drawingCommands);
+    
     for (const drawCmd of drawingCommands) {
+      console.log('[Enhanced Chart] 🎨 Executing drawing command:', drawCmd);
       const result = this.executeDrawingCommand(drawCmd);
+      console.log('[Enhanced Chart] ✅ Drawing command result:', result);
       if (result) {
         commands.push({ type: 'drawing', command: drawCmd, result });
       }
     }
     
-    // Process indicator commands
+    // STEP 3: Process indicator commands
     const indicatorResult = await this.processIndicatorCommand(response);
     if (indicatorResult) {
       commands.push({ type: 'indicator', result: indicatorResult });
     }
     
-    // Process standard chart commands
+    // STEP 4: Process remaining standard chart commands (excluding already-processed LOAD)
     const chartCommands = await this.baseService.parseAgentResponse(response);
     for (const command of chartCommands) {
+      // Skip LOAD commands (already processed)
+      const cmdString = typeof command === 'string' ? command : (command as any).command || String(command);
+      if (cmdString.startsWith('LOAD:')) {
+        continue;
+      }
+      
       if (this.baseService.executeCommand(command)) {
         commands.push(command);
       }
     }
     
+    console.log('[Enhanced Chart] 🎉 All commands processed, total:', commands.length);
     return commands;
   }
   
@@ -1009,9 +1040,12 @@ class EnhancedChartControl {
 
         case 'support':
           // Use DrawingPrimitive if available
+          console.log(`[Enhanced Chart] 🟢 Drawing support at ${drawing.price}, drawingPrimitive:`, !!this.drawingPrimitive);
           if (this.drawingPrimitive) {
             this.drawingPrimitive.addHorizontalLine(drawing.price, 'Support', '#4CAF50');
+            console.log(`[Enhanced Chart] ✅ Support line added via DrawingPrimitive`);
           } else {
+            console.log(`[Enhanced Chart] ⚠️ Using fallback highlightLevel for support`);
             this.highlightLevel(drawing.price, 'support');
           }
           return `Support level at ${drawing.price}`;

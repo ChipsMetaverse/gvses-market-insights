@@ -110,75 +110,235 @@ class PatternLibrary:
 
 
 PATTERN_CATEGORY_MAP = {
-    # Candlestick
+    # ========================================
+    # CANDLESTICK PATTERNS (35 patterns)
+    # ========================================
+    # Core Reversal Patterns
     "bullish_engulfing": "candlestick",
     "bearish_engulfing": "candlestick",
     "doji": "candlestick",
+    "dragonfly_doji": "candlestick",
+    "gravestone_doji": "candlestick",
     "hammer": "candlestick",
+    "hanging_man": "candlestick",
+    "inverted_hammer": "candlestick",
     "shooting_star": "candlestick",
+    
+    # Star Patterns
     "morning_star": "candlestick",
     "evening_star": "candlestick",
+    
+    # Harami Patterns
     "bullish_harami": "candlestick",
     "bearish_harami": "candlestick",
+    
+    # Cloud Patterns
     "piercing_line": "candlestick",
     "dark_cloud_cover": "candlestick",
+    
+    # Soldier & Crow Patterns
     "three_white_soldiers": "candlestick",
     "three_black_crows": "candlestick",
     
-    # Price action / micro-structure
-    "breakout": "price_action",
-    "breakdown": "price_action",
-    "support_bounce": "price_action",
-    "trend_acceleration": "price_action",
-    "gap_breakaway": "price_action",
-    
-    # Chart patterns / structure
-    "double_top": "chart_pattern",
-    "double_bottom": "chart_pattern",
-    "head_shoulders": "chart_pattern",
-    "inverse_head_shoulders": "chart_pattern",
-    "ascending_triangle": "chart_pattern",
-    "descending_triangle": "chart_pattern",
-    "symmetrical_triangle": "chart_pattern",
-    "bullish_flag": "chart_pattern",
-    "bearish_flag": "chart_pattern",
-    "bullish_pennant": "chart_pattern",
-    "bearish_pennant": "chart_pattern",
-    "falling_wedge": "chart_pattern",
-    "rising_wedge": "chart_pattern",
-    "cup_handle": "chart_pattern",
-
-    # Additional candlesticks
-    "marubozu_bullish": "candlestick",
-    "marubozu_bearish": "candlestick",
-    "spinning_top": "candlestick",
-    "dragonfly_doji": "candlestick",
-    "gravestone_doji": "candlestick",
-    "hanging_man": "candlestick",
-    "inverted_hammer": "candlestick",
+    # Inside/Outside Patterns
     "three_inside_up": "candlestick",
     "three_inside_down": "candlestick",
     "three_outside_up": "candlestick",
     "three_outside_down": "candlestick",
+    
+    # Marubozu Patterns
+    "marubozu_bullish": "candlestick",
+    "marubozu_bearish": "candlestick",
+    
+    # Other Single Candle Patterns
+    "spinning_top": "candlestick",
     "abandoned_baby": "candlestick",
-
-    # Additional price action
-    "rectangle_range": "price_action",
-    "channel_up": "price_action",
-    "channel_down": "price_action",
-    "runaway_gap": "price_action",
-    "exhaustion_gap": "price_action",
-
-    # Additional chart patterns
+    
+    # NEW: Advanced Candlestick Patterns (from Candlestick Trading Bible)
+    "tweezers_top": "candlestick",
+    "tweezers_bottom": "candlestick",
+    "pin_bar": "candlestick",
+    "inside_bar": "candlestick",
+    "inside_bar_false_breakout": "candlestick",
+    "kicking_bullish": "candlestick",
+    "kicking_bearish": "candlestick",
+    "belt_hold_bullish": "candlestick",
+    "belt_hold_bearish": "candlestick",
+    "abandoned_baby_bullish": "candlestick",
+    "abandoned_baby_bearish": "candlestick",
+    
+    # ========================================
+    # BULKOWSKI CHART PATTERNS (63 patterns)
+    # ========================================
+    # Broadening Patterns (6)
+    "broadening_bottom": "chart_pattern",
+    "broadening_top": "chart_pattern",
+    "broadening_right_angled_ascending": "chart_pattern",
+    "broadening_right_angled_descending": "chart_pattern",
+    "broadening_wedge_ascending": "chart_pattern",
+    "broadening_wedge_descending": "chart_pattern",
+    
+    # Bump and Run Reversals (2)
+    "bump_and_run_reversal_bottom": "chart_pattern",
+    "bump_and_run_reversal_top": "chart_pattern",
+    
+    # Cup Patterns (2)
+    "cup_with_handle": "chart_pattern",
+    "cup_with_handle_inverted": "chart_pattern",
+    "cup_handle": "chart_pattern",  # Alias
+    
+    # Diamond Patterns (2)
+    "diamond_bottom": "chart_pattern",
+    "diamond_top": "chart_pattern",
+    
+    # Double Bottom Variants (4)
+    "double_bottom": "chart_pattern",
+    "double_bottom_adam_adam": "chart_pattern",
+    "double_bottom_adam_eve": "chart_pattern",
+    "double_bottom_eve_adam": "chart_pattern",
+    "double_bottom_eve_eve": "chart_pattern",
+    
+    # Double Top Variants (4)
+    "double_top": "chart_pattern",
+    "double_top_adam_adam": "chart_pattern",
+    "double_top_adam_eve": "chart_pattern",
+    "double_top_eve_adam": "chart_pattern",
+    "double_top_eve_eve": "chart_pattern",
+    
+    # Flag Patterns (2)
+    "flag": "chart_pattern",
+    "bullish_flag": "chart_pattern",
+    "bearish_flag": "chart_pattern",
+    "flag_high_and_tight": "chart_pattern",
+    
+    # Head and Shoulders (4)
+    "head_and_shoulders": "chart_pattern",
+    "head_and_shoulders_top": "chart_pattern",
+    "head_and_shoulders_bottom": "chart_pattern",
+    "head_and_shoulders_bottom_complex": "chart_pattern",
+    "head_and_shoulders_top_complex": "chart_pattern",
+    "inverse_head_shoulders": "chart_pattern",  # Alias for bottom
+    
+    # Horn Patterns (2)
+    "horn_bottom": "chart_pattern",
+    "horn_top": "chart_pattern",
+    
+    # Island Patterns (2)
+    "island_reversal": "chart_pattern",
+    "island_long": "chart_pattern",
+    
+    # Measured Moves (2)
+    "measured_move_down": "chart_pattern",
+    "measured_move_up": "chart_pattern",
+    
+    # Pennant Patterns (3)
+    "pennant": "chart_pattern",
+    "bullish_pennant": "chart_pattern",
+    "bearish_pennant": "chart_pattern",
+    "pennant_bullish": "chart_pattern",  # Alias
+    "pennant_bearish": "chart_pattern",  # Alias
+    
+    # Pipe Patterns (2)
+    "pipe_bottom": "chart_pattern",
+    "pipe_top": "chart_pattern",
+    
+    # Rectangle Patterns (3)
+    "rectangle_bottom": "chart_pattern",
+    "rectangle_top": "chart_pattern",
+    "rectangle_range": "price_action",  # Horizontal channel
+    
+    # Rounding Patterns (2)
+    "rounding_bottom": "chart_pattern",
+    "rounding_top": "chart_pattern",
+    
+    # Scallop Patterns (4)
+    "scallop_ascending": "chart_pattern",
+    "scallop_ascending_inverted": "chart_pattern",
+    "scallop_descending": "chart_pattern",
+    "scallop_descending_inverted": "chart_pattern",
+    
+    # Three Peaks/Valleys (2)
+    "three_falling_peaks": "chart_pattern",
+    "three_rising_valleys": "chart_pattern",
+    
+    # Triangle Patterns (3)
+    "ascending_triangle": "chart_pattern",
+    "descending_triangle": "chart_pattern",
+    "symmetrical_triangle": "chart_pattern",
+    "triangle_ascending": "chart_pattern",  # Alias
+    "triangle_descending": "chart_pattern",  # Alias
+    "triangle_symmetrical": "chart_pattern",  # Alias
+    
+    # Triple Patterns (2)
     "triple_top": "chart_pattern",
     "triple_bottom": "chart_pattern",
-    "pennant_bullish": "chart_pattern",
-    "pennant_bearish": "chart_pattern",
-    "broadening_top": "chart_pattern",
-    "broadening_bottom": "chart_pattern",
-    "diamond_top": "chart_pattern",
-    "diamond_bottom": "chart_pattern",
-    "rounding_bottom": "chart_pattern",
+    
+    # Wedge Patterns (4)
+    "wedge_falling": "chart_pattern",
+    "wedge_rising": "chart_pattern",
+    "falling_wedge": "chart_pattern",  # Alias
+    "rising_wedge": "chart_pattern",  # Alias
+    
+    # Event Patterns (10)
+    "dead_cat_bounce": "event_pattern",
+    "dead_cat_bounce_inverted": "event_pattern",
+    "earnings_surprise_bad": "event_pattern",
+    "earnings_surprise_good": "event_pattern",
+    "fda_drug_approval": "event_pattern",
+    "flag_earnings": "event_pattern",
+    "same_store_sales_bad": "event_pattern",
+    "same_store_sales_good": "event_pattern",
+    "stock_downgrade": "event_pattern",
+    "stock_upgrade": "event_pattern",
+    
+    # ========================================
+    # PRICE ACTION PATTERNS (25 patterns)
+    # ========================================
+    # Support/Resistance
+    "support_bounce": "price_action",
+    "resistance_rejection": "price_action",
+    
+    # Breakouts/Breakdowns
+    "breakout": "price_action",
+    "breakout_bullish": "price_action",
+    "breakdown": "price_action",
+    "breakdown_bearish": "price_action",
+    "false_breakout": "price_action",
+    "fakeout": "price_action",
+    "retest_of_breakout": "price_action",
+    "consolidation_breakout": "price_action",
+    
+    # Market Structure
+    "market_structure_break_bullish": "price_action",
+    "market_structure_break_bearish": "price_action",
+    "swing_failure_pattern_bullish": "price_action",
+    "swing_failure_pattern_bearish": "price_action",
+    
+    # Liquidity & Supply/Demand
+    "liquidity_grab_above": "price_action",
+    "liquidity_grab_below": "price_action",
+    "supply_zone_test": "price_action",
+    "demand_zone_test": "price_action",
+    
+    # Trend Patterns
+    "trend_acceleration": "price_action",
+    "trend_exhaustion": "price_action",
+    "pullback_to_trend": "price_action",
+    "trendline_break": "price_action",
+    
+    # Channel Patterns
+    "channel_up": "price_action",
+    "channel_down": "price_action",
+    "channel_break": "price_action",
+    
+    # Gap Patterns
+    "gap": "price_action",
+    "gap_breakaway": "price_action",
+    "gap_runaway": "price_action",
+    "gap_exhaustion": "price_action",
+    "gap_common": "price_action",
+    "runaway_gap": "price_action",  # Alias
+    "exhaustion_gap": "price_action",  # Alias
 }
 
 @dataclass
@@ -285,25 +445,87 @@ class PatternDetector:
     def _enrich_with_knowledge(self, pattern: Pattern) -> Pattern:
         """
         Enrich pattern with knowledge base guidance (entry, stop-loss, targets, risk notes).
-        Validates against recognition rules and adjusts confidence if needed.
-        If pattern not in knowledge base, returns pattern unchanged (allows all patterns through).
+        Now integrates with enhanced_pattern_knowledge_base.json (123 patterns).
+        
+        Adds:
+        - Bulkowski success rates (bull/bear market)
+        - Risk/reward ratios
+        - Trading playbooks (entry/exit rules)
+        - Invalidation conditions
+        - Bulkowski rank/tier
         """
+        # Try enhanced knowledge base first (123 patterns with Bulkowski stats)
+        try:
+            from enhanced_knowledge_loader import get_enhanced_knowledge
+            enhanced_kb = get_enhanced_knowledge()
+            
+            if enhanced_kb.loaded:
+                # Enrich pattern with enhanced knowledge base
+                pattern_dict = pattern.__dict__.copy()
+                enriched_dict = enhanced_kb.enrich_pattern_dict(pattern_dict)
+                
+                # Update pattern object with enriched data
+                if "bulkowski_stats" in enriched_dict:
+                    stats = enriched_dict["bulkowski_stats"]
+                    pattern.success_rate = stats.get("bull_market_success_rate") or stats.get("bear_market_success_rate")
+                
+                if "entry_guidance" in enriched_dict:
+                    pattern.entry_guidance = enriched_dict["entry_guidance"]
+                
+                if "stop_loss_guidance" in enriched_dict:
+                    pattern.stop_loss_guidance = enriched_dict["stop_loss_guidance"]
+                
+                if "target_guidance" in enriched_dict:
+                    pattern.targets_guidance = [enriched_dict["target_guidance"]]
+                
+                if "risk_reward_ratio" in enriched_dict:
+                    pattern.risk_reward_ratio = enriched_dict["risk_reward_ratio"]
+                
+                if "typical_duration" in enriched_dict:
+                    pattern.typical_duration = enriched_dict["typical_duration"]
+                
+                if "strategy_notes" in enriched_dict:
+                    pattern.strategy_notes = enriched_dict["strategy_notes"]
+                
+                if "bulkowski_rank" in enriched_dict and enriched_dict["bulkowski_rank"]:
+                    pattern.metadata = pattern.metadata or {}
+                    pattern.metadata["bulkowski_rank"] = enriched_dict["bulkowski_rank"]
+                    pattern.metadata["bulkowski_tier"] = enriched_dict.get("bulkowski_tier") or enriched_dict["bulkowski_rank"]
+                
+                if "invalidation_conditions" in enriched_dict:
+                    pattern.metadata = pattern.metadata or {}
+                    pattern.metadata["invalidation_conditions"] = enriched_dict["invalidation_conditions"]
+                
+                if "warning_signs" in enriched_dict:
+                    pattern.metadata = pattern.metadata or {}
+                    pattern.metadata["warning_signs"] = enriched_dict["warning_signs"]
+                
+                logger.debug(f"✅ Enriched {pattern.pattern_type} with enhanced knowledge base")
+                
+                # If enhanced KB enriched the pattern, return it
+                if "bulkowski_stats" in enriched_dict or "entry_guidance" in enriched_dict:
+                    return pattern
+        
+        except ImportError:
+            logger.debug("Enhanced knowledge loader not available, using legacy knowledge library")
+        except Exception as e:
+            logger.warning(f"Failed to use enhanced knowledge base: {e}")
+        
+        # Fallback to legacy knowledge library if available
         if not self.use_knowledge_base or not self._knowledge_library:
             return pattern
         
         # Map pattern_type to knowledge base pattern_id
-        # Some patterns use underscores, some use different conventions
         kb_pattern_id = pattern.pattern_type
         if kb_pattern_id == "head_shoulders":
             kb_pattern_id = "head_and_shoulders"
         elif kb_pattern_id == "cup_handle":
             kb_pattern_id = "cup_and_handle"
         
-        # Check if pattern exists in knowledge base
+        # Check if pattern exists in legacy knowledge base
         kb_pattern = self._knowledge_library.get_pattern(kb_pattern_id)
         if not kb_pattern:
-            # Pattern not in knowledge base - allow through with original confidence
-            logger.debug(f"Pattern {kb_pattern_id} not in knowledge base, keeping original confidence")
+            logger.debug(f"Pattern {kb_pattern_id} not in legacy knowledge base")
             return pattern
         
         # Validate against knowledge base rules
@@ -314,7 +536,6 @@ class PatternDetector:
         )
         
         if not is_valid:
-            # Pattern didn't pass knowledge validation, reduce confidence significantly
             pattern.confidence = max(0, pattern.confidence - 20)
             pattern.knowledge_reasoning = f"Failed validation: {reasoning}"
             return pattern
@@ -323,7 +544,7 @@ class PatternDetector:
         pattern.confidence = min(100, pattern.confidence + conf_adj)
         pattern.knowledge_reasoning = reasoning
         
-        # Enrich with trading playbook
+        # Enrich with trading playbook from legacy KB
         playbook = self._knowledge_library.get_trading_playbook(kb_pattern_id)
         if playbook:
             pattern.entry_guidance = playbook.get("entry")
@@ -331,10 +552,8 @@ class PatternDetector:
             pattern.targets_guidance = playbook.get("targets", [])
             pattern.risk_notes = playbook.get("risk_notes")
             
-            # If playbook has timeframe_bias, add to strategy_notes
             if playbook.get("timeframe_bias"):
-                bias = playbook["timeframe_bias"]
-                pattern.strategy_notes = f"Best timeframe: {bias}"
+                pattern.strategy_notes = f"Best timeframe: {playbook['timeframe_bias']}"
         
         return pattern
         
