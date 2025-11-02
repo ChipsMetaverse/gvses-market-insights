@@ -1149,7 +1149,7 @@
 }
 
 .level-val.qe {
-  color: #00c851;
+  color: #ef4444;  /* Red for Sell High */
 }
 
 .level-val.st {

@@ -297,7 +297,7 @@ export function TradingChart({ symbol, days = 100, displayDays, technicalLevels,
       if (technicalLevels?.sell_high_level) {
         const line = candlestickSeriesRef.current.createPriceLine({
           price: technicalLevels.sell_high_level,
-          color: '#10b981',  // Green for sell high
+          color: '#ef4444',  // Red for sell high
           lineWidth: 2,
           lineStyle: 2,
           axisLabelVisible: true,
@@ -987,9 +987,9 @@ export function TradingChart({ symbol, days = 100, displayDays, technicalLevels,
                 top: `${levelPositions.sell_high}px`,
                 transform: 'translateY(-50%)',
                 backgroundColor: 'rgba(255, 255, 255, 0.75)',
-                color: '#10b981',
+                color: '#ef4444',
                 padding: '2px 8px',
-                border: '1px solid #10b981',
+                border: '1px solid #ef4444',
                 borderRadius: '4px',
                 fontSize: '11px',
                 fontWeight: '700',
