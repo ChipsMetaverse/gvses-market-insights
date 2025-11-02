@@ -2030,6 +2030,158 @@ async def create_chatkit_session(request: ChatKitSessionRequest):
         logger.error(f"ChatKit session creation error: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+# ============================================================================
+# ChatKit Custom Action Endpoints for Agent Builder Integration
+# ============================================================================
+
+from services.session_store import SessionStore
+
+class UpdateChartContextRequest(BaseModel):
+    """Request to update chart context for a ChatKit session"""
+    session_id: str
+    symbol: str
+    timeframe: str
+    snapshot_id: Optional[str] = None
+
+class ChatKitChartActionRequest(BaseModel):
+    """Request from Agent Builder custom action"""
+    query: str
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    conversation_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+class ChatKitChartActionResponse(BaseModel):
+    """Response to Agent Builder custom action"""
+    success: bool
+    text: str
+    chart_commands: List[str] = []
+    data: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+@app.post("/api/chatkit/update-context")
+async def update_chart_context(request: UpdateChartContextRequest):
+    """
+    Update chart context for a ChatKit session
+    
+    Called by frontend when chart changes (symbol, timeframe, snapshot)
+    Stores context in session store so custom actions can retrieve it
+    """
+    try:
+        logger.info(f"[CHATKIT UPDATE] Session {request.session_id}: {request.symbol} @ {request.timeframe}")
+        
+        SessionStore.set_chart_context(
+            request.session_id,
+            {
+                'symbol': request.symbol,
+                'timeframe': request.timeframe,
+                'snapshot_id': request.snapshot_id,
+                'timestamp': datetime.now().isoformat()
+            }
+        )
+        
+        return {
+            "success": True,
+            "session_id": request.session_id,
+            "updated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"[CHATKIT UPDATE] Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update context: {str(e)}")
+
+@app.post("/api/chatkit/chart-action", response_model=ChatKitChartActionResponse)
+async def chatkit_chart_action(request: ChatKitChartActionRequest):
+    """
+    Custom action endpoint for Agent Builder
+    
+    Handles chart control, pattern detection, drawing commands
+    Called by Agent Builder's "Gvses" agent when chart-related queries detected
+    
+    Flow:
+    1. Receive query from Agent Builder custom action
+    2. Retrieve chart context from session store
+    3. Call agent orchestrator with chart context
+    4. Extract drawing commands from response
+    5. Return formatted response with commands
+    """
+    try:
+        logger.info(f"[CHATKIT ACTION] Query: {request.query[:100]}...")
+        logger.info(f"[CHATKIT ACTION] Session: {request.session_id}, User: {request.user_id}")
+        
+        # Try to get chart context from session store
+        chart_context = None
+        if request.session_id:
+            chart_context = SessionStore.get_chart_context(request.session_id)
+            if chart_context:
+                logger.info(f"[CHATKIT ACTION] Retrieved chart context from session: {chart_context}")
+        
+        # Fallback: check if passed in metadata
+        if not chart_context and request.metadata and 'chart_context' in request.metadata:
+            chart_context = request.metadata['chart_context']
+            logger.info(f"[CHATKIT ACTION] Using chart context from metadata: {chart_context}")
+        
+        # Last resort: extract symbol from query
+        if not chart_context:
+            import re
+            symbol_match = re.search(r'\b([A-Z]{2,5})\b', request.query)
+            if symbol_match:
+                chart_context = {
+                    'symbol': symbol_match.group(1),
+                    'timeframe': '1D',  # default
+                    'source': 'extracted_from_query'
+                }
+                logger.info(f"[CHATKIT ACTION] Extracted chart context from query: {chart_context}")
+            else:
+                logger.warning(f"[CHATKIT ACTION] No chart context available - will ask user for symbol")
+        
+        # Call agent orchestrator
+        from services.agent_orchestrator import AgentOrchestrator
+        orchestrator = AgentOrchestrator()
+        
+        result = await orchestrator.process_query(
+            query=request.query,
+            conversation_history=[],
+            chart_context=chart_context
+        )
+        
+        # Format response for Agent Builder
+        response_text = result.get("text", "")
+        chart_commands = result.get("chart_commands", [])
+        tools_used = result.get("tools_used", [])
+        
+        logger.info(f"[CHATKIT ACTION] Generated {len(chart_commands)} chart commands, used {len(tools_used)} tools")
+        
+        # Embed commands in response text so frontend can parse them
+        if chart_commands:
+            command_text = "\n\n" + "\n".join(chart_commands)
+            response_text += command_text
+            logger.info(f"[CHATKIT ACTION] Embedded commands in response")
+        
+        return ChatKitChartActionResponse(
+            success=True,
+            text=response_text,
+            chart_commands=chart_commands,
+            data={
+                'tools_used': tools_used,
+                'chart_context': chart_context,
+                'timestamp': datetime.now().isoformat()
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"[CHATKIT ACTION] Error: {e}", exc_info=True)
+        return ChatKitChartActionResponse(
+            success=False,
+            text=f"I encountered an error processing your chart request: {str(e)}",
+            chart_commands=[],
+            error=str(e)
+        )
+
+# ============================================================================
+# End ChatKit Custom Action Endpoints
+# ============================================================================
+
 # Agent Orchestration endpoint for direct frontend integration
 @app.post("/api/agent/orchestrate")
 async def agent_orchestrate(request: dict):

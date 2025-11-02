@@ -1,0 +1,50 @@
+{
+  "name": "chart_control",
+  "description": "Control charts, draw support/resistance, detect patterns, and perform technical analysis. Use this when user asks about: 'draw support and resistance', 'what patterns do you see?', 'analyze this chart', 'show trendlines', 'detect patterns', or any chart-related technical analysis.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "The user's chart-related query"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Current ChatKit session ID (if available)"
+      },
+      "metadata": {
+        "type": "object",
+        "description": "Additional context",
+        "properties": {
+          "chart_context": {
+            "type": "object",
+            "description": "Current chart state",
+            "properties": {
+              "symbol": {
+                "type": "string",
+                "description": "Stock ticker symbol (e.g., TSLA, AAPL)"
+              },
+              "timeframe": {
+                "type": "string",
+                "description": "Chart timeframe (e.g., 1D, 1H, 5m)"
+              },
+              "snapshot_id": {
+                "type": "string",
+                "description": "Chart snapshot ID if available"
+              }
+            }
+          }
+        }
+      }
+    },
+    "required": ["query"]
+  },
+  "endpoint": {
+    "url": "https://gvses-market-insights.fly.dev/api/chatkit/chart-action",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}
+

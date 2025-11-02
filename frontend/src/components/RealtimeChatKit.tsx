@@ -33,6 +33,7 @@ export function RealtimeChatKit({
   const [isLoading, setIsLoading] = useState(true);
   const [chatKitControl, setChatKitControl] = useState<any>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   
   // Initialize data persistence
   const {
@@ -103,9 +104,17 @@ export function RealtimeChatKit({
             throw new Error(`Session failed: ${res.status} ${await res.text()}`);
           }
 
-          const { client_secret } = await res.json();
+          const { client_secret, session_id } = await res.json();
           localStorage.setItem('chatkit_device_id', deviceId);
-          console.log('✅ ChatKit session established with Agent Builder');
+          
+          // Store session ID for chart context updates
+          if (session_id) {
+            setSessionId(session_id);
+            console.log('✅ ChatKit session established with Agent Builder, session_id:', session_id);
+          } else {
+            console.log('✅ ChatKit session established with Agent Builder');
+          }
+          
           return client_secret;
         } catch (err) {
           console.error('❌ ChatKit session error:', err);
@@ -189,6 +198,41 @@ export function RealtimeChatKit({
       setIsLoading(false);
     }
   }, [chatKitHookResult]);
+
+  // Update chart context whenever symbol, timeframe, or snapshotId changes
+  useEffect(() => {
+    const updateChartContext = async () => {
+      if (!sessionId || !symbol) {
+        // Need both session ID and symbol to update context
+        return;
+      }
+
+      try {
+        const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        
+        const response = await fetch(`${backendUrl}/api/chatkit/update-context`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            symbol: symbol,
+            timeframe: timeframe || '1D',
+            snapshot_id: snapshotId || null
+          })
+        });
+
+        if (response.ok) {
+          console.log(`✅ [ChatKit] Updated chart context: ${symbol} @ ${timeframe || '1D'}`);
+        } else {
+          console.error(`❌ [ChatKit] Failed to update chart context: ${response.status}`);
+        }
+      } catch (error) {
+        console.error('❌ [ChatKit] Error updating chart context:', error);
+      }
+    };
+
+    updateChartContext();
+  }, [sessionId, symbol, timeframe, snapshotId]);
 
   // Voice connection handlers
   const handleVoiceConnect = useCallback(async () => {
