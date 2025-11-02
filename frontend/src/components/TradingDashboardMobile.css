@@ -3,6 +3,17 @@
     height: 100%;
     min-height: 100vh;
     overflow: hidden;
+    touch-action: pan-y pinch-zoom;  /* Allow vertical scroll and pinch zoom on chart only */
+    -webkit-overflow-scrolling: touch;  /* Smooth scrolling on iOS */
+    position: relative;
+  }
+
+  /* Prevent pull-to-refresh and overscroll on mobile */
+  html,
+  body {
+    overscroll-behavior: none;
+    touch-action: pan-y;
+    -webkit-touch-callout: none;  /* Disable iOS callout */
   }
 
   .dashboard-header-with-tickers {
@@ -93,24 +104,28 @@
     flex: 0 0 60%;
     min-height: 300px;
     overflow: hidden;
+    touch-action: pan-x pan-y pinch-zoom;  /* Allow all gestures on chart */
   }
 
   .mobile-chat-section {
     flex: 1 1 40%;
     min-height: 200px;
     max-height: 45%;
-    overflow: hidden;
+    overflow: visible;  /* Changed from hidden to visible */
     display: flex;
     flex-direction: column;
     background: #ffffff;
     border-top: 2px solid rgba(148, 163, 184, 0.2);
     padding: 12px;
+    padding-bottom: 70px;  /* Add space for tab bar */
+    touch-action: pan-y;  /* Only allow vertical scrolling in chat */
   }
 
   .mobile-chat-section .voice-conversation-section {
     height: 100%;
     display: flex;
     flex-direction: column;
+    overflow: visible;  /* Ensure input is always visible */
   }
 
   .mobile-chat-section .panel-title {
@@ -120,17 +135,28 @@
     margin-bottom: 8px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    flex-shrink: 0;  /* Don't let title shrink */
   }
 
   .mobile-chat-section .conversation-messages-compact {
-    flex: 1;
+    flex: 1 1 auto;
     overflow-y: auto;
+    overflow-x: hidden;
     margin-bottom: 8px;
+    min-height: 100px;  /* Ensure messages area has minimum space */
+    max-height: calc(100% - 120px);  /* Leave room for input */
+    -webkit-overflow-scrolling: touch;  /* Smooth scrolling on iOS */
+    overscroll-behavior: contain;  /* Prevent scroll chaining */
   }
 
   .mobile-chat-section .voice-input-container {
     flex-shrink: 0;
+    flex-grow: 0;
     padding-top: 0;
+    position: relative;
+    z-index: 5;  /* Ensure input is above other elements */
+    background: #ffffff;  /* Solid background so it's not transparent */
+    margin-top: auto;  /* Push to bottom */
   }
 
   .voice-panel-right {
@@ -160,10 +186,12 @@
     right: 0;
     bottom: 0;
     padding: 10px 16px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));  /* iOS safe area */
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(12px);
     border-top: 1px solid rgba(148, 163, 184, 0.2);
     z-index: 10;
+    touch-action: none;  /* Disable gestures on tab bar */
   }
 
   .mobile-tab-bar__list {

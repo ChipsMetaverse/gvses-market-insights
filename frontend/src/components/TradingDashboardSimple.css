@@ -2460,14 +2460,17 @@
 .voice-text-input {
   flex: 1;
   padding: 10px 14px;
+  min-height: 44px;  /* Minimum touch target for mobile */
   background: #f8f9fa;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 16px;  /* Prevent iOS zoom on focus */
   color: #1f2937;
   outline: none;
   transition: all 0.2s;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-appearance: none;  /* Remove iOS styling */
+  appearance: none;
 }
 
 .voice-text-input:focus {
@@ -2487,11 +2490,14 @@
 }
 
 .voice-send-button {
-  width: 40px;
-  height: 40px;
+  width: 44px;  /* Minimum touch target */
+  height: 44px;  /* Minimum touch target */
+  min-width: 44px;  /* Ensure it doesn't shrink */
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;  /* Don't let button shrink */
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
   border-radius: 8px;
