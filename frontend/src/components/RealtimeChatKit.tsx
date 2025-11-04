@@ -70,7 +70,12 @@ export function RealtimeChatKit({
       
       // Handle chart commands if present
       if (agentMessage.data?.chart_commands) {
-        onChartCommand?.(agentMessage.data.chart_commands);
+        // Normalize chart_commands to string (Agent Builder returns array, but callback expects string)
+        const commands = Array.isArray(agentMessage.data.chart_commands)
+          ? agentMessage.data.chart_commands.join(' ')
+          : agentMessage.data.chart_commands;
+        console.log('[ChatKit] Processing chart_commands:', { raw: agentMessage.data.chart_commands, normalized: commands });
+        onChartCommand?.(commands);
       }
     },
     onError: (errorMsg) => {

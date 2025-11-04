@@ -2099,7 +2099,13 @@ export const TradingDashboardSimple: React.FC = () => {
                   }}
                   onChartCommand={(command) => {
                     console.log('ChatKit chart command:', command);
-                    enhancedChartControl.processEnhancedResponse(command).catch(err => {
+                    
+                    // Defensive: handle both array and string formats
+                    const commandString = Array.isArray(command) 
+                      ? command.join(' ') 
+                      : command;
+                    
+                    enhancedChartControl.processEnhancedResponse(commandString).catch(err => {
                       console.error('Failed to execute ChatKit chart command:', err);
                     });
                   }}
@@ -2199,7 +2205,13 @@ export const TradingDashboardSimple: React.FC = () => {
               }}
               onChartCommand={(command) => {
                 console.log('ChatKit chart command:', command);
-                enhancedChartControl.processEnhancedResponse(command).catch(err => {
+                
+                // Defensive: handle both array and string formats
+                const commandString = Array.isArray(command) 
+                  ? command.join(' ') 
+                  : command;
+                
+                enhancedChartControl.processEnhancedResponse(commandString).catch(err => {
                   console.error('Failed to execute ChatKit chart command:', err);
                 });
               }}
