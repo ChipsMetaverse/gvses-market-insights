@@ -233,8 +233,14 @@ class MarketMCPSSEServer {
           case 'toggle_chart_indicator':
             return await this.toggleChartIndicator(args);
 
+          case 'highlight_chart_pattern':
+            return await this.highlightChartPattern(args);
+
           case 'capture_chart_snapshot':
             return await this.captureChartSnapshot(args);
+
+          case 'set_chart_style':
+            return await this.setChartStyle(args);
             
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -491,189 +497,188 @@ class MarketMCPSSEServer {
     }
   }
 
-  // Chart Control Methods for Agent Builder
+  // Chart Control Methods - Forward to Backend Agent Orchestrator
   async changeChartSymbol(args) {
     const { symbol } = args;
     
-    try {
-      // Call the headless chart service to change symbol
-      const backendUrl = process.env.BACKEND_URL || 'https://gvses-ai-market-assistant.fly.dev';
-      const response = await fetch(`${backendUrl}/api/chart/change-symbol`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol: symbol.toUpperCase() })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Chart service error: ${response.statusText}`);
+    // ✅ FIXED: Directly return correct format without calling backend
+    // This ensures the symbol is always included in the LOAD command
+    console.error('[CHART CONTROL] changeChartSymbol:', {
+      symbol: symbol.toUpperCase(),
+      command: `LOAD:${symbol.toUpperCase()}`
+    });
+    
+    return {
+      content: [{
+        type: 'text',
+        text: `Switched to ${symbol.toUpperCase()} chart`
+      }],
+      _meta: {
+        chart_commands: [`LOAD:${symbol.toUpperCase()}`],
+        action: 'change_symbol',
+        symbol: symbol.toUpperCase()
       }
-      
-      const result = await response.json();
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            action: 'change_symbol',
-            symbol: symbol.toUpperCase(),
-            status: 'success',
-            message: `Chart symbol changed to ${symbol.toUpperCase()}`,
-            timestamp: new Date().toISOString(),
-            ...result
-          }, null, 2)
-        }]
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            action: 'change_symbol',
-            symbol: symbol.toUpperCase(),
-            status: 'error',
-            message: `Failed to change chart symbol: ${error.message}`,
-            timestamp: new Date().toISOString()
-          }, null, 2)
-        }]
-      };
-    }
+    };
   }
 
   async setChartTimeframe(args) {
     const { timeframe } = args;
     
-    try {
-      const backendUrl = process.env.BACKEND_URL || 'https://gvses-ai-market-assistant.fly.dev';
-      const response = await fetch(`${backendUrl}/api/chart/set-timeframe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timeframe })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Chart service error: ${response.statusText}`);
+    // Simple timeframe change - no need for backend orchestrator
+    return {
+      content: [{
+        type: 'text',
+        text: `Chart timeframe set to ${timeframe}`
+      }],
+      _meta: {
+        chart_commands: [`TIMEFRAME:${timeframe}`],
+        action: 'set_timeframe',
+        timeframe
       }
-      
-      const result = await response.json();
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            action: 'set_timeframe',
-            timeframe,
-            status: 'success',
-            message: `Chart timeframe set to ${timeframe}`,
-            timestamp: new Date().toISOString(),
-            ...result
-          }, null, 2)
-        }]
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            action: 'set_timeframe',
-            timeframe,
-            status: 'error',
-            message: `Failed to set chart timeframe: ${error.message}`,
-            timestamp: new Date().toISOString()
-          }, null, 2)
-        }]
-      };
-    }
+    };
   }
 
   async toggleChartIndicator(args) {
-    const { indicator, enabled, period } = args;
+    const { indicator, enabled, params } = args;
+    
+    // Simple indicator toggle
+    const command = enabled ? 
+      `INDICATOR_ON:${indicator}${params ? `:${JSON.stringify(params)}` : ''}` :
+      `INDICATOR_OFF:${indicator}`;
+    
+    return {
+      content: [{
+        type: 'text',
+        text: `${indicator.toUpperCase()} indicator ${enabled ? 'enabled' : 'disabled'}`
+      }],
+      _meta: {
+        chart_commands: [command],
+        action: 'toggle_indicator',
+        indicator,
+        enabled,
+        params
+      }
+    };
+  }
+
+  async captureChartSnapshot(args) {
+    const { symbol, includeIndicators = true } = args;
+    
+    // Request chart snapshot
+    return {
+      content: [{
+        type: 'text',
+        text: `Chart snapshot captured${symbol ? ` for ${symbol.toUpperCase()}` : ''}`
+      }],
+      _meta: {
+        chart_commands: ['SNAPSHOT'],
+        action: 'capture_snapshot',
+        symbol,
+        includeIndicators
+      }
+    };
+  }
+
+  // NEW: Add highlight_chart_pattern method
+  async highlightChartPattern(args) {
+    const { patternType, coordinates, label } = args;
     
     try {
-      const backendUrl = process.env.BACKEND_URL || 'https://gvses-ai-market-assistant.fly.dev';
-      const response = await fetch(`${backendUrl}/api/chart/toggle-indicator`, {
+      // For pattern highlighting and drawing, use the backend agent orchestrator
+      const backendUrl = process.env.BACKEND_URL || 'https://gvses-market-insights.fly.dev';
+      
+      // Construct a natural language query based on pattern type
+      let query = '';
+      if (patternType === 'support' || patternType === 'resistance') {
+        query = `Draw ${patternType} levels on the chart`;
+      } else if (patternType === 'trendline') {
+        query = `Draw trendlines on the chart`;
+      } else if (patternType === 'fibonacci') {
+        query = `Draw Fibonacci retracement levels`;
+      } else if (patternType === 'pattern') {
+        query = `Highlight chart patterns and key levels`;
+      } else {
+        query = `Analyze chart and draw key technical levels`;
+      }
+      
+      if (label) {
+        query += ` with focus on ${label}`;
+      }
+      
+      const response = await fetch(`${backendUrl}/api/chatkit/chart-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ indicator, enabled, period })
+        body: JSON.stringify({
+          query,
+          session_id: this.currentSessionId || 'mcp-session',
+          metadata: { patternType, coordinates, label }
+        })
       });
       
       if (!response.ok) {
-        throw new Error(`Chart service error: ${response.statusText}`);
+        throw new Error(`Backend error: ${response.statusText}`);
       }
       
       const result = await response.json();
+      console.error('[CHART CONTROL] highlightChartPattern response:', {
+        patternType,
+        commands: result.chart_commands?.length || 0,
+        success: result.success
+      });
+      
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify({
-            action: 'toggle_indicator',
-            indicator,
-            enabled,
-            period,
-            status: 'success',
-            message: `${indicator.toUpperCase()} indicator ${enabled ? 'enabled' : 'disabled'}`,
-            timestamp: new Date().toISOString(),
-            ...result
-          }, null, 2)
-        }]
+          text: result.text || `Highlighted ${patternType} on chart`
+        }],
+        _meta: {
+          chart_commands: result.chart_commands || [],
+          action: 'highlight_pattern',
+          patternType,
+          coordinates,
+          label
+        }
       };
     } catch (error) {
+      console.error('[CHART CONTROL] highlightChartPattern error:', error);
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify({
-            action: 'toggle_indicator',
-            indicator,
-            enabled,
-            status: 'error',
-            message: `Failed to toggle indicator: ${error.message}`,
-            timestamp: new Date().toISOString()
-          }, null, 2)
-        }]
+          text: `Pattern highlighting requested: ${patternType}`
+        }],
+        _meta: {
+          chart_commands: [],
+          action: 'highlight_pattern',
+          patternType,
+          error: error.message
+        }
       };
     }
   }
 
-  async captureChartSnapshot(args) {
-    const { width = 1200, height = 800, format = 'png' } = args;
+  async setChartStyle(args) {
+    const { chartType, theme } = args;
     
-    try {
-      const backendUrl = process.env.BACKEND_URL || 'https://gvses-ai-market-assistant.fly.dev';
-      const response = await fetch(`${backendUrl}/api/chart/capture-snapshot`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ include_data: args.include_data || false })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Chart service error: ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            action: 'capture_snapshot',
-            dimensions: { width, height },
-            format,
-            status: 'success',
-            message: 'Chart snapshot captured successfully',
-            timestamp: new Date().toISOString(),
-            ...result
-          }, null, 2)
-        }]
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            action: 'capture_snapshot',
-            status: 'error',
-            message: `Failed to capture chart snapshot: ${error.message}`,
-            timestamp: new Date().toISOString()
-          }, null, 2)
-        }]
-      };
+    const commands = [];
+    if (chartType) {
+      commands.push(`CHART_TYPE:${chartType}`);
     }
+    if (theme) {
+      commands.push(`THEME:${theme}`);
+    }
+    
+    return {
+      content: [{
+        type: 'text',
+        text: `Chart style updated: ${chartType || 'same type'}, ${theme || 'same theme'}`
+      }],
+      _meta: {
+        chart_commands: commands,
+        action: 'set_chart_style',
+        chartType,
+        theme
+      }
+    };
   }
 
   /**
