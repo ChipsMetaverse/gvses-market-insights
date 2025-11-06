@@ -1068,6 +1068,127 @@ class AgentOrchestrator:
             {
                 "type": "function",
                 "function": {
+                    "name": "load_chart",
+                    "description": "Switch the chart to display a different stock symbol. Use this when user asks to see a specific stock chart.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {
+                                "type": "string",
+                                "description": "Stock ticker symbol (e.g., AAPL, TSLA, NVDA). REQUIRED - never omit the symbol."
+                            }
+                        },
+                        "required": ["symbol"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "set_chart_timeframe",
+                    "description": "Change the timeframe/interval displayed on the chart (e.g., 1D, 1W, 1M, 1Y)",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "timeframe": {
+                                "type": "string",
+                                "description": "Chart timeframe",
+                                "enum": ["1D", "5D", "1M", "3M", "6M", "1Y", "2Y", "3Y", "YTD", "MAX"]
+                            }
+                        },
+                        "required": ["timeframe"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "add_chart_indicator",
+                    "description": "Add a technical indicator to the chart (RSI, MACD, SMA, EMA, Bollinger Bands, etc.)",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "indicator": {
+                                "type": "string",
+                                "description": "Indicator name",
+                                "enum": ["RSI", "MACD", "SMA", "EMA", "BOLLINGER", "STOCHASTIC", "ATR", "OBV"]
+                            },
+                            "period": {
+                                "type": "integer",
+                                "description": "Period/length for the indicator (e.g., 14 for RSI, 20 for SMA)",
+                                "default": None
+                            }
+                        },
+                        "required": ["indicator"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "draw_trendline",
+                    "description": "Draw a trendline on the chart between two price points. Only use if you have specific price levels from data.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "start_price": {
+                                "type": "number",
+                                "description": "Starting price level for the trendline"
+                            },
+                            "end_price": {
+                                "type": "number",
+                                "description": "Ending price level for the trendline"
+                            },
+                            "label": {
+                                "type": "string",
+                                "description": "Optional label/description for the trendline"
+                            }
+                        },
+                        "required": ["start_price", "end_price"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "mark_support_resistance",
+                    "description": "Mark a support or resistance level on the chart with a horizontal line",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "price": {
+                                "type": "number",
+                                "description": "Price level to mark"
+                            },
+                            "type": {
+                                "type": "string",
+                                "description": "Level type",
+                                "enum": ["support", "resistance"]
+                            },
+                            "label": {
+                                "type": "string",
+                                "description": "Optional label (e.g., 'Strong Support', 'Key Resistance')"
+                            }
+                        },
+                        "required": ["price", "type"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_current_chart_state",
+                    "description": "Get the current state of the chart (what symbol, timeframe, and indicators are currently displayed)",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "generate_daily_watchlist",
                     "description": "Generate a daily watchlist based on catalysts and technical setups",
                     "parameters": {
@@ -1287,6 +1408,23 @@ class AgentOrchestrator:
     ) -> (Optional[str], List[str]):
         """Build chart control commands and optionally augment response text/data."""
         commands = self._build_chart_commands(query, tool_results)
+
+        # NEW: Extract commands from chart control function calls
+        chart_control_tools = [
+            "load_chart",
+            "set_chart_timeframe", 
+            "add_chart_indicator",
+            "draw_trendline",
+            "mark_support_resistance"
+        ]
+        
+        for tool_name in chart_control_tools:
+            if tool_name in tool_results:
+                tool_result = tool_results[tool_name]
+                if isinstance(tool_result, dict) and tool_result.get("command"):
+                    cmd = tool_result["command"]
+                    logger.info(f"[CHART_CONTROL] Extracted command from {tool_name}: {cmd}")
+                    commands.append(cmd)
 
         # Include pattern detection commands if tool was used
         if tool_results and "detect_chart_patterns" in tool_results:
@@ -2515,6 +2653,82 @@ class AgentOrchestrator:
                     "rho": 0.067,
                     "iv": 0.385,  # 38.5% implied volatility
                     "description": "Greeks analysis for options contract"
+                }
+            
+            # Chart Control Tools
+            elif tool_name == "load_chart":
+                symbol = arguments["symbol"].upper()
+                logger.info(f"[CHART_CONTROL] Loading chart for symbol: {symbol}")
+                result = {
+                    "success": True,
+                    "command": f"LOAD:{symbol}",
+                    "symbol": symbol,
+                    "message": f"Chart switched to {symbol}"
+                }
+            
+            elif tool_name == "set_chart_timeframe":
+                timeframe = arguments["timeframe"]
+                logger.info(f"[CHART_CONTROL] Setting chart timeframe: {timeframe}")
+                result = {
+                    "success": True,
+                    "command": f"TIMEFRAME:{timeframe}",
+                    "timeframe": timeframe,
+                    "message": f"Chart timeframe set to {timeframe}"
+                }
+            
+            elif tool_name == "add_chart_indicator":
+                indicator = arguments["indicator"]
+                period = arguments.get("period")
+                logger.info(f"[CHART_CONTROL] Adding indicator: {indicator} (period: {period})")
+                cmd = f"INDICATOR:{indicator}:ON"
+                if period:
+                    cmd += f":{period}"
+                result = {
+                    "success": True,
+                    "command": cmd,
+                    "indicator": indicator,
+                    "period": period,
+                    "message": f"{indicator} indicator added to chart"
+                }
+            
+            elif tool_name == "draw_trendline":
+                start_price = arguments["start_price"]
+                end_price = arguments["end_price"]
+                label = arguments.get("label", "Trendline")
+                logger.info(f"[CHART_CONTROL] Drawing trendline: {start_price} to {end_price}")
+                result = {
+                    "success": True,
+                    "command": f"TRENDLINE:{start_price}:{end_price}",
+                    "start_price": start_price,
+                    "end_price": end_price,
+                    "label": label,
+                    "message": f"Trendline drawn from ${start_price} to ${end_price}"
+                }
+            
+            elif tool_name == "mark_support_resistance":
+                price = arguments["price"]
+                level_type = arguments["type"]
+                label = arguments.get("label", f"{level_type.title()} Level")
+                logger.info(f"[CHART_CONTROL] Marking {level_type} at {price}")
+                cmd_type = "SUPPORT" if level_type == "support" else "RESISTANCE"
+                result = {
+                    "success": True,
+                    "command": f"{cmd_type}:{price}",
+                    "price": price,
+                    "type": level_type,
+                    "label": label,
+                    "message": f"{level_type.title()} level marked at ${price}"
+                }
+            
+            elif tool_name == "get_current_chart_state":
+                # Return the current chart context if available
+                # This will be populated from the request's chart_context parameter
+                chart_context = getattr(self, '_current_chart_context', {})
+                result = {
+                    "symbol": chart_context.get("symbol", "Unknown"),
+                    "timeframe": chart_context.get("timeframe", "Unknown"),
+                    "indicators": chart_context.get("indicators", []),
+                    "message": f"Currently viewing {chart_context.get('symbol', 'Unknown')} on {chart_context.get('timeframe', 'Unknown')} timeframe"
                 }
             elif tool_name == "analyze_chart_image":
                 if not self.chart_image_analyzer:
@@ -4599,6 +4813,11 @@ Remember to cite sources when using this knowledge and maintain educational tone
         chart_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Public entry point with intent-based routing for optimal performance."""
+        # Store chart context for get_current_chart_state tool
+        if chart_context:
+            self._current_chart_context = chart_context
+            logger.info(f"[CHART_CONTEXT] Stored: {chart_context}")
+        
         # Early validation for empty queries
         if not query or not query.strip():
             return {
