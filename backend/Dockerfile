@@ -32,10 +32,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY backend/ .
 
+# Make startup script executable
+RUN chmod +x start.sh
+
 # Expose port (8080 for Fly.io, 8000 for local)
 EXPOSE 8000
 EXPOSE 8080
 
-# Run the application (PORT env var for production)
-# Use --reload only in development, not in production
-CMD uvicorn mcp_server:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2
+# Run both MCP server and FastAPI server
+CMD ["/bin/bash", "./start.sh"]

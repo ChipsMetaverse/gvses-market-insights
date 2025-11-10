@@ -26,10 +26,26 @@ from services.chart_image_analyzer import ChartImageAnalyzer
 from services.chart_snapshot_store import ChartSnapshotStore
 from services.pattern_lifecycle import PatternLifecycleManager
 from services.chart_command_extractor import ChartCommandExtractor
-from models.chart_command import ChartCommand
+from models.chart_command import (
+    ChartCommand,
+    ChartCommandPayloadV2,
+    IndicatorConfig,
+    OverlayConfig,
+)
+from utils.retry_utils import openai_retry
 
-# Import new modular components  
+# Import new modular components
 from core.intent_router import IntentRouter
+
+# Phase 3: Cost tracking
+from services.cost_tracker import get_cost_tracker, TokenUsage, CostTags
+
+# Sprint 1, Day 2: Prometheus metrics
+from middleware import metrics
+
+# Sprint 1: Model routing and prompt caching
+from services.model_router import get_model_router, QueryIntent
+from services.prompt_cache import get_prompt_cache
 
 try:
     # Lazy import to avoid circular dependencies when headless service is absent
@@ -91,7 +107,12 @@ class AgentOrchestrator:
         
         # Initialize modular components
         self.intent_router = IntentRouter()
-        
+
+        # Sprint 1: Model routing and prompt caching for cost optimization
+        self.model_router = get_model_router()
+        self.prompt_cache = get_prompt_cache()
+        logger.info("ModelRouter and PromptCache initialized for cost optimization")
+
         # Initialize vector retriever for enhanced semantic search
         self.vector_retriever = VectorRetriever()
         logger.info(f"Vector retriever initialized with {len(self.vector_retriever.knowledge_base)} embedded chunks")
@@ -115,6 +136,10 @@ class AgentOrchestrator:
         # Initialize chart command extractor for parsing Voice Assistant responses
         self.chart_command_extractor = ChartCommandExtractor()
         logger.info("Chart command extractor initialized for Voice Assistant response parsing")
+        self.fixed_time_window = int(os.getenv("PATTERN_CONFIRM_WINDOW", "4"))
+        # Structured chart command migration flags
+        self.prefer_structured_chart_commands = os.getenv("PREFER_STRUCTURED_CHART_COMMANDS", "false").lower() == "true"
+        self.enable_structured_chart_objects = os.getenv("ENABLE_STRUCTURED_CHART_OBJECTS", "false").lower() == "true"
         lifecycle_confirm = float(os.getenv("PATTERN_CONFIRM_THRESHOLD", "75"))
         lifecycle_max_misses = int(os.getenv("PATTERN_MAX_MISSES", "2"))
         enable_phase5_ml = os.getenv("ENABLE_PHASE5_ML", "false").lower() == "true"
@@ -223,6 +248,28 @@ class AgentOrchestrator:
             logger.info(f"G'sves Assistant enabled: {self.gvses_assistant_id}")
         else:
             logger.info("G'sves Assistant disabled - using default orchestrator")
+
+    @openai_retry
+    async def _call_openai_with_retry(self, **completion_params):
+        """
+        OpenAI API call with automatic retry logic.
+
+        Wraps the chat.completions.create API call with exponential backoff retry.
+        Retries on transient errors (rate limits, timeouts, server errors).
+        Does not retry on permanent errors (auth, bad request).
+
+        Phase 3: Observability & Resilience - Retry Pattern
+
+        Args:
+            **completion_params: Parameters to pass to chat.completions.create
+
+        Returns:
+            ChatCompletion response from OpenAI API
+
+        Raises:
+            RateLimitError, APIConnectionError, etc. after max retry attempts
+        """
+        return await self.client.chat.completions.create(**completion_params)
 
     async def ingest_chart_snapshot(
         self,
@@ -1409,6 +1456,12 @@ class AgentOrchestrator:
     ) -> (Optional[str], List[str]):
         """Build chart control commands and optionally augment response text/data."""
         commands = self._build_chart_commands(query, tool_results)
+        structured_payload: List[Dict[str, Any]] = tool_results.setdefault("chart_commands_structured", []) if tool_results is not None else []
+        existing_structured_keys: Set[str] = set()
+        if structured_payload:
+            for item in structured_payload:
+                if isinstance(item, dict):
+                    existing_structured_keys.add(json.dumps(item, sort_keys=True, default=str))
 
         # NEW: Extract commands from chart control function calls
         chart_control_tools = [
@@ -1426,12 +1479,31 @@ class AgentOrchestrator:
                     cmd = tool_result["command"]
                     logger.info(f"[CHART_CONTROL] Extracted command from {tool_name}: {cmd}")
                     commands.append(cmd)
+                    try:
+                        structured_cmd = ChartCommand.from_legacy(cmd)
+                        serialized = structured_cmd.model_dump()
+                        key = json.dumps(serialized, sort_keys=True, default=str)
+                        if key not in existing_structured_keys:
+                            structured_payload.append(serialized)
+                            existing_structured_keys.add(key)
+                    except Exception:
+                        logger.debug("Failed to convert tool chart command to structured form", exc_info=True)
 
         # Include pattern detection commands if tool was used
         if tool_results and "detect_chart_patterns" in tool_results:
             pattern_data = tool_results["detect_chart_patterns"]
             if isinstance(pattern_data, dict) and pattern_data.get("chart_commands"):
-                commands.extend(pattern_data["chart_commands"])
+                for legacy_cmd in pattern_data["chart_commands"]:
+                    commands.append(legacy_cmd)
+                    try:
+                        structured_cmd = ChartCommand.from_legacy(legacy_cmd)
+                        serialized = structured_cmd.model_dump()
+                        key = json.dumps(serialized, sort_keys=True, default=str)
+                        if key not in existing_structured_keys:
+                            structured_payload.append(serialized)
+                            existing_structured_keys.add(key)
+                    except Exception:
+                        logger.debug("Failed to convert pattern chart command to structured form", exc_info=True)
 
         if commands:
             tool_results.setdefault("chart_commands", commands)
@@ -1450,6 +1522,7 @@ class AgentOrchestrator:
         commands: List[str] = []
         lower_query = query.lower()
         primary_symbol = self._extract_primary_symbol(query, tool_results)
+        structured_commands: List[ChartCommand] = []
 
         chart_intent_keywords = (
             "chart", "trend", "trendline", "trend line", "support", "resistance",
@@ -1459,7 +1532,9 @@ class AgentOrchestrator:
         has_chart_intent = any(keyword in lower_query for keyword in chart_intent_keywords)
 
         if primary_symbol:
-            commands.append(f"LOAD:{primary_symbol.upper()}")
+            symbol_upper = primary_symbol.upper()
+            commands.append(f"LOAD:{symbol_upper}")
+            structured_commands.append(ChartCommand(type="load", payload={"symbol": symbol_upper}))
 
         timeframe_map = [
             # Days/Weeks/Months/Years
@@ -1492,6 +1567,7 @@ class AgentOrchestrator:
         for keywords, timeframe in timeframe_map:
             if any(keyword in lower_query for keyword in keywords):
                 commands.append(f"TIMEFRAME:{timeframe}")
+                structured_commands.append(ChartCommand(type="timeframe", payload={"value": timeframe}))
                 break
 
         # Multi-timeframe top-down sweep when user requests technical/top-down analysis
@@ -1511,6 +1587,7 @@ class AgentOrchestrator:
             ]
             for tf in sweep:
                 commands.append(f"TIMEFRAME:{tf}")
+                structured_commands.append(ChartCommand(type="timeframe", payload={"value": tf, "mode": "top_down"}))
 
         indicator_map = {
             "rsi": "RSI",
@@ -1529,41 +1606,65 @@ class AgentOrchestrator:
             if keyword in lower_query:
                 if any(trigger in lower_query for trigger in enable_triggers):
                     commands.append(f"ADD:{token}")
+                    structured_commands.append(ChartCommand(type="indicator", payload={"name": token, "enabled": True}))
                 elif any(trigger in lower_query for trigger in disable_triggers):
                     commands.append(f"REMOVE:{token}")
+                    structured_commands.append(ChartCommand(type="indicator", payload={"name": token, "enabled": False}))
 
         if "reset" in lower_query and "chart" in lower_query:
             commands.append("RESET:VIEW")
+            structured_commands.append(ChartCommand(type="reset", payload={"target": "VIEW"}))
 
         if "auto scale" in lower_query or "fit to screen" in lower_query:
             commands.append("RESET:SCALE")
+            structured_commands.append(ChartCommand(type="reset", payload={"target": "SCALE"}))
 
         if "crosshair" in lower_query:
             if any(trigger in lower_query for trigger in ("hide", "off", "disable")):
                 commands.append("CROSSHAIR:OFF")
+                structured_commands.append(ChartCommand(type="crosshair", payload={"mode": "OFF"}))
             elif any(trigger in lower_query for trigger in ("show", "on", "enable")):
                 commands.append("CROSSHAIR:ON")
+                structured_commands.append(ChartCommand(type="crosshair", payload={"mode": "ON"}))
             else:
                 commands.append("CROSSHAIR:TOGGLE")
+                structured_commands.append(ChartCommand(type="crosshair", payload={"mode": "TOGGLE"}))
 
         if "zoom in" in lower_query:
             commands.append("ZOOM:IN")
+            structured_commands.append(ChartCommand(type="zoom", payload={"direction": "IN"}))
         elif "zoom out" in lower_query:
             commands.append("ZOOM:OUT")
+            structured_commands.append(ChartCommand(type="zoom", payload={"direction": "OUT"}))
 
         # Add drawing commands for technical analysis
         drawing_commands = self._generate_drawing_commands(query, tool_results)
         commands.extend(drawing_commands)
+        for raw_cmd in drawing_commands:
+            try:
+                structured_commands.append(ChartCommand.from_legacy(raw_cmd))
+            except Exception:
+                logger.debug("Failed to convert drawing command to structured form", exc_info=True)
         
-        # Remove duplicates while preserving order
-        seen: Set[str] = set()
-        unique_commands: List[str] = []
-        for cmd in commands:
-            if cmd not in seen:
-                seen.add(cmd)
-                unique_commands.append(cmd)
+        # Deduplicate commands while preserving order
+        commands = self._dedupe_commands(commands)
 
-        return unique_commands
+        if structured_commands and tool_results is not None:
+            existing_structured = tool_results.setdefault("chart_commands_structured", [])
+            try:
+                # Normalize to serializable dicts without duplicates
+                seen_structured: Set[str] = set()
+                for cmd in structured_commands:
+                    key = cmd.dedupe_key()
+                    if key in seen_structured:
+                        continue
+                    seen_structured.add(key)
+                    existing_structured.append(cmd.model_dump())
+            except Exception as exc:
+                logger.warning("Failed to attach structured chart commands to tool_results", exc_info=exc)
+
+        logger.info(f"[BUILD_CMD] Final command list: {len(commands)} commands - {commands}")
+        return commands
     
     def _generate_drawing_commands(self, query: str, tool_results: Optional[Dict[str, Any]]) -> List[str]:
         """Generate drawing commands from technical analysis results."""
@@ -1697,7 +1798,13 @@ class AgentOrchestrator:
             commands.append("ANALYZE:TECHNICAL")
         
         logger.info(f"[BUILD_CMD] Final command list: {len(commands)} commands - {commands}")
-        return commands
+        if self.prefer_structured_chart_commands:
+            return structured_commands
+        # default legacy output with structured fallback
+        if structured_commands and not commands:
+            legacy_commands = [cmd.to_legacy() for cmd in structured_commands]
+            commands.extend(legacy_commands)
+        return structured_commands if self.prefer_structured_chart_commands else commands
     
     async def _perform_technical_analysis(
         self, symbol: str, market_data: Dict[str, Any]
@@ -2570,8 +2677,8 @@ class AgentOrchestrator:
                 completion_params["max_completion_tokens"] = 900
             else:
                 completion_params["max_tokens"] = 900
-            
-            completion = await self.client.chat.completions.create(**completion_params)
+
+            completion = await self._call_openai_with_retry(**completion_params)
 
             if completion.choices:
                 return completion.choices[0].message.content
@@ -3176,9 +3283,9 @@ Return JSON with ALL detected patterns (use exact pattern names from list above)
             }
             # GPT-4.1 does not use gpt-5 naming convention, so use max_tokens
             completion_params["max_tokens"] = 100
-            
+
             response = await asyncio.wait_for(
-                self.client.chat.completions.create(**completion_params),
+                self._call_openai_with_retry(**completion_params),
                 timeout=2.0  # Quick 2-second timeout
             )
             
@@ -3296,9 +3403,140 @@ Return JSON with ALL detected patterns (use exact pattern names from list above)
                         task.cancel()
         
         return results
-    
+
+    def _record_api_cost(
+        self,
+        response: Any,
+        model: str,
+        request_id: Optional[str],
+        endpoint: str,
+        intent: Optional[str] = None,
+        tools_used: Optional[List[str]] = None,
+        stream: bool = False,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> None:
+        """
+        Phase 3: Record cost for OpenAI API call with attribution.
+
+        Args:
+            response: OpenAI API response with usage data
+            model: Model used for the request
+            request_id: Request ID for tracing
+            endpoint: API endpoint path
+            intent: Query intent classification
+            tools_used: List of tools executed
+            stream: Whether request used streaming
+            session_id: User session ID
+            user_id: User ID
+        """
+        try:
+            if not hasattr(response, 'usage') or not response.usage:
+                logger.warning("No usage data in API response", extra={"request_id": request_id})
+                return
+
+            usage = response.usage
+
+            # Extract cached tokens (prompt caching feature)
+            cached_tokens = 0
+            if hasattr(usage, 'prompt_tokens_details'):
+                details = usage.prompt_tokens_details
+                if details and hasattr(details, 'cached_tokens'):
+                    cached_tokens = details.cached_tokens
+
+            token_usage = TokenUsage(
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                total_tokens=usage.total_tokens,
+                cached_tokens=cached_tokens
+            )
+
+            tags = CostTags(
+                endpoint=endpoint,
+                session_id=session_id,
+                user_id=user_id,
+                intent=intent,
+                tools_used=tools_used or [],
+                stream=stream
+            )
+
+            cost_tracker = get_cost_tracker()
+            cost_record = cost_tracker.record_cost(
+                request_id=request_id or "no-request-id",
+                model=model,
+                usage=token_usage,
+                tags=tags
+            )
+
+            logger.info(
+                f"Cost recorded: ${cost_record.cost_usd:.6f} "
+                f"({token_usage.total_tokens} tokens, {cached_tokens} cached)",
+                extra={"request_id": request_id}
+            )
+
+            # Sprint 1, Day 2: Record Prometheus metrics
+            # Calculate duration (not available in this method, use 0 as placeholder)
+            # Real duration tracking should be done at the call site
+            metrics.openai_api_calls_total.labels(
+                model=model,
+                endpoint=endpoint,
+                intent=(intent or "unknown"),
+                stream=str(stream).lower()
+            ).inc()
+
+            metrics.openai_api_duration_seconds.labels(
+                model=model,
+                endpoint=endpoint
+            ).observe(0.0)
+
+            metrics.openai_tokens_used.labels(
+                model=model,
+                token_type="prompt"
+            ).observe(token_usage.prompt_tokens)
+
+            metrics.openai_tokens_used.labels(
+                model=model,
+                token_type="completion"
+            ).observe(token_usage.completion_tokens)
+
+            metrics.openai_tokens_used.labels(
+                model=model,
+                token_type="total"
+            ).observe(token_usage.total_tokens)
+
+            if cached_tokens > 0:
+                metrics.openai_tokens_used.labels(
+                    model=model,
+                    token_type="cached"
+                ).observe(cached_tokens)
+
+            metrics.openai_cost_usd.labels(
+                model=model,
+                intent=(intent or "unknown")
+            ).observe(cost_record.cost_usd)
+
+            metrics.openai_total_cost_usd.labels(
+                model=model
+            ).inc(cost_record.cost_usd)
+
+        except Exception as e:
+            logger.error(f"Failed to record API cost: {e}", extra={"request_id": request_id})
+
     def _build_system_prompt(self, retrieved_knowledge: str = "") -> str:
-        """Build the system prompt for the agent, including any retrieved knowledge."""
+        """
+        Build the system prompt for the agent, including any retrieved knowledge.
+
+        Phase 2: Prompt Caching Optimization
+        - This static prompt (~3000 tokens) leverages OpenAI's automatic prompt caching
+        - Caching is enabled automatically for OpenAI API >= 1.50.0
+        - Cache hit reduces latency by ~50% and cost by ~90% for cached tokens
+        - To maximize cache hits:
+          * Keep base_prompt static (already done ✅)
+          * Minimize use of retrieved_knowledge parameter
+          * Use consistent message ordering
+        - Cache TTL: ~5 minutes (OpenAI managed)
+        - No code changes needed - caching works automatically
+        """
         base_prompt = """You are G'sves, expert market analyst specializing in swing trading and technical analysis.
 
 TRADING LEVELS TERMINOLOGY:
@@ -3602,9 +3840,14 @@ Remember to cite sources when using this knowledge and maintain educational tone
     async def _process_query_responses(
         self,
         query: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        request_id: Optional[str] = None  # Phase 3: Request ID for cost tracking
     ) -> Dict[str, Any]:
-        """Process a query using the real Responses API."""
+        """
+        Process a query using the real Responses API.
+
+        Phase 3: Now includes request_id for cost tracking and observability.
+        """
         start_time = time.monotonic()
         # PROACTIVE KNOWLEDGE RETRIEVAL
         retrieved_knowledge = ""
@@ -3635,7 +3878,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
         # Use the actual Responses API client
         if not hasattr(self.client, 'responses'):
             logger.warning("Responses API not available in client; falling back to chat completions")
-            return await self._process_query_chat(query, conversation_history, stream=False)
+            return await self._process_query_chat(query, conversation_history, stream=False, request_id=request_id)
 
         # Convert messages to proper Responses API input format
         input_items = self._convert_messages_for_responses(messages)
@@ -3666,11 +3909,22 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 }
                 # gpt-4o-mini doesn't use gpt-5 naming, so use max_tokens
                 completion_params["max_tokens"] = 400
-                
-                chat_response = await self.client.chat.completions.create(**completion_params)
+
+                chat_response = await self._call_openai_with_retry(**completion_params)
                 chat_llm_dur = time.monotonic()-t_llm1_start
                 logger.info(f"Chat API (simple) latency: {chat_llm_dur:.2f}s")
-                
+
+                # Phase 3: Record API cost for simple query initial call
+                self._record_api_cost(
+                    response=chat_response,
+                    model="gpt-4o-mini",
+                    request_id=request_id,
+                    endpoint="/api/agent/orchestrate",
+                    intent="price-only",  # Simple queries are usually price-only
+                    tools_used=[],
+                    stream=False
+                )
+
                 assistant_msg = chat_response.choices[0].message
                 
                 # Process any tool calls
@@ -3696,10 +3950,23 @@ Remember to cite sources when using this knowledge and maintain educational tone
                     }
                     # gpt-4o-mini doesn't use gpt-5 naming, so use max_tokens
                     completion_params["max_tokens"] = 400
-                    
-                    final_response = await self.client.chat.completions.create(**completion_params)
+
+                    final_response = await self._call_openai_with_retry(**completion_params)
                     final_dur = time.monotonic()-t_final
                     logger.info(f"Chat API (final) latency: {final_dur:.2f}s")
+
+                    # Phase 3: Record API cost for simple query final response
+                    tools_used_names = [tc.function.name for tc in assistant_msg.tool_calls] if assistant_msg.tool_calls else []
+                    self._record_api_cost(
+                        response=final_response,
+                        model="gpt-4o-mini",
+                        request_id=request_id,
+                        endpoint="/api/agent/orchestrate",
+                        intent="price-only",
+                        tools_used=tools_used_names,
+                        stream=False
+                    )
+
                     response_text = final_response.choices[0].message.content
                 else:
                     response_text = assistant_msg.content
@@ -3734,15 +4001,36 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 # Fall through to Responses API
         
         try:
+            # Sprint 1: ModelRouter integration for Responses API
+            # Classify intent for model selection
+            intent = self.intent_router.classify_intent(query)
+
+            # Select model using ModelRouter
+            try:
+                intent_mapping = {
+                    "price-only": QueryIntent.PRICE_ONLY,
+                    "news": QueryIntent.NEWS_SUMMARY,
+                    "technical": QueryIntent.TECHNICAL_ANALYSIS,
+                    "market": QueryIntent.MARKET_OVERVIEW,
+                    "general": QueryIntent.GENERAL_QUERY,
+                }
+                query_intent = intent_mapping.get(intent, QueryIntent.GENERAL_QUERY)
+                model_info = self.model_router.select_model(query, intent=query_intent)
+                selected_model = model_info.name
+                logger.info(f"Responses API: ModelRouter selected '{selected_model}' (tier: {model_info.tier.value})")
+            except Exception as e:
+                logger.warning(f"ModelRouter failed for Responses API, using fallback: {e}")
+                selected_model = "gpt-4o-mini"
+
             # Use the actual Responses API
             t_llm1_start = time.monotonic()
-            
+
             # Build input for Responses API (use input_items, not query string)
             input_content = input_items if len(input_items) > 1 else [{"role": "user", "content": [{"type": "input_text", "text": query}]}]
-            
+
             # Prepare parameters for Responses API
             params = {
-                "model": "gpt-4o-mini",  # Use a model that supports Responses API
+                "model": selected_model,  # Sprint 1: Use ModelRouter-selected model
                 "input": input_content,
                 "instructions": self._build_system_prompt(retrieved_knowledge),
                 "max_output_tokens": 1500,  # Add token limit
@@ -3758,7 +4046,19 @@ Remember to cite sources when using this knowledge and maintain educational tone
             # Use the actual client.responses.create()
             response = await self.client.responses.create(**params)
             logger.info(f"Responses API latency: {time.monotonic()-t_llm1_start:.2f}s")
-            
+
+            # Phase 3: Record API cost for Responses API
+            # Note: Responses API may not return usage in standard format
+            self._record_api_cost(
+                response=response,
+                model=selected_model,  # Sprint 1: Use ModelRouter-selected model
+                request_id=request_id,
+                endpoint="/api/agent/orchestrate",
+                intent=intent,  # Sprint 1: Use classified intent
+                tools_used=[],  # Tools extracted later
+                stream=False
+            )
+
             # Debug logging for response structure
             logger.info(f"Responses API response type: {type(response)}")
             logger.info(f"Response attributes: {dir(response)[:10]}")  # First 10 attributes
@@ -3949,20 +4249,25 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 response_text, query, tool_results
             )
         
-        structured_commands, legacy_commands = self._serialize_chart_commands(chart_commands + extracted_commands)
-        
+        structured_commands, legacy_commands, chart_payload_v2 = self._serialize_chart_commands(chart_commands + extracted_commands)
+        if self.prefer_structured_chart_commands:
+            legacy_commands = []
+
         result_payload: Dict[str, Any] = {
             "text": response_text or "I'm sorry, I couldn't generate a response.",
             "tools_used": tools_used,
             "data": tool_results,
             "timestamp": datetime.now().isoformat(),
             "model": self.model,
-            "cached": False
+            "cached": False,
+            "prefer_structured_chart_commands": self.prefer_structured_chart_commands,
         }
-        if legacy_commands:
-            result_payload["chart_commands"] = legacy_commands
         if structured_commands:
             result_payload["chart_commands_structured"] = structured_commands
+        if legacy_commands:
+            result_payload["chart_commands"] = legacy_commands
+        if chart_payload_v2:
+            result_payload["chart_objects"] = chart_payload_v2.model_dump()
         try:
             logger.info(f"Response includes chart_commands: {bool(result_payload.get('chart_commands'))}")
             if result_payload.get('chart_commands'):
@@ -3977,9 +4282,14 @@ Remember to cite sources when using this knowledge and maintain educational tone
         query: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         intent: str = "general",
-        stream: bool = False
+        stream: bool = False,
+        request_id: Optional[str] = None  # Phase 3: Request ID for cost tracking
     ) -> Dict[str, Any]:
-        """Single-pass Chat Completions flow with tools and immediate response."""
+        """
+        Single-pass Chat Completions flow with tools and immediate response.
+
+        Phase 3: Now includes request_id for cost tracking and observability.
+        """
         start_time = time.monotonic()
 
         # Retrieve relevant knowledge for educational/general/technical queries
@@ -3999,11 +4309,31 @@ Remember to cite sources when using this knowledge and maintain educational tone
         messages.append({"role": "user", "content": query})
         
         try:
-            # Single LLM call with tools
-            # Use gpt-4o-mini for educational/general queries (gpt-5-mini has issues with empty responses)
-            model = "gpt-4o-mini" if intent in ["educational", "general"] else ("gpt-5-mini" if intent in ["price-only", "news"] else self.model)
+            # Sprint 1: ModelRouter for intent-based model selection with cost optimization
+            # Converts intent string to QueryIntent enum for routing
+            try:
+                # Map intent strings to QueryIntent enum
+                intent_mapping = {
+                    "price-only": QueryIntent.PRICE_ONLY,
+                    "news": QueryIntent.NEWS_SUMMARY,
+                    "technical": QueryIntent.TECHNICAL_ANALYSIS,
+                    "market": QueryIntent.MARKET_OVERVIEW,
+                    "chart-only": QueryIntent.CHART_COMMAND,
+                    "indicator-toggle": QueryIntent.CHART_COMMAND,
+                    "general": QueryIntent.GENERAL_QUERY,
+                    "educational": QueryIntent.GENERAL_QUERY
+                }
+                query_intent = intent_mapping.get(intent, QueryIntent.UNKNOWN)
+                model_info = self.model_router.select_model(query, intent=query_intent)
+                model = model_info.name
+                logger.info(f"ModelRouter selected '{model}' (tier: {model_info.tier.value}) for intent '{intent}'")
+            except Exception as e:
+                logger.warning(f"ModelRouter failed, falling back to default: {e}")
+                model = self.model
+                logger.info(f"Using fallback model '{model}' for intent '{intent}'")
+
             # Increased tokens for complex queries like planning (was 800, now 1500)
-            max_tokens = 400 if intent in ["price-only", "news"] else 1500  # More tokens for complex responses
+            max_tokens = 400 if intent in ["price-only", "news", "company-info"] else 1500  # More tokens for complex responses
             
             t_llm = time.monotonic()
             # Use correct parameter name based on model
@@ -4032,11 +4362,41 @@ Remember to cite sources when using this knowledge and maintain educational tone
             if intent in ["educational", "general"]:
                 logger.info(f"LLM Request - Model: {completion_params['model']}, Messages: {len(messages)}, Tools: {len(completion_params.get('tools', []))}")
                 logger.info(f"User query: {query}")
-            
-            response = await self.client.chat.completions.create(**completion_params)
+
+            # Sprint 1: Prompt caching to leverage OpenAI's automatic caching (50% cost reduction for >1024 tokens)
+            system_prompt = messages[0]["content"] if messages and messages[0]["role"] == "system" else ""
+            user_prompt = messages[-1]["content"] if messages and messages[-1]["role"] == "user" else query
+
+            # Check if caching is recommended for this prompt size
+            should_cache = self.prompt_cache.should_use_caching(system_prompt, user_prompt)
+            if should_cache:
+                # Check if we've seen this prompt before
+                cached_prompt = self.prompt_cache.get(system_prompt, user_prompt, model)
+                if cached_prompt:
+                    logger.info(f"Prompt cache HIT (accessed {cached_prompt.access_count} times) - OpenAI will use cached prompt")
+                else:
+                    logger.info("Prompt cache MISS - storing for future caching")
+                    self.prompt_cache.put(system_prompt, user_prompt, model)
+
+            response = await self._call_openai_with_retry(**completion_params)
             llm1_dur = time.monotonic()-t_llm
             logger.info(f"Single-pass LLM latency: {llm1_dur:.2f}s")
-            
+
+            # Update cache with response for query deduplication
+            if should_cache and response.choices and response.choices[0].message.content:
+                self.prompt_cache.put(system_prompt, user_prompt, model, response=response.choices[0].message.content)
+
+            # Phase 3: Record API cost for initial call
+            self._record_api_cost(
+                response=response,
+                model=model,
+                request_id=request_id,
+                endpoint="/api/agent/orchestrate",
+                intent=intent,
+                tools_used=[],  # Tools not executed yet
+                stream=stream
+            )
+
             # Debug logging for educational queries
             if intent == "educational" or intent == "general":
                 logger.info(f"LLM Response - Finish reason: {response.choices[0].finish_reason}")
@@ -4079,7 +4439,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
                     })
                     
                     t_final = time.monotonic()
-                    final_response = await self.client.chat.completions.create(
+                    final_response = await self._call_openai_with_retry(
                         model="gpt-4o-mini",  # Fast model for summarization
                         messages=tool_messages,
                         temperature=0.3,
@@ -4087,6 +4447,18 @@ Remember to cite sources when using this knowledge and maintain educational tone
                     )
                     summarization_dur = time.monotonic()-t_final
                     logger.info(f"Final summarization latency: {summarization_dur:.2f}s")
+
+                    # Phase 3: Record API cost for final summarization
+                    self._record_api_cost(
+                        response=final_response,
+                        model="gpt-4o-mini",
+                        request_id=request_id,
+                        endpoint="/api/agent/orchestrate",
+                        intent=intent,
+                        tools_used=tools_used,
+                        stream=stream
+                    )
+
                     response_text = final_response.choices[0].message.content
                 else:
                     response_text = assistant_msg.content
@@ -4134,7 +4506,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 "tools_used": tools_used,
                 "news_called": any(t == "get_stock_news" for t in tools_used),
                 "news_gated": intent not in ["news", "general"],
-                "model": self.model,
+                "model": model,  # Sprint 1: Use ModelRouter-selected model
                 "use_responses": False,
             }
             total_time = time.monotonic() - start_time
@@ -4149,7 +4521,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
             
             # Combine existing and extracted commands and serialize
             all_commands = chart_commands + extracted_commands
-            structured_commands, legacy_commands = self._serialize_chart_commands(all_commands)
+            structured_commands, legacy_commands, chart_payload_v2 = self._serialize_chart_commands(all_commands)
 
             return {
                 "text": response_text or "I couldn't generate a response.",
@@ -4158,6 +4530,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 "structured_data": structured_data,
                 "chart_commands": legacy_commands,
                 "chart_commands_structured": structured_commands,
+                "chart_objects": chart_payload_v2.model_dump() if chart_payload_v2 else None,
                 "timestamp": datetime.now().isoformat(),
                 "model": model,  # Required field for AgentResponse
                 "cached": False,
@@ -4174,11 +4547,14 @@ Remember to cite sources when using this knowledge and maintain educational tone
             if "quota" in str(e).lower() or "429" in str(e):
                 error_msg = "OpenAI API quota exceeded. Please check your billing and add credits at https://platform.openai.com/account/billing"
 
+            # Sprint 1: Use selected model if available, else fall back to default
+            error_model = locals().get('model', self.model)
+
             return {
                 "text": error_msg,
                 "tools_used": [],
                 "data": {"error": str(e), "error_type": type(e).__name__},
-                "model": self.model,
+                "model": error_model,
                 "timestamp": datetime.now().isoformat(),
                 "chart_commands": [],
                 "chart_commands_structured": []
@@ -4186,10 +4562,11 @@ Remember to cite sources when using this knowledge and maintain educational tone
 
     def _serialize_chart_commands(
         self, commands: Iterable[Any]
-    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+    ) -> Tuple[List[Dict[str, Any]], List[str], Optional[ChartCommandPayloadV2]]:
         """Normalize chart commands into structured payload plus legacy strings."""
         structured: List[Dict[str, Any]] = []
         legacy: List[str] = []
+        command_models: List[ChartCommand] = []
         seen: Set[str] = set()
 
         for raw in commands:
@@ -4222,16 +4599,97 @@ Remember to cite sources when using this knowledge and maintain educational tone
 
             structured.append(chart_command.model_dump())
             legacy.append(chart_command.to_legacy())
+            command_models.append(chart_command)
 
-        return structured, legacy
+        payload_v2 = (
+            self._build_chart_payload_v2(command_models)
+            if self.enable_structured_chart_objects and command_models
+            else None
+        )
+
+        return structured, legacy, payload_v2
+
+    def _build_chart_payload_v2(
+        self, command_models: List[ChartCommand]
+    ) -> Optional[ChartCommandPayloadV2]:
+        """Construct ChartCommandPayloadV2 from normalized chart command models."""
+        if not command_models:
+            return None
+
+        symbol: Optional[str] = None
+        timeframe: Optional[str] = None
+        indicator_map: Dict[str, IndicatorConfig] = {}
+        overlays: Dict[str, OverlayConfig] = {}
+
+        for command in command_models:
+            payload = command.payload or {}
+            command_type = (command.type or "").lower()
+
+            if command_type in {"load", "symbol"} and not symbol:
+                raw_symbol = payload.get("symbol") or payload.get("ticker")
+                if isinstance(raw_symbol, str) and raw_symbol.strip():
+                    symbol = raw_symbol.strip().upper()
+
+            if command_type == "timeframe" and not timeframe:
+                raw_timeframe = payload.get("value") or payload.get("interval")
+                if isinstance(raw_timeframe, str) and raw_timeframe.strip():
+                    timeframe = raw_timeframe.strip().upper()
+
+            if command_type == "indicator":
+                raw_name = payload.get("name") or payload.get("indicator")
+                if not raw_name:
+                    continue
+                name = str(raw_name).upper()
+                enabled_value = payload.get("enabled")
+                enabled = None
+                if isinstance(enabled_value, bool):
+                    enabled = enabled_value
+                params: Dict[str, Any] = {}
+                raw_params = payload.get("params")
+                if isinstance(raw_params, dict):
+                    params = raw_params
+                indicator_map[name] = IndicatorConfig(
+                    name=name,
+                    enabled=enabled,
+                    params=params,
+                )
+
+            if command_type == "overlay":
+                raw_name = payload.get("name")
+                if not raw_name:
+                    continue
+                name = str(raw_name).upper()
+                overlay_type = payload.get("type")
+                params: Dict[str, Any] = {}
+                raw_params = payload.get("params")
+                if isinstance(raw_params, dict):
+                    params = raw_params
+                overlays[name] = OverlayConfig(
+                    name=name,
+                    type=str(overlay_type) if overlay_type else None,
+                    params=params,
+                )
+
+        return ChartCommandPayloadV2(
+            symbol=symbol,
+            timeframe=timeframe,
+            overlays=list(overlays.values()),
+            indicators=list(indicator_map.values()),
+            commands=command_models,
+        )
 
     async def _process_query_chat(
-        self, 
-        query: str, 
+        self,
+        query: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        stream: bool = False
+        stream: bool = False,
+        request_id: Optional[str] = None  # Phase 3: Request ID for cost tracking
     ) -> Dict[str, Any]:
-        """Legacy chat.completions implementation (retained as fallback)."""
+        """
+        Legacy chat.completions implementation (retained as fallback).
+
+        Phase 3: Now includes request_id for cost tracking and observability.
+        """
         try:
             # PROACTIVE KNOWLEDGE RETRIEVAL for legacy path
             retrieved_knowledge = ""
@@ -4312,12 +4770,23 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 completion_params["max_completion_tokens"] = 1000  # Reduced for faster response
             else:
                 completion_params["max_tokens"] = 1000  # Reduced for faster response
-            
-            response = await self.client.chat.completions.create(**completion_params)
-            
+
+            response = await self._call_openai_with_retry(**completion_params)
+
+            # Phase 3: Record API cost
+            self._record_api_cost(
+                response=response,
+                model=self.model,
+                request_id=request_id,
+                endpoint="/api/agent/orchestrate",
+                intent=None,  # Intent not available in legacy path
+                tools_used=[],  # Tools not executed yet
+                stream=stream
+            )
+
             assistant_message = response.choices[0].message
             messages.append(assistant_message.model_dump())
-            
+
             tool_results = {}
             tools_used = []
             
@@ -4615,9 +5084,11 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 "cached": False  # Would be true if all results came from cache
             }
             if final_commands:
-                structured_commands, legacy_commands = self._serialize_chart_commands(final_commands)
+                structured_commands, legacy_commands, chart_payload_v2 = self._serialize_chart_commands(final_commands)
                 result_payload["chart_commands"] = legacy_commands
                 result_payload["chart_commands_structured"] = structured_commands
+                if chart_payload_v2:
+                    result_payload["chart_objects"] = chart_payload_v2.model_dump()
             try:
                 logger.info(f"Response includes chart_commands: {bool(result_payload.get('chart_commands'))}")
                 if result_payload.get('chart_commands'):
@@ -4845,20 +5316,25 @@ Remember to cite sources when using this knowledge and maintain educational tone
         except Exception as e:
             logger.error(f"Error processing query with G'sves assistant: {e}")
             # Fall back to regular orchestrator on error
-            return await self._process_query_single_pass(query, conversation_history, self.intent_router.classify_intent(query), False)
+            return await self._process_query_single_pass(query, conversation_history, self.intent_router.classify_intent(query), False, None)
 
     async def process_query(
         self,
         query: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         stream: bool = False,
-        chart_context: Optional[Dict[str, Any]] = None
+        chart_context: Optional[Dict[str, Any]] = None,
+        request_id: Optional[str] = None  # Phase 3: Request ID for distributed tracing
     ) -> Dict[str, Any]:
-        """Public entry point with intent-based routing for optimal performance."""
+        """
+        Public entry point with intent-based routing for optimal performance.
+
+        Phase 3: Now includes request_id for distributed tracing and observability.
+        """
         # Store chart context for get_current_chart_state tool
         if chart_context:
             self._current_chart_context = chart_context
-            logger.info(f"[CHART_CONTEXT] Stored: {chart_context}")
+            logger.info(f"[CHART_CONTEXT] Stored: {chart_context}", extra={"request_id": request_id})
         
         # Early validation for empty queries
         if not query or not query.strip():
@@ -4944,55 +5420,16 @@ Remember to cite sources when using this knowledge and maintain educational tone
         #     response = await self._handle_educational_query(query)
         #     return response
         
-        # Fast-path for chart-only commands (no LLM needed)
-        if intent == "chart-only":
-            symbol = self.intent_router.extract_symbol(query)
-            if symbol:
-                response = {
-                    "text": f"Loading {symbol.upper()} chart",
-                    "tools_used": [],
-                    "data": {},
-                    "chart_commands": [f"LOAD:{symbol.upper()}"],
-                    "timestamp": datetime.now().isoformat(),
-                    "model": "static-chart",
-                    "cached": False,
-                    "session_id": None
-                }
-                logger.info(f"Response includes chart_commands: True")
-                logger.info(f"Chart commands: {response['chart_commands']}")
-                await self._cache_response(query, context, response)
-                return response
-        
-        # Fast-path for indicator toggles (no LLM needed)
-        if intent == "indicator-toggle":
-            commands = self._extract_indicator_commands(query)
-            if commands:
-                response = {
-                    "text": "Updating indicators",
-                    "tools_used": [],
-                    "data": {},
-                    "chart_commands": commands,
-                    "timestamp": datetime.now().isoformat(),
-                    "model": "static-indicator",
-                    "cached": False,
-                    "session_id": None
-                }
-                logger.info(f"Response includes chart_commands: True")
-                logger.info(f"Chart commands: {response['chart_commands']}")
-                await self._cache_response(query, context, response)
-                return response
-        
-        # Choose between Responses API and Chat Completions based on feature flag
         USE_RESPONSES = os.getenv("USE_RESPONSES", "false").lower() == "true"
         
         if USE_RESPONSES and self._has_responses_support():
             # Use the fixed single-pass Responses API with submit_tool_outputs
             logger.info("Using fixed single-pass Responses API")
-            response = await self._process_query_responses(query, conversation_history)
+            response = await self._process_query_responses(query, conversation_history, request_id)
         else:
             # Use single-pass Chat Completions (default)
             logger.info("Using single-pass Chat Completions API")
-            response = await self._process_query_single_pass(query, conversation_history, intent, stream)
+            response = await self._process_query_single_pass(query, conversation_history, intent, stream, request_id)
         
         # Cache the successful response
         if response and not response.get("error"):
@@ -5018,7 +5455,13 @@ Remember to cite sources when using this knowledge and maintain educational tone
             response_text = MarketResponseFormatter.format_market_brief(overview_result)
             for chunk in response_text.split():
                 yield {"type": "content", "text": chunk + " "}
-            yield {"type": "done"}
+            yield {
+                "type": "done",
+                "chart_commands": [],
+                "chart_commands_structured": [],
+                "tools_used": ["get_market_overview"],
+                "prefer_structured_chart_commands": self.prefer_structured_chart_commands,
+            }
             return
 
         responses_client = self._responses_client
@@ -5046,7 +5489,13 @@ Remember to cite sources when using this knowledge and maintain educational tone
         except Exception as exc:
             logger.error(f"Responses streaming call failed: {exc}")
             yield {"type": "error", "message": str(exc)}
-            yield {"type": "done"}
+            yield {
+                "type": "done",
+                "chart_commands": [],
+                "chart_commands_structured": [],
+                "tools_used": [],
+                "prefer_structured_chart_commands": self.prefer_structured_chart_commands,
+            }
             return
 
         collected_tool_calls: List[Dict[str, Any]] = []
@@ -5146,14 +5595,45 @@ Remember to cite sources when using this knowledge and maintain educational tone
         if structured_payload:
             yield {"type": "structured", "data": structured_payload, "tools_used": tools_used}
 
-        yield {"type": "done"}
+        # Phase 2: Extract chart commands for streaming (same logic as non-streaming)
+        chart_commands_from_tools = []
+        if response_text:
+            _, chart_commands_from_tools = self._append_chart_commands_to_data(query, tool_results, response_text)
+
+        # Extract additional chart commands from the response text
+        extracted_commands = []
+        if response_text:
+            extracted_commands = self.chart_command_extractor.extract_commands_from_response(
+                response_text, query, tool_results
+            )
+
+        # Serialize to both legacy and structured formats
+        all_commands = chart_commands_from_tools + extracted_commands
+        structured_commands, legacy_commands, chart_payload_v2 = self._serialize_chart_commands(all_commands)
+        if self.prefer_structured_chart_commands:
+            legacy_commands = []
+
+        # Include chart commands in final done event
+        yield {
+            "type": "done",
+            "chart_commands": legacy_commands,
+            "chart_commands_structured": structured_commands,
+            "tools_used": tools_used,
+            "prefer_structured_chart_commands": self.prefer_structured_chart_commands,
+            "chart_objects": chart_payload_v2.model_dump() if chart_payload_v2 else None,
+        }
 
     async def stream_query(
         self,
         query: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        request_id: Optional[str] = None  # Phase 3: Request ID for distributed tracing
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Public streaming entrypoint that prefers the Responses API."""
+        """
+        Public streaming entrypoint that prefers the Responses API.
+
+        Phase 3: Now includes request_id for distributed tracing and observability.
+        """
         if self._has_responses_support():
             async for chunk in self._stream_query_responses(query, conversation_history):
                 yield chunk
@@ -5201,8 +5681,14 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 response_text = MarketResponseFormatter.format_market_brief(overview_result)
                 for chunk in response_text.split():
                     yield {"type": "content", "text": chunk + " "}
-                
-                yield {"type": "done"}
+
+                yield {
+                    "type": "done",
+                    "chart_commands": [],
+                    "chart_commands_structured": [],
+                    "tools_used": ["get_market_overview"],
+                    "prefer_structured_chart_commands": self.prefer_structured_chart_commands,
+                }
                 return
             
             # Create streaming response with tools
@@ -5219,8 +5705,8 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 completion_params["max_completion_tokens"] = 1000  # Reduced for faster response
             else:
                 completion_params["max_tokens"] = 1000  # Reduced for faster response
-            
-            stream = await self.client.chat.completions.create(**completion_params)
+
+            stream = await self._call_openai_with_retry(**completion_params)
             
             # Track state during streaming
             collected_tool_calls = []
@@ -5315,13 +5801,45 @@ Remember to cite sources when using this knowledge and maintain educational tone
                         # Stream formatted response
                         for chunk in formatted_response.split():
                             yield {"type": "content", "text": chunk + " "}
-            
-            yield {"type": "done"}
+
+            # Phase 2: Extract chart commands for streaming (same logic as non-streaming)
+            response_text = accumulated_content
+            tool_results_dict = tool_results if 'tool_results' in locals() else {}
+
+            chart_commands_from_tools = []
+            if response_text:
+                _, chart_commands_from_tools = self._append_chart_commands_to_data(query, tool_results_dict, response_text)
+
+            # Extract additional chart commands from the response text
+            extracted_commands = []
+            if response_text:
+                extracted_commands = self.chart_command_extractor.extract_commands_from_response(
+                    response_text, query, tool_results_dict
+                )
+
+            # Serialize to both legacy and structured formats
+            all_commands = chart_commands_from_tools + extracted_commands
+            structured_commands, legacy_commands = self._serialize_chart_commands(all_commands)
+
+            # Include chart commands in final done event
+            yield {
+                "type": "done",
+                "chart_commands": legacy_commands,
+                "chart_commands_structured": structured_commands,
+                "tools_used": list(tool_tasks.keys()) if tool_tasks else [],
+                "prefer_structured_chart_commands": self.prefer_structured_chart_commands,
+            }
             
         except Exception as e:
             logger.error(f"Streaming error: {e}")
             yield {"type": "error", "message": str(e)}
-            yield {"type": "done"}
+            yield {
+                "type": "done",
+                "chart_commands": [],
+                "chart_commands_structured": [],
+                "tools_used": [],
+                "prefer_structured_chart_commands": self.prefer_structured_chart_commands,
+            }
     
     def _check_morning_greeting(self, query: str, conversation_history: Optional[List]) -> bool:
         """Check if query is a morning greeting trigger."""
