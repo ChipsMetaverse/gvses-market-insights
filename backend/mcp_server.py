@@ -15,6 +15,7 @@ import os
 import sys
 import uuid
 import datetime
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Header
@@ -39,6 +40,12 @@ from chart_control_api import router as chart_control_router
 from services.agents_sdk_service import agents_sdk_service, AgentQuery, AgentResponse
 from services.database_service import get_database_service
 from websocket_server import chart_streamer  # Real-time chart command streaming
+from utils.telemetry import build_request_telemetry, persist_request_log
+from utils.request_context import generate_request_id, set_request_id
+
+# Sprint 1, Day 2: Prometheus metrics
+from middleware.metrics import PrometheusMiddleware, get_metrics, get_metrics_content_type
+from fastapi.responses import Response as FastAPIResponse
 
 # Load environment variables from .env if present
 load_dotenv()
@@ -63,7 +70,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:5174",
         "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173", 
+        "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "https://gvses-market-insights.fly.dev",
         "*"  # Allow all origins in development
@@ -72,6 +79,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Sprint 1, Day 2: Add Prometheus metrics middleware
+app.add_middleware(PrometheusMiddleware)
+logger.info("Prometheus metrics middleware enabled")
 
 # Global MCP client instance
 mcp_client = None
@@ -254,26 +265,91 @@ async def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {
-            "status": "unhealthy", 
+            "status": "unhealthy",
             "error": str(e),
             "timestamp": datetime.now().isoformat(),
             "version": "2.0.1",
             "build_timestamp": "2025-10-12T00:00:00Z"
         }
 
+# Sprint 1, Day 2: Prometheus metrics endpoint
+@app.get("/metrics")
+async def metrics_endpoint():
+    """
+    Prometheus metrics endpoint.
+
+    Returns metrics in Prometheus text format for scraping.
+    """
+    try:
+        metrics_data = get_metrics()
+        return FastAPIResponse(
+            content=metrics_data,
+            media_type=get_metrics_content_type()
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate metrics: {e}")
+        raise HTTPException(status_code=500, detail="Metrics generation failed")
+
 # Stock quote endpoint
 @app.get("/api/stock-price")
 @limiter.limit("100/minute")
 async def get_stock_price(request: Request, symbol: str):
     """Get current stock price"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
     try:
-        quote = await market_service.get_stock_price(symbol.upper())
+        quote = await market_service.get_stock_price(symbol_upper)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "stock_price_request_completed",
+            extra=completed.for_logging(symbol=symbol_upper)
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "stock_price",
+                "symbol": symbol_upper,
+                "status": "success",
+            },
+        )
         return quote
     except ValueError as e:
-        logger.error(f"Invalid symbol {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.warning(
+            "stock_price_request_invalid_symbol",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e))
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "stock_price_error",
+                "symbol": symbol_upper,
+                "status": "invalid_symbol",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found or invalid")
     except Exception as e:
-        logger.error(f"Failed to get stock price for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to get stock price for {symbol_upper}: {e}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "stock_price_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to fetch stock price: {str(e)}")
 
 # News endpoint for frontend
@@ -281,12 +357,47 @@ async def get_stock_price(request: Request, symbol: str):
 @limiter.limit("100/minute")
 async def get_news_v1(request: Request, symbol: str, limit: int = 6):
     """Get news articles for a symbol (frontend compatible endpoint)"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
     try:
         from services.news_service import get_related_news
-        news_data = await get_related_news(symbol.upper(), limit)
+        news_data = await get_related_news(symbol_upper, limit)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        articles = news_data.get("articles", []) if isinstance(news_data, dict) else []
+        logger.info(
+            "news_v1_request_completed",
+            extra=completed.for_logging(symbol=symbol_upper, articles=len(articles))
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "news_v1",
+                "symbol": symbol_upper,
+                "status": "success",
+                "articles": len(articles),
+            },
+        )
         return news_data  # Returns {"articles": [...], "items": [...]}
     except Exception as e:
-        logger.error(f"Failed to get news for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to get news for {symbol_upper}: {e}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "news_v1_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to fetch news: {str(e)}")
 
 # Stock news endpoint (alternative format)
@@ -294,13 +405,48 @@ async def get_news_v1(request: Request, symbol: str, limit: int = 6):
 @limiter.limit("100/minute")
 async def get_stock_news(request: Request, symbol: str):
     """Get news articles for a symbol (returns array format)"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
     try:
         from services.news_service import get_related_news
-        news_data = await get_related_news(symbol.upper(), limit=6)
+        news_data = await get_related_news(symbol_upper, limit=6)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        articles = news_data.get("articles", []) if isinstance(news_data, dict) else []
+        logger.info(
+            "stock_news_request_completed",
+            extra=completed.for_logging(symbol=symbol_upper, articles=len(articles))
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "stock_news",
+                "symbol": symbol_upper,
+                "status": "success",
+                "articles": len(articles),
+            },
+        )
         # Return just the articles array for backward compatibility
         return {"news": news_data.get("articles", [])}
     except Exception as e:
-        logger.error(f"Failed to get news for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to get news for {symbol_upper}: {e}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "stock_news_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "error": str(e),
+            },
+        )
         return {"news": []}
 
 # Symbol search endpoint
@@ -308,15 +454,63 @@ async def get_stock_news(request: Request, symbol: str):
 @limiter.limit("100/minute")  
 async def symbol_search(request: Request, query: str, limit: int = 10):
     """Search for stock symbols by company name or ticker"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
     try:
         if hasattr(market_service, 'search_symbols'):
             results = await market_service.search_symbols(query, limit)
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            completed = telemetry.with_duration(duration_ms)
+            logger.info(
+                "symbol_search_completed",
+                extra=completed.for_logging(matches=len(results), query=query)
+            )
+            await persist_request_log(
+                completed,
+                {
+                    "event": "symbol_search",
+                    "query": query,
+                    "status": "success",
+                    "matches": len(results),
+                },
+            )
             return {"results": results}
         else:
             # Fallback - return empty results if search not supported
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            completed = telemetry.with_duration(duration_ms)
+            logger.info(
+                "symbol_search_no_support",
+                extra=completed.for_logging(matches=0, query=query)
+            )
+            await persist_request_log(
+                completed,
+                {
+                    "event": "symbol_search",
+                    "query": query,
+                    "status": "unsupported",
+                    "matches": 0,
+                },
+            )
             return {"results": []}
     except Exception as e:
-        logger.error(f"Failed to search symbols for '{query}': {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to search symbols for '{query}': {e}",
+            extra=errored.for_logging(query=query, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "symbol_search_error",
+                "query": query,
+                "status": "exception",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to search symbols: {str(e)}")
 
 # Stock history endpoint  
@@ -324,14 +518,64 @@ async def symbol_search(request: Request, query: str, limit: int = 10):
 @limiter.limit("100/minute")
 async def get_stock_history(request: Request, symbol: str, days: int = 30):
     """Get historical stock data"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
     try:
-        history = await market_service.get_stock_history(symbol.upper(), days)
+        history = await market_service.get_stock_history(symbol_upper, days)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "stock_history_completed",
+            extra=completed.for_logging(symbol=symbol_upper, days=days, candles=len(history.get("candles", [])) if isinstance(history, dict) else None)
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "stock_history",
+                "symbol": symbol_upper,
+                "status": "success",
+                "days": days,
+            },
+        )
         return history
     except ValueError as e:
-        logger.error(f"Invalid request for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.warning(
+            "stock_history_invalid_symbol",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e), days=days)
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "stock_history_error",
+                "symbol": symbol_upper,
+                "status": "invalid_symbol",
+                "days": days,
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found or invalid")
     except Exception as e:
-        logger.error(f"Failed to get stock history for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to get stock history for {symbol_upper}: {e}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e), days=days),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "stock_history_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "days": days,
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to fetch stock history: {str(e)}")
 
 # Stock news endpoint
@@ -339,14 +583,64 @@ async def get_stock_history(request: Request, symbol: str, days: int = 30):
 @limiter.limit("50/minute")
 async def get_stock_news(request: Request, symbol: str, limit: int = 10):
     """Get recent news for a stock"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
     try:
-        news = await market_service.get_stock_news(symbol.upper(), limit)
+        news = await market_service.get_stock_news(symbol_upper, limit)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "stock_news_detailed_completed",
+            extra=completed.for_logging(symbol=symbol_upper, articles=len(news) if isinstance(news, list) else None)
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "stock_news_detailed",
+                "symbol": symbol_upper,
+                "status": "success",
+                "limit": limit,
+            },
+        )
         return news
     except ValueError as e:
-        logger.error(f"Invalid symbol {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.warning(
+            "stock_news_detailed_invalid_symbol",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e), limit=limit)
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "stock_news_detailed_error",
+                "symbol": symbol_upper,
+                "status": "invalid_symbol",
+                "limit": limit,
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found or invalid")
     except Exception as e:
-        logger.error(f"Failed to get stock news for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to get stock news for {symbol_upper}: {e}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e), limit=limit),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "stock_news_detailed_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "limit": limit,
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to fetch stock news: {str(e)}")
 
 # Streaming news endpoint (SSE)
@@ -367,10 +661,25 @@ async def stream_news(request: Request, symbol: str = "TSLA", interval: int = 10
     from services.http_mcp_client import get_http_mcp_client
     import json as json_lib
     
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
+    logged_completion = False
+
     async def event_generator():
         try:
             client = await get_http_mcp_client()
-            logger.info(f"Starting news stream for {symbol}")
+            logger.info(f"Starting news stream for {symbol_upper}")
+            await persist_request_log(
+                telemetry,
+                {
+                    "event": "stream_news_start",
+                    "symbol": symbol_upper,
+                    "status": "started",
+                },
+            )
             
             async for event in client.call_tool_streaming(
                 "stream_market_news",
@@ -392,6 +701,31 @@ async def stream_news(request: Request, symbol: str = "TSLA", interval: int = 10
                 }
             }
             yield f"data: {json_lib.dumps(error_event)}\n\n"
+
+            error_telemetry = telemetry.with_duration((time.perf_counter() - start_time) * 1000)
+            await persist_request_log(
+                error_telemetry,
+                {
+                    "event": "stream_news_error",
+                    "symbol": symbol_upper,
+                    "status": "exception",
+                    "error": str(e),
+                },
+            )
+            nonlocal logged_completion
+            logged_completion = True
+        else:
+            completed = telemetry.with_duration((time.perf_counter() - start_time) * 1000)
+            await persist_request_log(
+                completed,
+                {
+                    "event": "stream_news_completed",
+                    "symbol": symbol_upper,
+                    "status": "success",
+                },
+            )
+            nonlocal logged_completion
+            logged_completion = True
     
     return StreamingResponse(
         event_generator(),
@@ -408,14 +742,61 @@ async def stream_news(request: Request, symbol: str = "TSLA", interval: int = 10
 @limiter.limit("50/minute")
 async def get_comprehensive_stock_data(request: Request, symbol: str):
     """Get comprehensive stock information including price, history, and news"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
     try:
-        data = await market_service.get_comprehensive_stock_data(symbol.upper())
+        data = await market_service.get_comprehensive_stock_data(symbol_upper)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "comprehensive_stock_data_completed",
+            extra=completed.for_logging(symbol=symbol_upper)
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "comprehensive_stock_data",
+                "symbol": symbol_upper,
+                "status": "success",
+            },
+        )
         return data
     except ValueError as e:
-        logger.error(f"Invalid symbol {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.warning(
+            "comprehensive_stock_data_invalid_symbol",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e))
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "comprehensive_stock_data_error",
+                "symbol": symbol_upper,
+                "status": "invalid_symbol",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found or invalid")
     except Exception as e:
-        logger.error(f"Failed to get comprehensive data for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to get comprehensive data for {symbol_upper}: {e}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "comprehensive_stock_data_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to fetch comprehensive stock data: {str(e)}")
 
 # Technical indicators endpoint
@@ -430,12 +811,17 @@ async def get_technical_indicators(
     """Get technical indicators for a stock symbol"""
     if not symbol:
         raise HTTPException(status_code=400, detail="Symbol is required")
-    
-    logger.info(f"Getting technical indicators for {symbol}: {indicators}")
-    
+
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
+    logger.info(f"Getting technical indicators for {symbol_upper}: {indicators}")
+
     try:
         # Get current stock price first
-        price_data = await market_service.get_stock_price(symbol)
+        price_data = await market_service.get_stock_price(symbol_upper)
         current_price = price_data.get("price", 0)
         
         # Parse requested indicators
@@ -444,39 +830,35 @@ async def get_technical_indicators(
         # Call MCP server for technical indicators
         mcp_client = await get_direct_mcp_client()
         if not mcp_client:
-            raise HTTPException(status_code=503, detail="Technical analysis service unavailable")
+            # Fallback: return empty indicators instead of 503
+            logger.warning(f"MCP client unavailable for {symbol_upper}, returning empty indicators")
+            return {
+                "symbol": symbol_upper,
+                "timestamp": int(asyncio.get_event_loop().time()),
+                "current_price": current_price,
+                "indicators": {},
+                "data_source": "unavailable"
+            }
         
-        # Call the get_technical_indicators tool
         mcp_result = await mcp_client.call_tool(
             "get_technical_indicators",
-            {
-                "symbol": symbol.upper(),
-                "indicators": indicator_list,
-                "period": days
-            }
+            {"symbol": symbol_upper, "indicators": indicator_list, "days": days}
         )
-        
-        logger.error(f"MCP result structure: {mcp_result}")
-        
-        # Parse nested MCP response structure
-        parsed_data = None
-        if mcp_result and isinstance(mcp_result, dict):
-            # Handle nested structure: {'result': {'content': [{'type': 'text', 'text': '...'}]}}
-            if 'result' in mcp_result and 'content' in mcp_result['result']:
-                content = mcp_result['result']['content']
-                if isinstance(content, list) and len(content) > 0 and 'text' in content[0]:
-                    import json
-                    try:
-                        parsed_data = json.loads(content[0]['text'])
-                        logger.info(f"Parsed technical data: {parsed_data}")
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Failed to parse MCP JSON: {e}")
-            # Direct content access
-            elif "content" in mcp_result:
-                parsed_data = mcp_result["content"]
-        
+
+        parsed_data: Dict[str, Any] = {}
+        if isinstance(mcp_result, dict) and "content" in mcp_result:
+            parsed_data = mcp_result["content"]
+        elif isinstance(mcp_result, list) and mcp_result:
+            first_item = mcp_result[0]
+            if isinstance(first_item, dict) and "text" in first_item:
+                import json
+                try:
+                    parsed_data = json.loads(first_item["text"])
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"Failed to parse MCP JSON: {json_err}")
+
         if not parsed_data:
-            raise HTTPException(status_code=404, detail=f"No technical data available for {symbol}")
+            raise HTTPException(status_code=404, detail=f"No technical data available for {symbol_upper}")
         
         mcp_data = parsed_data
         
@@ -535,26 +917,110 @@ async def get_technical_indicators(
         else:
             logger.warning(f"Unexpected MCP data structure for {symbol}: {mcp_data}")
         
-        logger.info(f"Technical indicators retrieved for {symbol}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "technical_indicators_completed",
+            extra=completed.for_logging(symbol=symbol_upper, indicators=indicator_list)
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "technical_indicators",
+                "symbol": symbol_upper,
+                "status": "success",
+                "indicators": indicator_list,
+            },
+        )
         return response
         
     except ValueError as e:
-        logger.error(f"Invalid symbol {symbol}: {str(e)}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.warning(
+            "technical_indicators_invalid_symbol",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e))
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "technical_indicators_error",
+                "symbol": symbol_upper,
+                "status": "invalid_symbol",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=404, detail=f"Invalid symbol: {symbol}")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting technical indicators for {symbol}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get technical indicators")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Error getting technical indicators for {symbol_upper}: {str(e)}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "technical_indicators_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "error": str(e),
+            },
+        )
+
+        try:
+            fallback_price = await market_service.get_stock_price(symbol_upper)
+            current_price = fallback_price.get("price", 0)
+        except Exception:
+            current_price = 0
+
+        return {
+            "symbol": symbol_upper,
+            "timestamp": int(asyncio.get_event_loop().time()),
+            "current_price": current_price,
+            "indicators": {},
+            "data_source": "fallback_error",
+            "calculation_period": days,
+            "error": "Technical indicators temporarily unavailable",
+            "error_details": str(e)
+        }
 
 # Market overview endpoint
 @app.get("/api/market-overview")
 @limiter.limit("50/minute")
 async def get_market_overview(request: Request):
     """Get market overview including indices and top movers"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
     try:
         overview = await market_service.get_market_overview()
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info("market_overview_completed", extra=completed.for_logging())
+        await persist_request_log(
+            completed,
+            {
+                "event": "market_overview",
+                "status": "success",
+            },
+        )
         return overview
     except Exception as e:
-        logger.error(f"Failed to get market overview: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(f"Failed to get market overview: {e}", extra=errored.for_logging(error=str(e)))
+        await persist_request_log(
+            errored,
+            {
+                "event": "market_overview_error",
+                "status": "exception",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to fetch market overview: {str(e)}")
 
 # Enhanced market data endpoint
@@ -562,14 +1028,61 @@ async def get_market_overview(request: Request):
 @limiter.limit("100/minute")
 async def get_enhanced_market_data(request: Request, symbol: str):
     """Enhanced market data with intelligent service selection"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
     try:
-        data = await market_service.get_enhanced_market_data(symbol.upper())
+        data = await market_service.get_enhanced_market_data(symbol_upper)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "enhanced_market_data_completed",
+            extra=completed.for_logging(symbol=symbol_upper)
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "enhanced_market_data",
+                "symbol": symbol_upper,
+                "status": "success",
+            },
+        )
         return data
     except ValueError as e:
-        logger.error(f"Invalid symbol {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.warning(
+            "enhanced_market_data_invalid_symbol",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e))
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "enhanced_market_data_error",
+                "symbol": symbol_upper,
+                "status": "invalid_symbol",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found or invalid")
     except Exception as e:
-        logger.error(f"Failed to get enhanced market data for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to get enhanced market data for {symbol_upper}: {e}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "enhanced_market_data_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to fetch enhanced market data: {str(e)}")
 
 # Enhanced historical data endpoint
@@ -577,14 +1090,64 @@ async def get_enhanced_market_data(request: Request, symbol: str):
 @limiter.limit("100/minute") 
 async def get_enhanced_historical_data(request: Request, symbol: str, days: int = 30):
     """Enhanced historical data with intelligent routing"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
     try:
-        data = await market_service.get_enhanced_historical_data(symbol.upper(), days)
+        data = await market_service.get_enhanced_historical_data(symbol_upper, days)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "enhanced_history_completed",
+            extra=completed.for_logging(symbol=symbol_upper, days=days)
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "enhanced_history",
+                "symbol": symbol_upper,
+                "status": "success",
+                "days": days,
+            },
+        )
         return data
     except ValueError as e:
-        logger.error(f"Invalid request for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.warning(
+            "enhanced_history_invalid_symbol",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e), days=days)
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "enhanced_history_error",
+                "symbol": symbol_upper,
+                "status": "invalid_symbol",
+                "days": days,
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found or invalid")
     except Exception as e:
-        logger.error(f"Failed to get enhanced historical data for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to get enhanced historical data for {symbol_upper}: {e}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e), days=days),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "enhanced_history_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "days": days,
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to fetch enhanced historical data: {str(e)}")
 
 # Debug endpoint for comparing data sources
@@ -592,11 +1155,44 @@ async def get_enhanced_historical_data(request: Request, symbol: str, days: int 
 @limiter.limit("10/minute")  
 async def compare_data_sources(request: Request, symbol: str):
     """Compare data from different sources for debugging"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
     try:
-        comparison = await market_service.compare_data_sources(symbol.upper())
+        comparison = await market_service.compare_data_sources(symbol_upper)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "compare_sources_completed",
+            extra=completed.for_logging(symbol=symbol_upper)
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "compare_sources",
+                "symbol": symbol_upper,
+                "status": "success",
+            },
+        )
         return comparison
     except Exception as e:
-        logger.error(f"Failed to compare data sources for {symbol}: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to compare data sources for {symbol_upper}: {e}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "compare_sources_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to compare data sources: {str(e)}")
 
 # Dashboard router
@@ -613,6 +1209,14 @@ app.include_router(agent_router, tags=["agent"])
 @limiter.limit("30/minute")
 async def ask_ai(request: Request, message_request: AIMessageRequest):
     """Ask AI a question (text-only fallback)"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(
+        request,
+        request_id,
+        session_id=message_request.session_id,
+    )
+    start_time = time.perf_counter()
     try:
         # Import anthropic client here to avoid import issues
         import anthropic
@@ -638,31 +1242,76 @@ async def ask_ai(request: Request, message_request: AIMessageRequest):
             ]
         )
         
-        return {
+        result = {
             "response": response.content[0].text,
             "session_id": message_request.session_id,
             "timestamp": datetime.now().isoformat()
         }
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        await persist_request_log(
+            completed,
+            {
+                "event": "ask_ai",
+                "status": "success",
+                "model": os.getenv("MODEL", "claude-3-sonnet-20240229"),
+            },
+        )
+        return result
         
     except Exception as e:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
         logger.error(f"AI request failed: {e}")
+        await persist_request_log(
+            errored,
+            {
+                "event": "ask_ai_error",
+                "status": "exception",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"AI request failed: {str(e)}")
 
 # ElevenLabs proxy endpoints
 @app.get("/elevenlabs/signed-url")
-async def get_elevenlabs_signed_url():
+async def get_elevenlabs_signed_url(request: Request):
     """Get signed URL for ElevenLabs WebSocket connection"""
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
     try:
         # For now, return a basic response indicating the service is available
         # In production, this would integrate with ElevenLabs API
-        import time
-        return {
+        import time as _time
+        result = {
             "signed_url": "ws://localhost:8000/realtime-relay",
-            "session_id": f"session_{int(time.time())}",
+            "session_id": f"session_{int(_time.time())}",
             "expires_in": 3600
         }
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        await persist_request_log(
+            completed,
+            {
+                "event": "elevenlabs_signed_url",
+                "status": "success",
+            },
+        )
+        return result
     except Exception as e:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
         logger.error(f"Failed to get ElevenLabs signed URL: {e}")
+        await persist_request_log(
+            errored,
+            {
+                "event": "elevenlabs_signed_url_error",
+                "status": "exception",
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Failed to get signed URL: {str(e)}")
 
 # OpenAI Realtime Relay WebSocket endpoints

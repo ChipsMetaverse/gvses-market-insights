@@ -357,6 +357,36 @@ class DatabaseService:
         except Exception as e:
             print(f"Error logging query: {e}")
             return False
+
+    async def log_request_event(
+        self,
+        event: str,
+        telemetry: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Persist enriched request telemetry for auditing."""
+        try:
+            data = {
+                "event": event,
+                "request_id": telemetry.get("request_id"),
+                "path": telemetry.get("path"),
+                "method": telemetry.get("method"),
+                "client_ip": telemetry.get("client_ip"),
+                "forwarded_for": telemetry.get("forwarded_for"),
+                "user_agent": telemetry.get("user_agent"),
+                "session_id": telemetry.get("session_id"),
+                "user_id": telemetry.get("user_id"),
+                "duration_ms": telemetry.get("duration_ms"),
+                "cost_summary": telemetry.get("cost_summary"),
+                "payload": metadata or {},
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+            self.client.table("request_logs").insert(data).execute()
+            return True
+        except Exception as e:
+            print(f"Error logging request event: {e}")
+            return False
     
     async def get_query_stats(
         self,

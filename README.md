@@ -87,7 +87,11 @@ VITE_WS_URL=ws://localhost:8000
 If using Supabase:
 1. Create a new Supabase project
 2. Run the schema from `database/schema.sql` in the SQL editor
-3. Copy your project URL and anon key to the environment files
+3. Apply additional migrations (e.g. telemetry logging) from `backend/supabase_migrations/`
+   ```bash
+   supabase db push --file backend/supabase_migrations/002_request_logs.sql
+   ```
+4. Copy your project URL and anon key to the environment files
 
 ### 4. Run the Application
 

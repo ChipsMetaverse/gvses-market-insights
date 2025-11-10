@@ -4,16 +4,22 @@ Agent Router
 API endpoints for the OpenAI agent orchestrator with function calling.
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
 import logging
+import time
 from datetime import datetime
 from services.agent_orchestrator import get_orchestrator
 from services.openai_relay_server import openai_relay_server
 from services.chart_tool_registry import get_chart_tool_registry
+from utils.request_context import set_request_id, get_request_id, generate_request_id
+from utils.telemetry import build_request_telemetry, persist_request_log
+# Phase 3: Cost tracking
+from services.cost_tracker import get_cost_tracker
+from models.cost_record import TimeWindow
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +43,10 @@ class AgentResponse(BaseModel):
     model: str
     cached: bool = False
     session_id: Optional[str] = None
+    request_id: Optional[str] = None  # Phase 3: Request ID for distributed tracing
     # Ensure chart command array is preserved and delivered to frontend
     chart_commands: Optional[List[str]] = None
+    chart_commands_structured: Optional[List[Dict[str, Any]]] = None
 
 class ToolSchema(BaseModel):
     """Model for tool schema information."""
@@ -77,48 +85,90 @@ class ChartSnapshotResponse(BaseModel):
     analysis: Optional[Dict[str, Any]] = None
     analysis_error: Optional[str] = None
 
-@router.post("/orchestrate", response_model=AgentResponse)
-async def orchestrate_query(request: AgentQuery):
+@router.post("/orchestrate")
+async def orchestrate_query(body: AgentQuery, request: Request):
     """
     Process a query using the OpenAI agent with function calling.
-    
+
     This endpoint:
     1. Accepts a user query and optional conversation history
     2. Uses OpenAI to determine which tools to call
     3. Executes the necessary market data tools
     4. Returns a comprehensive response with data
+
+    Phase 2: Supports both streaming and non-streaming based on request.stream
+    Phase 3: Request ID propagation for distributed tracing
     """
+    # Phase 3: Extract or generate request ID
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+
+    telemetry = build_request_telemetry(
+        request,
+        request_id,
+        session_id=body.session_id,
+        user_id=body.user_id,
+    )
+
+    # Phase 2: If client requested streaming, redirect to streaming logic
+    if body.stream:
+        return await stream_query(body, request)
+
+    start_time = time.perf_counter()
+    cost_tracker = get_cost_tracker()
+
     try:
         orchestrator = get_orchestrator()
 
         logger.info(
             "agent_query_received",
-            extra={
-                "timestamp": datetime.utcnow().isoformat(),
-                "query": request.query,
-                "session_id": request.session_id,
-                "stream": request.stream,
-            },
+            extra=telemetry.for_logging(
+                timestamp=datetime.utcnow().isoformat(),
+                query=body.query,
+                stream=body.stream,
+            ),
         )
 
-        # Process the query
+        # Process the query (non-streaming)
         result = await orchestrator.process_query(
-            query=request.query,
-            conversation_history=request.conversation_history,
-            stream=False,  # Streaming handled separately
-            chart_context=request.chart_context  # Pass chart context if provided
+            query=body.query,
+            conversation_history=body.conversation_history,
+            stream=False,  # Non-streaming path
+            chart_context=body.chart_context,  # Pass chart context if provided
+            request_id=request_id  # Phase 3: Pass request ID for tracing
         )
 
-        # Add session ID if provided
-        if request.session_id:
-            result["session_id"] = request.session_id
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        cost_summary = cost_tracker.get_cost_summary_for_request(request_id)
+        completed_telemetry = telemetry.with_duration(duration_ms).with_cost_summary(cost_summary)
+
+        # Add session ID and request ID if provided
+        if body.session_id:
+            result["session_id"] = body.session_id
+        result["request_id"] = request_id
+        if cost_summary:
+            result["cost_summary"] = cost_summary
+
+        response_preview = (result.get("text") or "")[:250] or None
 
         logger.info(
             "agent_query_completed",
-            extra={
-                "timestamp": datetime.utcnow().isoformat(),
-                "session_id": result.get("session_id"),
-                "model": result.get("model"),
+            extra=completed_telemetry.for_logging(
+                timestamp=datetime.utcnow().isoformat(),
+                session_id=result.get("session_id"),
+                model=result.get("model"),
+                tools_used=result.get("tools_used", []),
+                chart_commands=result.get("chart_commands"),
+                response_preview=response_preview,
+            ),
+        )
+
+        await persist_request_log(
+            completed_telemetry,
+            {
+                "event": "agent_query_completed",
+                "query": body.query,
+                "response_preview": response_preview,
                 "tools_used": result.get("tools_used", []),
                 "chart_commands": result.get("chart_commands"),
             },
@@ -127,47 +177,95 @@ async def orchestrate_query(request: AgentQuery):
         return AgentResponse(**result)
         
     except Exception as e:
-        logger.error(f"Error in agent orchestration: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        error_telemetry = telemetry.with_duration(duration_ms)
+        logger.error(
+            "Error in agent orchestration",
+            exc_info=True,
+            extra=error_telemetry.for_logging(message=str(e)),
+        )
+        await persist_request_log(
+            error_telemetry,
+            {
+                "event": "agent_query_error",
+                "query": body.query,
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/stream")
-async def stream_query(request: AgentQuery):
+async def stream_query(body: AgentQuery, request: Request):
     """
     Stream a response from the agent.
-    
+
     Returns a streaming response that yields text chunks as they're generated.
     Note: Tool calling happens before streaming begins.
+    Phase 3: Request ID propagation for distributed tracing
     """
-    if not request.stream:
+    # Phase 3: Extract or generate request ID
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+
+    if not body.stream:
         # If not streaming, redirect to regular orchestrate
-        return await orchestrate_query(request)
-    
+        return await orchestrate_query(body, request)
+
+    start_time = time.perf_counter()
+    cost_tracker = get_cost_tracker()
+
     try:
         orchestrator = get_orchestrator()
-        
+
         async def generate():
             """Generate TRUE streaming response with progressive tool execution."""
             # First, send metadata about the query
             metadata = {
                 "type": "metadata",
-                "session_id": request.session_id,
+                "session_id": body.session_id,
+                "request_id": request_id,  # Phase 3: Include request ID in stream
                 "model": orchestrator.model,
                 "streaming": True,
                 "version": "2.0"  # New streaming version
             }
             yield f"data: {json.dumps(metadata)}\n\n"
-            
+
             # Stream the response with progressive updates
             async for chunk in orchestrator.stream_query(
-                query=request.query,
-                conversation_history=request.conversation_history
+                query=body.query,
+                conversation_history=body.conversation_history,
+                request_id=request_id  # Phase 3: Pass request ID to orchestrator
             ):
                 # The new stream_query yields dictionaries with type and data
                 # Types: content, tool_start, tool_result, done, error
+                if chunk.get("type") == "content":
+                    logger.debug(
+                        "agent_stream_chunk",
+                        extra=telemetry.for_logging(chunk_type=chunk.get("type")),
+                    )
                 yield f"data: {json.dumps(chunk)}\n\n"
-                
+
                 # If this is the done signal, we're finished
                 if chunk.get("type") == "done":
+                    duration_ms = (time.perf_counter() - start_time) * 1000
+                    cost_summary = cost_tracker.get_cost_summary_for_request(request_id)
+                    completed_telemetry = telemetry.with_duration(duration_ms).with_cost_summary(cost_summary)
+                    logger.info(
+                        "agent_stream_completed",
+                        extra=completed_telemetry.for_logging(
+                            tools_used=chunk.get("tools_used", []),
+                            chart_commands=chunk.get("chart_commands"),
+                        ),
+                    )
+                    await persist_request_log(
+                        completed_telemetry,
+                        {
+                            "event": "agent_stream_completed",
+                            "query": body.query,
+                            "tools_used": chunk.get("tools_used", []),
+                            "chart_commands": chunk.get("chart_commands"),
+                        },
+                    )
                     break
         
         return StreamingResponse(
@@ -181,7 +279,21 @@ async def stream_query(request: AgentQuery):
         )
         
     except Exception as e:
-        logger.error(f"Error in agent streaming: {e}")
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        error_telemetry = telemetry.with_duration(duration_ms)
+        logger.error(
+            "Error in agent streaming",
+            exc_info=True,
+            extra=error_telemetry.for_logging(message=str(e)),
+        )
+        await persist_request_log(
+            error_telemetry,
+            {
+                "event": "agent_stream_error",
+                "query": body.query,
+                "error": str(e),
+            },
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/tools", response_model=List[ToolSchema])
@@ -441,7 +553,8 @@ async def process_voice_query(request: AgentQuery):
             model=result.get("model", "unknown"),
             cached=result.get("cached", False),
             session_id=request.session_id,
-            chart_commands=result.get("chart_commands")
+            chart_commands=result.get("chart_commands"),
+            chart_commands_structured=result.get("chart_commands_structured")
         )
         
     except Exception as e:
@@ -595,7 +708,161 @@ async def get_pattern_history(
             ))
         
         return entries
-        
+
     except Exception as e:
         logger.error(f"Error retrieving pattern history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Phase 3: Cost Tracking Endpoints
+# ============================================================================
+
+@router.get("/costs/summary")
+async def get_cost_summary(
+    window: str = "day",
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None
+):
+    """
+    Get cost summary for a time window.
+
+    Phase 3: Observability Infrastructure - Cost Tracking
+
+    Args:
+        window: Time window (hour, day, week, month, custom)
+        start_time: ISO format datetime for custom window
+        end_time: ISO format datetime for custom window
+
+    Returns:
+        CostSummary with aggregated cost data
+    """
+    try:
+        cost_tracker = get_cost_tracker()
+
+        # Parse time window
+        try:
+            time_window = TimeWindow(window.lower())
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid window: {window}. Must be one of: hour, day, week, month, custom"
+            )
+
+        # Parse custom time range if provided
+        start_dt = None
+        end_dt = None
+        if time_window == TimeWindow.CUSTOM:
+            if not start_time or not end_time:
+                raise HTTPException(
+                    status_code=400,
+                    detail="start_time and end_time required for custom window"
+                )
+            try:
+                from datetime import datetime
+                start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Invalid datetime format: {e}")
+
+        # Get summary
+        summary = cost_tracker.get_summary(
+            window=time_window,
+            start_time=start_dt,
+            end_time=end_dt
+        )
+
+        return {
+            "period_start": summary.period_start.isoformat(),
+            "period_end": summary.period_end.isoformat(),
+            "total_requests": summary.total_requests,
+            "total_tokens": summary.total_tokens,
+            "total_cost_usd": summary.total_cost_usd,
+            "avg_cost_per_request_usd": summary.avg_cost_per_request_usd,
+            "cost_by_model": summary.cost_by_model,
+            "cost_by_endpoint": summary.cost_by_endpoint,
+            "cost_by_intent": summary.cost_by_intent,
+            "total_cached_savings_usd": summary.total_cached_savings_usd,
+            "cache_hit_rate": summary.cache_hit_rate
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting cost summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/costs/stats")
+async def get_cost_stats():
+    """
+    Get overall cost tracking statistics.
+
+    Phase 3: Observability Infrastructure - Cost Tracking
+
+    Returns:
+        Overall statistics including total cost, records, models used
+    """
+    try:
+        cost_tracker = get_cost_tracker()
+        stats = cost_tracker.get_stats()
+        return stats
+
+    except Exception as e:
+        logger.error(f"Error getting cost stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/costs/recent")
+async def get_recent_costs(limit: int = 100):
+    """
+    Get recent cost records.
+
+    Phase 3: Observability Infrastructure - Cost Tracking
+
+    Args:
+        limit: Maximum number of records to return (default: 100, max: 1000)
+
+    Returns:
+        List of recent cost records with request details
+    """
+    try:
+        if limit > 1000:
+            raise HTTPException(status_code=400, detail="Limit cannot exceed 1000")
+
+        cost_tracker = get_cost_tracker()
+        records = cost_tracker.get_recent_records(limit=limit)
+
+        # Convert to serializable format
+        return [
+            {
+                "request_id": record.request_id,
+                "timestamp": record.timestamp.isoformat(),
+                "model": record.model,
+                "tokens": {
+                    "prompt_tokens": record.tokens.prompt_tokens,
+                    "completion_tokens": record.tokens.completion_tokens,
+                    "total_tokens": record.tokens.total_tokens,
+                    "cached_tokens": record.tokens.cached_tokens
+                },
+                "cost_usd": record.cost_usd,
+                "input_cost_usd": record.input_cost_usd,
+                "output_cost_usd": record.output_cost_usd,
+                "cached_savings_usd": record.cached_savings_usd,
+                "tags": {
+                    "endpoint": record.tags.endpoint,
+                    "session_id": record.tags.session_id,
+                    "user_id": record.tags.user_id,
+                    "intent": record.tags.intent,
+                    "tools_used": record.tags.tools_used,
+                    "stream": record.tags.stream
+                }
+            }
+            for record in records
+        ]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting recent costs: {e}")
         raise HTTPException(status_code=500, detail=str(e))

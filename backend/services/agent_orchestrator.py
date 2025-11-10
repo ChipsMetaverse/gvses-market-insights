@@ -12,7 +12,7 @@ import hashlib
 import time
 import re
 import string
-from typing import Any, Dict, List, Optional, AsyncGenerator, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, AsyncGenerator, Set, Tuple
 from datetime import datetime, timedelta
 from collections import OrderedDict
 import logging
@@ -26,6 +26,7 @@ from services.chart_image_analyzer import ChartImageAnalyzer
 from services.chart_snapshot_store import ChartSnapshotStore
 from services.pattern_lifecycle import PatternLifecycleManager
 from services.chart_command_extractor import ChartCommandExtractor
+from models.chart_command import ChartCommand
 
 # Import new modular components  
 from core.intent_router import IntentRouter
@@ -3948,15 +3949,7 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 response_text, query, tool_results
             )
         
-        # Combine existing and extracted commands
-        all_commands = chart_commands + extracted_commands
-        # Remove duplicates while preserving order
-        seen = set()
-        final_commands = []
-        for cmd in all_commands:
-            if cmd not in seen:
-                seen.add(cmd)
-                final_commands.append(cmd)
+        structured_commands, legacy_commands = self._serialize_chart_commands(chart_commands + extracted_commands)
         
         result_payload: Dict[str, Any] = {
             "text": response_text or "I'm sorry, I couldn't generate a response.",
@@ -3966,8 +3959,10 @@ Remember to cite sources when using this knowledge and maintain educational tone
             "model": self.model,
             "cached": False
         }
-        if final_commands:
-            result_payload["chart_commands"] = final_commands
+        if legacy_commands:
+            result_payload["chart_commands"] = legacy_commands
+        if structured_commands:
+            result_payload["chart_commands_structured"] = structured_commands
         try:
             logger.info(f"Response includes chart_commands: {bool(result_payload.get('chart_commands'))}")
             if result_payload.get('chart_commands'):
@@ -4124,15 +4119,6 @@ Remember to cite sources when using this knowledge and maintain educational tone
                             chart_commands.extend(technical_commands)
                         structured_data["technical_analysis"] = ta_results
             
-            if chart_commands:
-                seen_cmds: Set[str] = set()
-                deduped_cmds: List[str] = []
-                for cmd in chart_commands:
-                    if cmd not in seen_cmds:
-                        seen_cmds.add(cmd)
-                        deduped_cmds.append(cmd)
-                chart_commands = deduped_cmds
-            
             # Record diagnostics
             total_dur = time.monotonic()-start_time
             self.last_diag = {
@@ -4161,22 +4147,17 @@ Remember to cite sources when using this knowledge and maintain educational tone
                     response_text, query, tool_results
                 )
             
-            # Combine existing and extracted commands
+            # Combine existing and extracted commands and serialize
             all_commands = chart_commands + extracted_commands
-            # Remove duplicates while preserving order
-            seen = set()
-            final_commands = []
-            for cmd in all_commands:
-                if cmd not in seen:
-                    seen.add(cmd)
-                    final_commands.append(cmd)
-            
+            structured_commands, legacy_commands = self._serialize_chart_commands(all_commands)
+
             return {
                 "text": response_text or "I couldn't generate a response.",
                 "tools_used": tools_used,
                 "data": tool_results,  # Required field for AgentResponse
                 "structured_data": structured_data,
-                "chart_commands": final_commands,
+                "chart_commands": legacy_commands,
+                "chart_commands_structured": structured_commands,
                 "timestamp": datetime.now().isoformat(),
                 "model": model,  # Required field for AgentResponse
                 "cached": False,
@@ -4188,11 +4169,61 @@ Remember to cite sources when using this knowledge and maintain educational tone
             
         except Exception as e:
             logger.error(f"Single-pass processing failed: {e}")
+            # Return properly formatted response even on error
+            error_msg = "I encountered an error while processing your request."
+            if "quota" in str(e).lower() or "429" in str(e):
+                error_msg = "OpenAI API quota exceeded. Please check your billing and add credits at https://platform.openai.com/account/billing"
+
             return {
-                "text": "I encountered an error while processing your request.",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
+                "text": error_msg,
+                "tools_used": [],
+                "data": {"error": str(e), "error_type": type(e).__name__},
+                "model": self.model,
+                "timestamp": datetime.now().isoformat(),
+                "chart_commands": [],
+                "chart_commands_structured": []
             }
+
+    def _serialize_chart_commands(
+        self, commands: Iterable[Any]
+    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """Normalize chart commands into structured payload plus legacy strings."""
+        structured: List[Dict[str, Any]] = []
+        legacy: List[str] = []
+        seen: Set[str] = set()
+
+        for raw in commands:
+            if not raw:
+                continue
+
+            chart_command: Optional[ChartCommand] = None
+
+            if isinstance(raw, ChartCommand):
+                chart_command = raw
+            elif isinstance(raw, str):
+                chart_command = ChartCommand.from_legacy(raw)
+            elif isinstance(raw, dict):
+                try:
+                    if hasattr(ChartCommand, "model_validate"):
+                        chart_command = ChartCommand.model_validate(raw)  # type: ignore[attr-defined]
+                    else:
+                        chart_command = ChartCommand(**raw)
+                except Exception as exc:
+                    logger.warning("Failed to parse structured chart command dict", exc_info=exc)
+                    continue
+            else:
+                logger.debug(f"Skipping unrecognized chart command payload: {raw}")
+                continue
+
+            key = chart_command.dedupe_key()
+            if key in seen:
+                continue
+            seen.add(key)
+
+            structured.append(chart_command.model_dump())
+            legacy.append(chart_command.to_legacy())
+
+        return structured, legacy
 
     async def _process_query_chat(
         self, 
@@ -4584,7 +4615,9 @@ Remember to cite sources when using this knowledge and maintain educational tone
                 "cached": False  # Would be true if all results came from cache
             }
             if final_commands:
-                result_payload["chart_commands"] = final_commands
+                structured_commands, legacy_commands = self._serialize_chart_commands(final_commands)
+                result_payload["chart_commands"] = legacy_commands
+                result_payload["chart_commands_structured"] = structured_commands
             try:
                 logger.info(f"Response includes chart_commands: {bool(result_payload.get('chart_commands'))}")
                 if result_payload.get('chart_commands'):
@@ -4596,10 +4629,19 @@ Remember to cite sources when using this knowledge and maintain educational tone
             
         except Exception as e:
             logger.error(f"Error processing query: {e}")
+            # Return properly formatted response even on error
+            error_msg = "I apologize, but I encountered an error processing your request. Please try again."
+            if "quota" in str(e).lower() or "429" in str(e):
+                error_msg = "OpenAI API quota exceeded. Please check your billing and add credits at https://platform.openai.com/account/billing"
+
             return {
-                "text": "I apologize, but I encountered an error processing your request. Please try again.",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
+                "text": error_msg,
+                "tools_used": [],
+                "data": {"error": str(e), "error_type": type(e).__name__},
+                "model": self.model,
+                "timestamp": datetime.now().isoformat(),
+                "chart_commands": [],
+                "chart_commands_structured": []
             }
 
     # DEPRECATED: Replaced by self.intent_router.classify_intent()
