@@ -21,6 +21,13 @@ interface AgentQuery {
   chart_context?: ChartContext;  // NEW: Current chart state
 }
 
+export interface StructuredChartCommand {
+  type: string;
+  payload: Record<string, any>;
+  description?: string | null;
+  legacy?: string | null;
+}
+
 interface AgentResponse {
   text: string;
   tools_used: string[];
@@ -31,6 +38,7 @@ interface AgentResponse {
   session_id?: string;
   structured_output?: StructuredMarketAnalysis; // New field for Responses API
   chart_commands?: string[];
+  chart_commands_structured?: StructuredChartCommand[];
 }
 
 interface StructuredMarketAnalysis {
@@ -63,6 +71,7 @@ interface ChartSnapshot {
   timeframe: string;
   captured_at: string;
   chart_commands?: string[];
+  chart_commands_structured?: StructuredChartCommand[];
   metadata?: Record<string, any>;
   vision_model?: string;
   analysis?: {
@@ -129,17 +138,25 @@ class AgentOrchestratorService {
 
   /**
    * Send a query to the agent orchestrator
+   *
+   * Phase 2: Supports optional streaming for progressive UI updates
+   *
+   * @param query - The user's query
+   * @param conversationHistory - Optional conversation history
+   * @param chartContext - Optional chart context
+   * @param stream - Whether to use streaming (default: false for backwards compatibility)
    */
   async sendQuery(
     query: string,
     conversationHistory?: Array<{ role: string; content: string }>,
-    chartContext?: ChartContext
+    chartContext?: ChartContext,
+    stream: boolean = false
   ): Promise<AgentResponse> {
     const endpoint = this.getOrchestratorEndpoint();
     const payload: AgentQuery = {
       query,
       conversation_history: conversationHistory,
-      stream: false,
+      stream: stream,  // Phase 2: Honor caller's streaming preference
       session_id: this.sessionId,
       chart_context: chartContext  // Pass chart context if provided
     };
@@ -186,6 +203,9 @@ class AgentOrchestratorService {
     if (!data.data) data.data = {};
     data.data.endpoint_used = endpoint;
     data.data.sdk_enabled = endpoint.includes('sdk-orchestrate');
+    if (data.chart_commands_structured && !data.data.chart_commands_structured) {
+      data.data.chart_commands_structured = data.chart_commands_structured;
+    }
 
     return data;
   }
@@ -285,13 +305,15 @@ class AgentOrchestratorService {
   async streamQuery(
     query: string,
     conversationHistory?: Array<{ role: string; content: string }>,
+    chartContext?: ChartContext,
     onChunk?: (chunk: StreamChunk) => void
   ): Promise<void> {
     const payload: AgentQuery = {
       query,
       conversation_history: conversationHistory,
       stream: true,
-      session_id: this.sessionId
+      session_id: this.sessionId,
+      chart_context: chartContext
     };
 
     const response = await fetch(`${this.baseUrl}/api/agent/stream`, {
@@ -368,11 +390,14 @@ class AgentOrchestratorService {
                   });
                 }
               }
-              // Handle completion
+              // Handle completion - Phase 2: Pass chart commands
               else if (chunk.type === 'done') {
                 if (onChunk) {
                   onChunk({
-                    type: 'done'
+                    type: 'done',
+                    chart_commands: chunk.chart_commands,
+                    chart_commands_structured: chunk.chart_commands_structured,
+                    tools_used: chunk.tools_used
                   });
                 }
               }
@@ -409,6 +434,10 @@ interface StreamChunk {
   text?: string;
   data?: any;
   tool?: string;
+  // Phase 2: Chart commands in done event
+  chart_commands?: string[];
+  chart_commands_structured?: StructuredChartCommand[];
+  tools_used?: string[];
 }
 
 // Export singleton instance

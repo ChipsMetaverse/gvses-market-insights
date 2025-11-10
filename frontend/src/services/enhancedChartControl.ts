@@ -4,9 +4,19 @@
  * Allows agent to manipulate all chart features while speaking to users
  */
 
-import { IChartApi, ISeriesApi, SeriesType, LineSeries, UTCTimestamp } from 'lightweight-charts';
-import { chartControlService } from './chartControlService';
+import {
+  IChartApi,
+  ISeriesApi,
+  SeriesType,
+  LineSeries,
+  UTCTimestamp,
+  SeriesMarker,
+  SeriesMarkerShape,
+  Time,
+} from 'lightweight-charts';
+import { chartControlService, type StructuredChartCommand } from './chartControlService';
 import { DrawingPrimitive } from './DrawingPrimitive';
+import { PREFER_STRUCTURED_CHART_COMMANDS } from '../utils/featureFlags';
 
 type ParsedDrawingCommand =
   | { action: 'pattern_level'; patternId: string; levelType: string; price: number }
@@ -30,13 +40,18 @@ type ParsedDrawingCommand =
   | { action: 'target'; price: number }
   | { action: 'stoploss'; price: number };
 
+type MarkerCapableCandlestickSeries = ISeriesApi<'Candlestick'> & {
+  setMarkers(markers: SeriesMarker<Time>[]): void;
+};
+
 class EnhancedChartControl {
   private chartRef: IChartApi | null = null;
-  private mainSeriesRef: ISeriesApi<SeriesType> | null = null;
+  private mainSeriesRef: MarkerCapableCandlestickSeries | null = null;
   private indicatorDispatch: any = null;
   private drawingsMap: Map<string, any> = new Map();
   private annotationsMap: Map<string, ISeriesApi<SeriesType>> = new Map();
   private drawingPrimitive: DrawingPrimitive | null = null;
+  private patternMarkers: SeriesMarker<Time>[] = [];
   
   private overlayControls: {
     setOverlayVisibility?: (indicator: string, enabled: boolean) => void;
@@ -50,7 +65,7 @@ class EnhancedChartControl {
   /**
    * Initialize with chart reference, main series, and indicator dispatch
    */
-  initialize(chart: IChartApi, mainSeries: ISeriesApi<SeriesType>, indicatorDispatch: any) {
+  initialize(chart: IChartApi, mainSeries: MarkerCapableCandlestickSeries, indicatorDispatch: any) {
     this.chartRef = chart;
     this.mainSeriesRef = mainSeries;
     this.indicatorDispatch = indicatorDispatch;
@@ -82,6 +97,38 @@ class EnhancedChartControl {
    */
   getChartRef(): IChartApi | null {
     return this.chartRef;
+  }
+
+  clearDrawings(): string {
+    this.drawingsMap.forEach((line) => {
+      if (line && typeof line.remove === 'function') {
+        try {
+          line.remove();
+        } catch (error) {
+          console.warn('Error removing drawing line:', error);
+        }
+      }
+    });
+    this.drawingsMap.clear();
+
+    if (this.chartRef) {
+      this.annotationsMap.forEach(series => {
+        try {
+          this.chartRef!.removeSeries(series);
+        } catch (error) {
+          console.error('Error removing annotation series:', error);
+        }
+      });
+    }
+    this.annotationsMap.clear();
+
+    if (this.mainSeriesRef) {
+      this.patternMarkers = [];
+      this.mainSeriesRef.setMarkers([]);
+    }
+
+    this.overlayControls.clearOverlays?.();
+    return 'Cleared all drawings';
   }
 
   /**
@@ -331,7 +378,8 @@ class EnhancedChartControl {
     if (!this.chartRef || !this.mainSeriesRef) {
       return 'Chart not available';
     }
-    
+    const series = this.mainSeriesRef;
+
     const colors = {
       support: '#22c55e',
       resistance: '#ef4444',
@@ -339,7 +387,7 @@ class EnhancedChartControl {
     };
     
     try {
-      const priceLine = this.mainSeriesRef.createPriceLine({
+      const priceLine = series.createPriceLine({
         price,
         color: colors[type],
         lineWidth: 2,
@@ -359,194 +407,16 @@ class EnhancedChartControl {
   }
   
   /**
-   * Draw a trendline between two points
-   */
-  drawTrendline(startTime: number, startPrice: number, endTime: number, endPrice: number, color: string = '#3b82f6'): string {
-    if (!this.chartRef) {
-      return 'Chart not initialized';
-    }
-
-    try {
-      console.log(`[Enhanced Chart] Drawing trendline from ${startTime} to ${endTime}`, { startPrice, endPrice, color });
-      
-      // Create line series for the trendline
-      const lineSeries = this.chartRef.addLineSeries({
-        color: color,
-        lineWidth: 2,
-        lineStyle: 0, // Solid line
-        priceLineVisible: false,
-        lastValueVisible: false,
-      });
-
-      // Set data points for the trendline
-      lineSeries.setData([
-        { time: startTime, value: startPrice },
-        { time: endTime, value: endPrice }
-      ]);
-
-      // Store reference for cleanup
-      const lineId = `trendline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      this.annotationsMap.set(lineId, lineSeries);
-      
-      console.log(`✅ Trendline created successfully (ID: ${lineId}). Total annotations: ${this.annotationsMap.size}`);
-      return `Trendline drawn from ${startTime} to ${endTime}`;
-    } catch (error) {
-      console.error('❌ Error drawing trendline:', error);
-      return 'Failed to draw trendline';
-    }
-  }
-
-  /**
-   * Draw a horizontal line at a specific price level (TIME-BOUND VERSION)
-   * @param price - Price level to draw the line
-   * @param startTime - Start timestamp (Unix seconds) for the line
-   * @param endTime - End timestamp (Unix seconds) for the line
-   * @param color - Line color (default: red)
-   * @param label - Optional label for the line
-   */
-  drawHorizontalLine(
-    price: number, 
-    startTime: number, 
-    endTime: number, 
-    color: string = '#ef4444', 
-    label?: string
-  ): string {
-    if (!this.chartRef) {
-      return 'Chart not initialized';
-    }
-
-    try {
-      // Calculate time span for logging
-      const timeSpanDays = Math.round((endTime - startTime) / 86400);
-      
-      console.log(`[Enhanced Chart] Drawing time-bound horizontal line at ${price.toFixed(2)}`, {
-        startTime,
-        endTime,
-        timeSpanDays,
-        color,
-        label
-      });
-      
-      // Create a LineSeries with time-bound data (not createPriceLine which spans entire chart)
-      const lineSeries = this.chartRef.addSeries(LineSeries, {
-        color: color,
-        lineWidth: 2,
-        lineStyle: 2, // Dashed line
-        priceLineVisible: false,
-        lastValueVisible: true, // Show price label at the end
-        crosshairMarkerVisible: false,
-        title: label
-      });
-
-      // Set data with time range - this makes the line ONLY appear between startTime and endTime
-      lineSeries.setData([
-        { time: startTime as UTCTimestamp, value: price },
-        { time: endTime as UTCTimestamp, value: price }
-      ]);
-
-      // Store reference for cleanup (use annotationsMap since it's a series, not a priceLine)
-      const lineId = `horizontal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      this.annotationsMap.set(lineId, lineSeries);
-      
-      console.log(`✅ Time-bound horizontal line created (ID: ${lineId}). Range: ${new Date(startTime * 1000).toISOString().split('T')[0]} → ${new Date(endTime * 1000).toISOString().split('T')[0]} (${timeSpanDays} days). Total annotations: ${this.annotationsMap.size}`);
-      return `Horizontal line drawn at ${price.toFixed(2)} for time range`;
-    } catch (error) {
-      console.error('❌ Error drawing horizontal line:', error);
-      return 'Failed to draw horizontal line';
-    }
-  }
-
-  /**
-   * Clear all drawings and annotations
-   */
-  clearDrawings(): string {
-    // Remove price lines
-    this.drawingsMap.forEach((line) => {
-      if (line && line.remove) {
-        line.remove();
-      }
-    });
-    this.drawingsMap.clear();
-    
-    // Remove annotation series
-    if (this.chartRef) {
-      this.annotationsMap.forEach(series => {
-        try {
-          this.chartRef!.removeSeries(series);
-        } catch (error) {
-          console.error('Error removing series:', error);
-        }
-      });
-    }
-    this.annotationsMap.clear();
-    this.overlayControls.clearOverlays?.();
-    
-    return 'Cleared all drawings';
-  }
-
-  /**
-   * Clear a specific pattern's overlays
-   */
-  clearPattern(patternId: string): string {
-    // Remove all drawings/annotations associated with this pattern
-    // For now, we clear everything since we don't track per-pattern
-    return this.clearDrawings();
-  }
-  
-  /**
-   * Highlight detected patterns on the chart
-   * @param patternId - Unique pattern identifier
-   * @param candles - Array of candle indices involved in the pattern
-   * @param patternType - Type of pattern for styling
-   */
-  highlightPattern(patternId: string, candles: number[], patternType: string): void {
-    if (!this.chartRef || !this.mainSeriesRef) return;
-    
-    // For now, add markers to highlight pattern candles
-    // This is a simplified visualization approach
-    const markers = candles.map(index => {
-      let color = '#3b82f6'; // Default blue
-      let text = '';
-      
-      // Color and label based on pattern type
-      if (patternType.includes('bullish')) {
-        color = '#22c55e'; // Green
-        text = '↑';
-      } else if (patternType.includes('bearish')) {
-        color = '#ef4444'; // Red
-        text = '↓';
-      } else if (patternType === 'doji') {
-        color = '#f59e0b'; // Orange
-        text = '•';
-      } else if (patternType === 'breakout') {
-        color = '#8b5cf6'; // Purple
-        text = '⚡';
-      }
-      
-      return {
-        time: index, // This should be the actual timestamp
-        position: 'aboveBar' as const,
-        color,
-        shape: 'circle' as const,
-        text
-      };
-    });
-    
-    // Note: setMarkers would need the actual time values from candle data
-    // This is a simplified example - in production, you'd map indices to timestamps
-    this.overlayControls.highlightPattern?.(patternType, { title: patternType });
-  }
-  
-  /**
    * Draw support and resistance levels on the chart
    * @param levels - Object with support and resistance arrays
    */
   drawSupportResistanceLevels(levels: { support: number[], resistance: number[] }): void {
     if (!this.chartRef || !this.mainSeriesRef) return;
+    const series = this.mainSeriesRef;
     
     // Draw support levels
     levels.support?.forEach((level, index) => {
-      const priceLine = this.mainSeriesRef.createPriceLine({
+      const priceLine = series.createPriceLine({
         price: level,
         color: '#22c55e',
         lineWidth: 1,
@@ -559,7 +429,7 @@ class EnhancedChartControl {
     
     // Draw resistance levels
     levels.resistance?.forEach((level, index) => {
-      const priceLine = this.mainSeriesRef.createPriceLine({
+      const priceLine = series.createPriceLine({
         price: level,
         color: '#ef4444',
         lineWidth: 1,
@@ -736,63 +606,116 @@ class EnhancedChartControl {
    * Process enhanced response - combines chart commands and indicator commands
    * FIX: Execute LOAD commands first, wait for chart to stabilize, then draw
    */
-  async processEnhancedResponse(response: string): Promise<any[]> {
-    console.log('[Enhanced Chart] 🔥 processEnhancedResponse called with:', response);
-    const commands = [];
-    
-    // STEP 1: Extract and execute LOAD commands FIRST (to avoid race condition)
-    const loadCommands = response.match(/LOAD:\w+/g) || [];
-    console.log('[Enhanced Chart] 📍 Found LOAD commands:', loadCommands);
-    
-    if (loadCommands.length > 0) {
-      for (const loadCmd of loadCommands) {
-        console.log('[Enhanced Chart] 🔄 Executing LOAD command:', loadCmd);
-        if (this.baseService.executeCommand(loadCmd)) {
-          commands.push({ type: 'symbol_change', command: loadCmd });
+  async processEnhancedResponse(
+    response: string,
+    chartCommandsFromApi: string[] = [],
+    structuredCommandsFromApi: StructuredChartCommand[] = []
+  ): Promise<any[]> {
+    const processingMode = PREFER_STRUCTURED_CHART_COMMANDS ? 'structured-first' : 'hybrid';
+
+    console.log('[Enhanced Chart] 🔥 processEnhancedResponse called with:', {
+      responseSnippet: response?.slice(0, 120),
+      legacyCount: chartCommandsFromApi.length,
+      structuredCount: structuredCommandsFromApi.length,
+      processingMode
+    });
+
+    // Log structured-first mode behavior
+    if (PREFER_STRUCTURED_CHART_COMMANDS && structuredCommandsFromApi.length > 0) {
+      console.log('[Enhanced Chart] 🎯 Structured-first mode: Processing structured commands only, ignoring legacy');
+    } else if (PREFER_STRUCTURED_CHART_COMMANDS && structuredCommandsFromApi.length === 0) {
+      console.log('[Enhanced Chart] ⚠️ Structured-first mode: No structured commands, falling back to pattern matching');
+    }
+
+    const executedCommands: any[] = [];
+    const executedCommandKeys = new Set<string>();
+
+    const parsedCommands = await this.baseService.parseAgentResponse(
+      response,
+      chartCommandsFromApi,
+      structuredCommandsFromApi
+    );
+
+    // STEP 1: Execute symbol changes (LOAD) first
+    const symbolCommands = parsedCommands.filter(cmd => cmd.type === 'symbol');
+    if (symbolCommands.length > 0) {
+      for (const symbolCommand of symbolCommands) {
+        const key = JSON.stringify({ type: symbolCommand.type, value: symbolCommand.value });
+        if (executedCommandKeys.has(key)) {
+          continue;
+        }
+
+        if (this.baseService.executeCommand(symbolCommand)) {
+          executedCommandKeys.add(key);
+          executedCommands.push({ type: 'symbol_change', command: symbolCommand });
         }
       }
-      
-      // Wait for chart to fully remount and stabilize
+
       console.log('[Enhanced Chart] ⏳ Waiting 2.5 seconds for chart to stabilize after symbol change...');
       await new Promise(resolve => setTimeout(resolve, 2500));
       console.log('[Enhanced Chart] ✅ Chart should be stable now, proceeding with drawings');
     }
-    
-    // STEP 2: Process drawing commands (SUPPORT:, RESISTANCE:, FIBONACCI:, TRENDLINE:)
-    const drawingCommands = this.parseDrawingCommands(response);
-    console.log('[Enhanced Chart] 📊 Parsed drawing commands:', drawingCommands);
-    
-    for (const drawCmd of drawingCommands) {
-      console.log('[Enhanced Chart] 🎨 Executing drawing command:', drawCmd);
-      const result = this.executeDrawingCommand(drawCmd);
-      console.log('[Enhanced Chart] ✅ Drawing command result:', result);
-      if (result) {
-        commands.push({ type: 'drawing', command: drawCmd, result });
-      }
-    }
-    
-    // STEP 3: Process indicator commands
-    const indicatorResult = await this.processIndicatorCommand(response);
-    if (indicatorResult) {
-      commands.push({ type: 'indicator', result: indicatorResult });
-    }
-    
-    // STEP 4: Process remaining standard chart commands (excluding already-processed LOAD)
-    const chartCommands = await this.baseService.parseAgentResponse(response);
-    for (const command of chartCommands) {
-      // Skip LOAD commands (already processed)
-      const cmdString = typeof command === 'string' ? command : (command as any).command || String(command);
-      if (cmdString.startsWith('LOAD:')) {
+
+    // STEP 2: Execute drawing commands (support/resistance, fibonacci, trendlines, etc.)
+    const executedDrawingKeys = new Set<string>();
+    const drawingCommands = parsedCommands.filter(cmd => cmd.type === 'drawing');
+    for (const drawingCommand of drawingCommands) {
+      const key = JSON.stringify(drawingCommand.value);
+      if (executedDrawingKeys.has(key)) {
         continue;
       }
-      
-      if (this.baseService.executeCommand(command)) {
-        commands.push(command);
+
+      const result = this.executeDrawingCommand(drawingCommand.value as ParsedDrawingCommand);
+      if (result) {
+        executedDrawingKeys.add(key);
+        executedCommands.push({ type: 'drawing', command: drawingCommand.value, result });
       }
     }
-    
-    console.log('[Enhanced Chart] 🎉 All commands processed, total:', commands.length);
-    return commands;
+
+    // Include any residual DRAW:* tokens from the raw response text
+    const textDrawingCommands = this.parseDrawingCommands(response);
+    for (const drawCmd of textDrawingCommands) {
+      const key = JSON.stringify(drawCmd);
+      if (executedDrawingKeys.has(key)) {
+        continue;
+      }
+
+      const result = this.executeDrawingCommand(drawCmd);
+      if (result) {
+        executedDrawingKeys.add(key);
+        executedCommands.push({ type: 'drawing', command: drawCmd, result });
+      }
+    }
+
+    // STEP 3: Natural language indicator processing
+    const indicatorResult = await this.processIndicatorCommand(response);
+    if (indicatorResult) {
+      executedCommands.push({ type: 'indicator', result: indicatorResult });
+    }
+
+    // STEP 4: Execute remaining standard commands (timeframes, indicators, zoom, etc.)
+    const remainingCommands = parsedCommands.filter(
+      cmd => cmd.type !== 'symbol' && cmd.type !== 'drawing'
+    );
+
+    for (const command of remainingCommands) {
+      const key = JSON.stringify({ type: command.type, value: command.value });
+      if (executedCommandKeys.has(key)) {
+        continue;
+      }
+
+      if (command.type === 'indicator' && indicatorResult) {
+        continue;
+      }
+
+      if (this.baseService.executeCommand(command)) {
+        executedCommandKeys.add(key);
+        executedCommands.push(command);
+      }
+    }
+
+    console.log('[Enhanced Chart] 🎉 All commands processed, total:', executedCommands.length);
+    return executedCommands;
   }
   
   /**
@@ -1206,32 +1129,70 @@ class EnhancedChartControl {
         opacity
       });
 
-      // Lightweight Charts doesn't support candle overlays
-      // Instead, we'll add subtle markers at the candle positions
-      const existingMarkers = this.mainSeriesRef.markers?.() || [];
-      const newMarkers = candleIndices.map(idx => {
-        if (idx >= candleData.length) return null;
-        const candle = candleData[idx];
-        return {
-          time: candle.time as UTCTimestamp,
-          position: 'inBar' as const,
-          color: overlayColor,
-          shape: 'circle' as const,
-          size: 0.5,
-          text: ''
-        };
-      }).filter(m => m !== null);
+      const newMarkers: SeriesMarker<Time>[] = [];
 
-      // Note: We can't actually highlight candles in Lightweight Charts
-      // This would require custom rendering or a different approach
-      // For now, the boundary box will be the primary visual indicator
-      
-      console.log('[Enhanced Chart] Pattern candles marked (boundary box will show highlight)');
-      return `Marked ${candleIndices.length} pattern candles`;
+      candleIndices.forEach(idx => {
+        if (idx >= candleData.length) {
+          return;
+        }
+
+        const candle = candleData[idx];
+        const time = candle?.time ?? candle?.timestamp ?? candle?.t;
+
+        if (time === undefined || time === null) {
+          return;
+        }
+
+        const markerEntry: SeriesMarker<Time> = {
+          time: time as UTCTimestamp,
+          position: 'aboveBar',
+          color: overlayColor,
+          shape: 'circle',
+          text: '',
+          size: Math.max(0.4, Math.min(1, opacity)),
+        };
+        newMarkers.push(markerEntry);
+      });
+
+      if (newMarkers.length === 0) {
+        console.log('[Enhanced Chart] No valid candle markers generated');
+        return 'No candles highlighted';
+      }
+
+      const newMarkerTimes = new Set(newMarkers.map(marker => marker.time));
+      this.patternMarkers = [
+        ...this.patternMarkers.filter(marker => !newMarkerTimes.has(marker.time)),
+        ...newMarkers
+      ];
+
+      this.mainSeriesRef.setMarkers(this.patternMarkers);
+      console.log('[Enhanced Chart] Pattern markers applied', { count: this.patternMarkers.length });
+      return `Marked ${newMarkers.length} pattern candles`;
     } catch (error) {
       console.error('Failed to highlight pattern candles:', error);
       return `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
+  }
+
+  highlightPattern(_patternId: string, candles: number[], patternType: string): void {
+    if (!this.chartRef || !this.mainSeriesRef) {
+      return;
+    }
+
+    const series = this.mainSeriesRef;
+    const seriesData = (series as unknown as { data?: () => any[] }).data?.();
+    if (!Array.isArray(seriesData) || seriesData.length === 0) {
+      console.debug('[Enhanced Chart] No series data available for pattern highlight');
+      return;
+    }
+
+    const overlayColor = patternType.includes('bearish')
+      ? '#ef4444'
+      : patternType.includes('bullish')
+        ? '#22c55e'
+        : '#3b82f6';
+
+    this.highlightPatternCandles(candles, seriesData, overlayColor, 0.6);
   }
 
   /**
@@ -1253,11 +1214,15 @@ class EnhancedChartControl {
     try {
       console.log('[Enhanced Chart] Drawing pattern marker', marker);
       
-      const markerShape = marker.type === 'circle' ? 'circle' : 
-                         marker.type === 'star' ? 'circle' : 
-                         marker.direction === 'up' ? 'arrowUp' : 'arrowDown';
+      const markerShape: SeriesMarkerShape = marker.type === 'circle'
+        ? 'circle'
+        : marker.type === 'star'
+          ? 'circle'
+          : marker.direction === 'up'
+            ? 'arrowUp'
+            : 'arrowDown';
 
-      const seriesMarker = {
+      const seriesMarker: SeriesMarker<Time> = {
         time: marker.time as UTCTimestamp,
         position: (marker.direction === 'up' ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
         color: marker.color,
@@ -1266,25 +1231,10 @@ class EnhancedChartControl {
         size: marker.radius || 1
       };
 
-      // Safely get existing markers - handle both v3 and v4 API
-      let existingMarkers: any[] = [];
-      try {
-        if (typeof (this.mainSeriesRef as any).markers === 'function') {
-          existingMarkers = (this.mainSeriesRef as any).markers() || [];
-        }
-      } catch (e) {
-        console.warn('[Enhanced Chart] Could not retrieve existing markers, starting fresh:', e);
-      }
-      
-      // Set markers with error handling
-      if (typeof (this.mainSeriesRef as any).setMarkers === 'function') {
-        (this.mainSeriesRef as any).setMarkers([...existingMarkers, seriesMarker]);
-        console.log('[Enhanced Chart] Pattern marker added successfully');
-        return `Pattern marker added at ${marker.time}`;
-      } else {
-        console.error('[Enhanced Chart] setMarkers method not available on series');
-        return 'Error: setMarkers not supported';
-      }
+      this.patternMarkers = [...this.patternMarkers, seriesMarker];
+      this.mainSeriesRef.setMarkers(this.patternMarkers);
+      console.log('[Enhanced Chart] Pattern marker added successfully');
+      return `Pattern marker added at ${marker.time}`;
     } catch (error) {
       console.error('Failed to draw pattern marker:', error);
       return `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;

@@ -3,17 +3,26 @@
  * Processes agent commands to control TradingView Lightweight Charts
  */
 
-import { marketDataService, SymbolSearchResult } from './marketDataService';
+import { marketDataService } from './marketDataService';
 import { chartToolService } from './chartToolService';
+import { PREFER_STRUCTURED_CHART_COMMANDS } from '../utils/featureFlags';
 
 export interface ChartCommand {
   type: 'symbol' | 'timeframe' | 'indicator' | 'zoom' | 'scroll' | 'style' | 'reset' | 'crosshair' | 'drawing';
   value: any;
+  description?: string | null;
   metadata?: {
     assetType?: 'stock' | 'crypto';
     [key: string]: any;
   };
   timestamp?: number;
+}
+
+export interface StructuredChartCommand {
+  type: string;
+  payload: Record<string, any>;
+  description?: string | null;
+  legacy?: string | null;
 }
 
 export interface ChartControlCallbacks {
@@ -397,6 +406,183 @@ class ChartControlService {
     crosshair: /(?:CROSSHAIR|CURSOR)[:\s]+(ON|OFF|TOGGLE)|(?:show|hide|toggle)(?: the)? crosshair/i
   };
 
+  private coerceNumber(value: any): number | undefined {
+    if (value === null || value === undefined || value === '') {
+      return undefined;
+    }
+
+    const num = Number(value);
+    return Number.isFinite(num) ? num : undefined;
+  }
+
+  private normalizeAssetType(raw: any): 'stock' | 'crypto' | undefined {
+    if (!raw) {
+      return undefined;
+    }
+    const value = String(raw).toLowerCase();
+    if (value.includes('crypto') || value.includes('coin')) {
+      return 'crypto';
+    }
+    if (value.includes('stock') || value.includes('equity')) {
+      return 'stock';
+    }
+    return undefined;
+  }
+
+  private convertStructuredCommand(structured: StructuredChartCommand): ChartCommand | null {
+    if (!structured || !structured.type) {
+      return null;
+    }
+
+    const timestamp = Date.now();
+    const type = String(structured.type).toLowerCase();
+    const payload = structured.payload || {};
+    const description = structured.description ?? null;
+    const baseMetadata = typeof payload.metadata === 'object' && payload.metadata !== null
+      ? { ...payload.metadata }
+      : {};
+
+    const wrap = (
+      commandType: ChartCommand['type'],
+      value: any,
+      extraMetadata: Record<string, any> = {}
+    ): ChartCommand => ({
+      type: commandType,
+      value,
+      description,
+      metadata: { ...baseMetadata, ...extraMetadata },
+      timestamp
+    });
+
+    switch (type) {
+      case 'load':
+      case 'symbol':
+        if (payload.symbol) {
+          const assetType = this.normalizeAssetType(payload.asset_type ?? payload.assetType);
+          return wrap('symbol', String(payload.symbol).toUpperCase(), assetType ? { assetType } : {});
+        }
+        break;
+
+      case 'timeframe':
+        if (payload.value) {
+          return wrap('timeframe', String(payload.value).toUpperCase());
+        }
+        break;
+
+      case 'indicator': {
+        const name = payload.name || payload.indicator;
+        if (name) {
+          const rawAction = String(payload.action || '').toLowerCase();
+          const enabled = typeof payload.enabled === 'boolean'
+            ? payload.enabled
+            : !(rawAction === 'remove' || rawAction === 'hide' || rawAction === 'off');
+          return wrap('indicator', { name: String(name).toUpperCase(), enabled });
+        }
+        break;
+      }
+
+      case 'zoom': {
+        const direction = String(payload.direction || payload.action || 'in').toUpperCase();
+        const amount = this.coerceNumber(payload.amount);
+        const level = direction === 'OUT'
+          ? Math.max(amount ?? 0.5, 0.5)
+          : Math.max(amount ?? 2, 1.01);
+        return wrap('zoom', level);
+      }
+
+      case 'scroll':
+        if (payload.time || payload.date) {
+          return wrap('scroll', payload.time || payload.date);
+        }
+        break;
+
+      case 'reset': {
+        const target = String(payload.target || payload.scope || 'view').toUpperCase();
+        return wrap('reset', target);
+      }
+
+      case 'crosshair': {
+        const mode = String(payload.mode || payload.state || 'toggle').toUpperCase();
+        return wrap('crosshair', mode === 'ON' || mode === 'ENABLE');
+      }
+
+      case 'drawing': {
+        const style = String(payload.style || payload.type || '').toLowerCase();
+        const price = this.coerceNumber(payload.price);
+        switch (style) {
+          case 'support':
+          case 'resistance':
+            if (price !== undefined) {
+              return wrap('drawing', { action: style, price });
+            }
+            break;
+
+          case 'fibonacci': {
+            const high = this.coerceNumber(payload.high);
+            const low = this.coerceNumber(payload.low);
+            if (high !== undefined && low !== undefined) {
+              return wrap('drawing', { action: 'fibonacci', high, low });
+            }
+            break;
+          }
+
+          case 'trendline': {
+            const startPrice = this.coerceNumber(payload.start_price ?? payload.startPrice);
+            const endPrice = this.coerceNumber(payload.end_price ?? payload.endPrice);
+            const startTime = this.coerceNumber(payload.start_time ?? payload.startTime);
+            const endTime = this.coerceNumber(payload.end_time ?? payload.endTime);
+            if (
+              startPrice !== undefined &&
+              endPrice !== undefined &&
+              startTime !== undefined &&
+              endTime !== undefined
+            ) {
+              return wrap('drawing', {
+                action: 'trendline',
+                startPrice,
+                startTime,
+                endPrice,
+                endTime
+              });
+            }
+            break;
+          }
+
+          case 'pattern':
+          case 'annotation': {
+            const patternId = payload.pattern_id ?? payload.patternId;
+            if (patternId) {
+              return wrap('drawing', {
+                action: 'pattern',
+                patternId,
+                status: payload.status,
+                patternType: payload.pattern_type ?? payload.patternType,
+                startCandle: payload.start_candle ?? payload.startCandle,
+                endCandle: payload.end_candle ?? payload.endCandle
+              });
+            }
+            break;
+          }
+        }
+        break;
+      }
+    }
+
+    if (structured.legacy) {
+      const fallback = this.parseDrawingCommand(structured.legacy);
+      if (fallback) {
+        fallback.description = description;
+        fallback.metadata = {
+          ...(fallback.metadata || {}),
+          source: 'structured-fallback'
+        };
+        return fallback;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Register callbacks for chart control events
    */
@@ -655,32 +841,76 @@ class ChartControlService {
    * Parse agent response for chart commands (async for symbol search)
    * Enhanced with knowledge-based tool mapping
    */
-  async parseAgentResponse(response: string, chartCommandsFromApi?: string[]): Promise<ChartCommand[]> {
+  async parseAgentResponse(
+    response: string,
+    chartCommandsFromApi?: string[],
+    structuredCommandsFromApi?: StructuredChartCommand[]
+  ): Promise<ChartCommand[]> {
     const commands: ChartCommand[] = [];
 
-    // PHASE 1: Try knowledge-based tool mapping first
-    try {
-      const toolMapping = await chartToolService.mapVoiceCommandToTool(response);
-      if (toolMapping.tool && toolMapping.command) {
-        console.log(`Knowledge-based tool match: ${toolMapping.tool.name}`, toolMapping);
+    // Log processing mode for debugging
+    const processingMode = PREFER_STRUCTURED_CHART_COMMANDS ? 'structured-first' : 'hybrid';
+    console.log(`[ChartControl] Processing mode: ${processingMode}`);
 
-        // Convert tool command to ChartCommand
-        const knowledgeCommand = this.convertToolCommandToChartCommand(
-          toolMapping.command,
-          toolMapping.tool,
-          toolMapping.parameters
-        );
+    // PHASE 0: Structured-first processing (when feature flag enabled)
+    if (PREFER_STRUCTURED_CHART_COMMANDS) {
+      if (structuredCommandsFromApi && structuredCommandsFromApi.length > 0) {
+        console.log(`[ChartControl] Processing ${structuredCommandsFromApi.length} structured commands (structured-first mode)`);
 
-        if (knowledgeCommand) {
-          commands.push(knowledgeCommand);
+        for (const structuredCommand of structuredCommandsFromApi) {
+          const converted = this.convertStructuredCommand(structuredCommand);
+          if (converted) {
+            commands.push(converted);
+          }
         }
+
+        // Return early - ignore legacy commands and pattern matching
+        console.log(`[ChartControl] Returning ${commands.length} commands from structured-only processing`);
+        return commands;
       }
-    } catch (error) {
-      console.warn('Knowledge-based tool mapping failed, falling back to pattern matching:', error);
+
+      console.log('[ChartControl] No structured commands, falling back to pattern matching');
     }
 
-    // PHASE 2: Process explicit chart commands from API
-    if (chartCommandsFromApi && chartCommandsFromApi.length > 0) {
+    // PHASE 1: Hybrid mode - Try knowledge-based tool mapping first
+    if (!PREFER_STRUCTURED_CHART_COMMANDS) {
+      try {
+        const toolMapping = await chartToolService.mapVoiceCommandToTool(response);
+        if (toolMapping.tool && toolMapping.command) {
+          console.log(`Knowledge-based tool match: ${toolMapping.tool.name}`, toolMapping);
+
+          // Convert tool command to ChartCommand
+          const knowledgeCommand = this.convertToolCommandToChartCommand(
+            toolMapping.command,
+            toolMapping.tool,
+            toolMapping.parameters
+          );
+
+          if (knowledgeCommand) {
+            commands.push(knowledgeCommand);
+          }
+        }
+      } catch (error) {
+        console.warn('Knowledge-based tool mapping failed, falling back to pattern matching:', error);
+      }
+    }
+
+    // PHASE 2A: Hybrid mode - Process structured chart commands from API
+    if (!PREFER_STRUCTURED_CHART_COMMANDS && structuredCommandsFromApi && structuredCommandsFromApi.length > 0) {
+      console.log(`[ChartControl] Processing ${structuredCommandsFromApi.length} structured commands (hybrid mode)`);
+
+      for (const structuredCommand of structuredCommandsFromApi) {
+        const converted = this.convertStructuredCommand(structuredCommand);
+        if (converted) {
+          commands.push(converted);
+        }
+      }
+    }
+
+    // PHASE 2B: Hybrid mode - Process explicit legacy chart commands from API
+    if (!PREFER_STRUCTURED_CHART_COMMANDS && chartCommandsFromApi && chartCommandsFromApi.length > 0) {
+      console.log(`[ChartControl] Processing ${chartCommandsFromApi.length} legacy commands (hybrid mode)`);
+
       for (const cmd of chartCommandsFromApi) {
         // Check if it's a drawing command
         const drawingCommand = this.parseDrawingCommand(cmd);
@@ -988,34 +1218,32 @@ class ChartControlService {
           
         case 'scroll':
           if (this.callbacks.onScrollToTime && this.chartRef) {
-            // Parse date or relative time
-            let targetTime: number;
             const scrollValue = command.value || '';
+            const now = new Date();
+            let targetTime = Math.floor(now.getTime() / 1000);
+
             if (scrollValue && scrollValue.match && scrollValue.match(/\d{4}-\d{2}-\d{2}/)) {
               targetTime = new Date(scrollValue).getTime() / 1000;
               message = `Scrolled to ${scrollValue}`;
             } else if (scrollValue) {
-              // Handle relative times like "yesterday", "last week"
-              const now = new Date();
               switch (scrollValue.toLowerCase()) {
                 case 'yesterday':
-                  targetTime = (now.getTime() - 86400000) / 1000;
+                  targetTime = Math.floor((now.getTime() - 86400000) / 1000);
                   message = 'Scrolled to yesterday';
                   break;
                 case 'last week':
-                  targetTime = (now.getTime() - 604800000) / 1000;
+                  targetTime = Math.floor((now.getTime() - 604800000) / 1000);
                   message = 'Scrolled to last week';
                   break;
                 case 'last month':
-                  targetTime = (now.getTime() - 2592000000) / 1000;
+                  targetTime = Math.floor((now.getTime() - 2592000000) / 1000);
                   message = 'Scrolled to last month';
                   break;
                 default:
-                  targetTime = now.getTime() / 1000;
                   message = 'Scrolled to current time';
               }
             }
-            
+
             this.chartRef.timeScale().scrollToPosition(targetTime, false);
             success = true;
           } else {
@@ -1025,13 +1253,15 @@ class ChartControlService {
           
         case 'style':
           if (this.callbacks.onStyleChange) {
-            this.callbacks.onStyleChange(command.value);
             const styleNames = {
               'candles': 'Candlestick',
               'line': 'Line',
               'area': 'Area'
             };
-            message = `Style: ${styleNames[command.value] || command.value}`;
+            const styleValue = typeof command.value === 'string' ? command.value.toLowerCase() : 'candles';
+            this.callbacks.onStyleChange(styleValue as 'candles' | 'line' | 'area');
+            const title = styleNames[styleValue as keyof typeof styleNames] || styleValue;
+            message = `Style: ${title}`;
             success = true;
           } else {
             message = 'Style change not available';
@@ -1103,8 +1333,16 @@ class ChartControlService {
   /**
    * Process agent response and execute any chart commands (async)
    */
-  async processAgentResponse(response: string, chartCommandsFromApi?: string[]): Promise<ChartCommand[]> {
-    const commands = await this.parseAgentResponse(response, chartCommandsFromApi);
+  async processAgentResponse(
+    response: string,
+    chartCommandsFromApi?: string[],
+    structuredCommandsFromApi?: StructuredChartCommand[]
+  ): Promise<ChartCommand[]> {
+    const commands = await this.parseAgentResponse(
+      response,
+      chartCommandsFromApi,
+      structuredCommandsFromApi
+    );
     const executedCommands: ChartCommand[] = [];
     
     for (const command of commands) {

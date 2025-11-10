@@ -100,8 +100,21 @@ export function SimpleVoiceTrader() {
       }
       
       // Process enhanced chart commands
-      if (command.enhanced_response) {
-        await enhancedChartControl.processEnhancedResponse(command.enhanced_response);
+      const legacyCommands: string[] = Array.isArray(command.chart_commands)
+        ? command.chart_commands
+        : typeof command.chart_commands === 'string'
+          ? [command.chart_commands]
+          : [];
+      const structuredCommands = Array.isArray(command.chart_commands_structured)
+        ? command.chart_commands_structured
+        : [];
+
+      if (command.enhanced_response || legacyCommands.length > 0 || structuredCommands.length > 0) {
+        await enhancedChartControl.processEnhancedResponse(
+          command.enhanced_response || '',
+          legacyCommands,
+          structuredCommands
+        );
       }
     } catch (error) {
       console.error('Chart command error:', error);

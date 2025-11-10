@@ -12,6 +12,18 @@ import {
   ProviderCapabilities,
   ChatProvider,
 } from './types';
+import { normalizeChartCommandPayload } from '../utils/chartCommandUtils';
+
+const generateRequestId = (): string => {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch (err) {
+    // Ignore and fall back to manual generation
+  }
+  return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
 
 interface AgentResponse {
   text: string;
@@ -21,13 +33,30 @@ interface AgentResponse {
   model: string;
   cached: boolean;
   session_id?: string;
+  request_id?: string;
 }
 
 interface StreamChunk {
-  type: 'metadata' | 'content' | 'done';
+  type: 'metadata' | 'content' | 'tool_start' | 'tool_result' | 'structured' | 'done' | 'error';
   text?: string;
   session_id?: string;
   model?: string;
+  // Chart commands (in 'done' event) - Phase 2: Streaming chart command support
+  chart_commands?: string[];
+  chart_commands_structured?: Array<{
+    type: string;
+    payload: Record<string, any>;
+    description?: string | null;
+    legacy?: string | null;
+  }>;
+  // Tool data
+  tool?: string;
+  arguments?: Record<string, any>;
+  data?: Record<string, any>;
+  tools_used?: string[];
+  request_id?: string;
+  // Error message
+  message?: string;
 }
 
 export class BackendAgentProvider extends AbstractBaseProvider implements ChatProvider {
@@ -130,11 +159,14 @@ export class BackendAgentProvider extends AbstractBaseProvider implements ChatPr
         content: msg.content,
       }));
 
+      const requestId = generateRequestId();
+
       // Call backend agent orchestrator
       const response = await fetch(`${this._config.apiUrl || ''}/api/agent/orchestrate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Request-ID': requestId,
         },
         body: JSON.stringify({
           query: message,
@@ -150,6 +182,7 @@ export class BackendAgentProvider extends AbstractBaseProvider implements ChatPr
       }
 
       const data: AgentResponse = await response.json();
+      const responseRequestId = data.request_id || requestId;
 
       // Create assistant message
       const assistantMessage: Message = {
@@ -162,6 +195,7 @@ export class BackendAgentProvider extends AbstractBaseProvider implements ChatPr
           data: data.data,
           model: data.model,
           cached: data.cached,
+          request_id: responseRequestId,
         },
       };
 
@@ -173,6 +207,7 @@ export class BackendAgentProvider extends AbstractBaseProvider implements ChatPr
         this.emit('toolData', {
           tools: data.tools_used,
           data: data.data,
+          request_id: responseRequestId,
         });
       }
 
@@ -209,10 +244,13 @@ export class BackendAgentProvider extends AbstractBaseProvider implements ChatPr
       }));
 
       // Use Server-Sent Events for streaming
+      const requestId = generateRequestId();
+
       const response = await fetch(`${this._config.apiUrl || ''}/api/agent/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Request-ID': requestId,
         },
         body: JSON.stringify({
           query: message,
@@ -234,6 +272,13 @@ export class BackendAgentProvider extends AbstractBaseProvider implements ChatPr
       const decoder = new TextDecoder();
       let buffer = '';
       let fullResponse = '';
+      // Streaming Chart Commands: Capture all metadata from streaming
+      let chartCommands: string[] | undefined;
+      let chartCommandsStructured: Array<any> | undefined;
+      let toolsUsed: string[] | undefined;
+      let structuredData: any | undefined;
+      const toolStartTimes = new Map<string, number>();
+      let streamRequestId: string = requestId;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -249,21 +294,83 @@ export class BackendAgentProvider extends AbstractBaseProvider implements ChatPr
             if (jsonStr.trim()) {
               try {
                 const chunk: StreamChunk = JSON.parse(jsonStr);
-                
+
+                if (chunk.type === 'metadata') {
+                  if (chunk.request_id) {
+                    streamRequestId = chunk.request_id;
+                  }
+                }
+
                 if (chunk.type === 'content' && chunk.text) {
                   fullResponse += chunk.text;
                   yield chunk.text;
-                } else if (chunk.type === 'done') {
-                  // Streaming complete
+                }
+                else if (chunk.type === 'tool_start') {
+                  // Telemetry: Track tool execution start time
+                  const startTime = Date.now();
+                  if (chunk.tool) {
+                    toolStartTimes.set(chunk.tool, startTime);
+                  }
+                  // Emit tool start event for UI telemetry
+                  this.emit('toolData', {
+                    type: 'start',
+                    tool: chunk.tool,
+                    arguments: chunk.arguments,
+                    timestamp: startTime,
+                  });
+                }
+                else if (chunk.type === 'tool_result') {
+                  // Telemetry: Calculate tool execution duration
+                  const endTime = Date.now();
+                  const startTime = chunk.tool ? toolStartTimes.get(chunk.tool) : undefined;
+                  const duration = startTime ? endTime - startTime : undefined;
+
+                  // Emit tool result event for UI telemetry
+                  this.emit('toolData', {
+                    type: 'result',
+                    tool: chunk.tool,
+                    data: chunk.data,
+                    timestamp: endTime,
+                    duration,
+                  });
+                }
+                else if (chunk.type === 'structured') {
+                  // Capture structured analysis payload
+                  structuredData = chunk.data;
+                }
+                else if (chunk.type === 'error') {
+                  // Handle streaming errors
+                  const errorMsg = chunk.message || 'Streaming error occurred';
+                  console.error('[BackendAgentProvider] Streaming error:', errorMsg);
+                  this.emit('error', { error: errorMsg });
+                }
+                else if (chunk.type === 'done') {
+                  // Streaming complete: Extract chart commands from done event
+                  chartCommands = chunk.chart_commands;
+                  chartCommandsStructured = chunk.chart_commands_structured;
+                  toolsUsed = chunk.tools_used;
+                  if (chunk.request_id) {
+                    streamRequestId = chunk.request_id;
+                  }
                   break;
                 }
               } catch (e) {
                 console.error('Error parsing stream chunk:', e);
+                this.emit('error', { error: 'Failed to parse stream chunk' });
               }
             }
           }
         }
       }
+
+      // Streaming Chart Commands: Normalize before emitting
+      const normalizedCommands = normalizeChartCommandPayload(
+        {
+          legacy: chartCommands,
+          chart_commands_structured: chartCommandsStructured,
+        },
+        fullResponse
+      );
 
       // Add complete response to history
       const assistantMessage: Message = {
@@ -271,9 +378,32 @@ export class BackendAgentProvider extends AbstractBaseProvider implements ChatPr
         role: 'assistant',
         content: fullResponse,
         timestamp: new Date().toISOString(),
+        // Include normalized chart commands and metadata
+        metadata: {
+          chart_commands: normalizedCommands.legacy,
+          chart_commands_structured: normalizedCommands.structured,
+          tools_used: toolsUsed,
+          structured_output: structuredData,
+          request_id: streamRequestId,
+        },
       };
       this.conversationHistory.push(assistantMessage);
       this.emit('message', assistantMessage);
+
+      // Emit normalized chart commands separately for chart integration hooks
+      if (normalizedCommands.legacy.length > 0 || normalizedCommands.structured.length > 0) {
+        console.log('[BackendAgentProvider] Emitting chart commands:', {
+          legacyCount: normalizedCommands.legacy.length,
+          structuredCount: normalizedCommands.structured.length,
+        });
+
+        this.emit('chartCommands', {
+          legacy: normalizedCommands.legacy,
+          structured: normalizedCommands.structured,
+          responseText: fullResponse,
+          request_id: streamRequestId,
+        });
+      }
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to stream message';

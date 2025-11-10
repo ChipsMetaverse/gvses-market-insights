@@ -16,6 +16,7 @@
   "dependencies": {
     "@elevenlabs/client": "^0.2.0",
     "@openai/chatkit-react": "^1.1.1",
+    "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-progress": "^1.1.7",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-slot": "^1.2.3",
@@ -30,9 +31,11 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.9.5",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.3.1",
-    "voice-stream": "^1.0.0"
+    "voice-stream": "^1.0.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

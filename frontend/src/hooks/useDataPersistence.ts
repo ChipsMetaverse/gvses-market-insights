@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface Message {
   id: string;
@@ -35,7 +36,7 @@ export function useDataPersistence(config: PersistenceConfig = DEFAULT_CONFIG) {
   const pendingMessages = useRef<Message[]>([]);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const apiUrl = getApiUrl();
   
   // Create a new conversation
   const createConversation = useCallback(async (userId?: string, metadata?: any) => {

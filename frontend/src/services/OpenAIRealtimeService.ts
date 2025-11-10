@@ -13,11 +13,11 @@ interface VoiceConnectionConfig {
   relayServerUrl?: string;
   onConnected?: () => void;
   onDisconnected?: () => void;
-  onError?: (error: any) => void;
+  onError?: (error: unknown) => void;
   onTranscript?: (text: string, final: boolean, itemId?: string) => void;
   onAudioResponse?: (audioData: Int16Array) => void;
-  onToolCall?: (toolName: string, args: any) => void;
-  onToolResult?: (toolName: string, result: any) => void;
+  onToolCall?: (toolName: string, args: Record<string, unknown> | undefined) => void;
+  onToolResult?: (toolName: string, result: unknown) => void;
 }
 
 type ConversationHistory = Array<Record<string, unknown>>;

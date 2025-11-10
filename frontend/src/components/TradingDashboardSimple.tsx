@@ -7,6 +7,8 @@ import { useElevenLabsConversation } from '../hooks/useElevenLabsConversation';
 import { useOpenAIRealtimeConversation } from '../hooks/useOpenAIRealtimeConversation';
 import { useAgentVoiceConversation } from '../hooks/useAgentVoiceConversation';
 import { useRealtimeSDKConversation } from '../hooks/useRealtimeSDKConversation';
+import { useAgentChartIntegration } from '../hooks/useAgentChartIntegration';
+import { BackendAgentProvider } from '../providers/BackendAgentProvider';
 import { RealtimeChatKit } from './RealtimeChatKit';
 // import { ProviderSelector } from './ProviderSelector'; // Removed - conflicts with useElevenLabsConversation
 // FIXED: Microphone now requested BEFORE connection (following official OpenAI pattern)
@@ -19,6 +21,9 @@ import StructuredResponse from './StructuredResponse';
 import { Tooltip } from './Tooltip';
 import { OnboardingTour } from './OnboardingTour';
 import { TimeRange } from '../types/dashboard';
+import {
+  normalizeChartCommandPayload,
+} from '../utils/chartCommandUtils';
 import './TradingDashboardSimple.css';
 import './TradingDashboardMobile.css';
 
@@ -257,13 +262,13 @@ export const TradingDashboardSimple: React.FC = () => {
     const handleEnd = () => {
       document.removeEventListener('mousemove', handleMove as any);
       document.removeEventListener('mouseup', handleEnd);
-      document.removeEventListener('touchmove', handleMove as any, { passive: false });
+      (document as any).removeEventListener('touchmove', handleMove as any);
       document.removeEventListener('touchend', handleEnd);
     };
     
     document.addEventListener('mousemove', handleMove as any);
     document.addEventListener('mouseup', handleEnd);
-    document.addEventListener('touchmove', handleMove as any, { passive: false });
+    (document as any).addEventListener('touchmove', handleMove as any, { passive: false });
     document.addEventListener('touchend', handleEnd);
   }, []);
 
@@ -282,6 +287,10 @@ export const TradingDashboardSimple: React.FC = () => {
   });
   const [activePanel, setActivePanel] = useState<'analysis' | 'chart' | 'voice'>('chart');
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Streaming Chart Commands: BackendAgentProvider for chart command streaming
+  const backendProviderRef = useRef<BackendAgentProvider | null>(null);
+  const [streamingProvider, setStreamingProvider] = useState<BackendAgentProvider | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -499,7 +508,7 @@ export const TradingDashboardSimple: React.FC = () => {
     }
     // Process agent response for chart commands with enhanced multi-command support
     try {
-      const commands = await enhancedChartControl.processEnhancedResponse(response);
+      const commands = await enhancedChartControl.processEnhancedResponse(response, [], []);
       if (commands.length > 0) {
         console.log('Enhanced chart commands executed:', commands);
         // Show feedback for each command
@@ -602,14 +611,16 @@ export const TradingDashboardSimple: React.FC = () => {
       return;
     }
 
-    const commands = snapshot.chart_commands;
-    if (commands && commands.length > 0) {
-      console.log('Executing backend chart commands:', commands);
-      enhancedChartControl.processEnhancedResponse(
-        commands.join(' ')
-      ).catch(err => {
-        console.error('Failed to execute backend chart commands:', err);
-      });
+    const legacyCommands = snapshot.chart_commands ?? [];
+    const structuredCommands = snapshot.chart_commands_structured ?? [];
+
+    if (legacyCommands.length > 0 || structuredCommands.length > 0) {
+      console.log('Executing backend chart commands:', { legacyCommands, structuredCommands });
+      enhancedChartControl
+        .processEnhancedResponse('', legacyCommands, structuredCommands)
+        .catch(err => {
+          console.error('Failed to execute backend chart commands:', err);
+        });
     }
   };
 
@@ -808,21 +819,27 @@ export const TradingDashboardSimple: React.FC = () => {
       }
 
       if (message.role === 'assistant') {
-        const rawCommands = message.data?.chart_commands;
-        const chartCommands = Array.isArray(rawCommands) ? rawCommands : [];
-        if (chartCommands.length > 0) {
-          enhancedChartControl.processEnhancedResponse(chartCommands.join(' ')).catch(err => {
-            console.error('Failed to execute chart commands from message data:', err);
-          });
+        const rawLegacy = message.data?.chart_commands;
+        const legacyCommands = Array.isArray(rawLegacy) ? rawLegacy : [];
+        const structuredCommands = Array.isArray(message.data?.chart_commands_structured)
+          ? message.data!.chart_commands_structured
+          : [];
 
-          const loadCommand = chartCommands.find(cmd => cmd.startsWith('LOAD:'));
-          if (loadCommand) {
-            const symbol = loadCommand.split(':')[1];
-            if (symbol) {
-              setTimeout(() => {
-                fetchAndApplySnapshot(symbol);
-              }, 1000);
-            }
+        if (legacyCommands.length > 0 || structuredCommands.length > 0) {
+          enhancedChartControl
+            .processEnhancedResponse(message.content, legacyCommands, structuredCommands)
+            .catch(err => {
+              console.error('Failed to execute chart commands from message data:', err);
+            });
+
+          const loadCommand = legacyCommands.find(cmd => cmd.startsWith('LOAD:'));
+          const structuredSymbol = structuredCommands.find(cmd => cmd.type === 'symbol');
+          const nextSymbol = loadCommand?.split(':')[1] || structuredSymbol?.payload?.symbol;
+
+          if (nextSymbol) {
+            setTimeout(() => {
+              fetchAndApplySnapshot(nextSymbol as string);
+            }, 1000);
           }
         }
       }
@@ -892,6 +909,45 @@ export const TradingDashboardSimple: React.FC = () => {
         setTimeout(() => setToastCommand(null), 1000);
       }
     }
+  });
+
+  // Streaming Chart Commands: Initialize BackendAgentProvider
+  useEffect(() => {
+    const initProvider = async () => {
+      if (!backendProviderRef.current) {
+        const provider = new BackendAgentProvider({
+          apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
+        });
+
+        await provider.initialize({
+          apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
+        });
+
+        backendProviderRef.current = provider;
+        setStreamingProvider(provider);
+        console.log('[TradingDashboardSimple] BackendAgentProvider initialized for chart streaming');
+      }
+    };
+
+    initProvider().catch(err => {
+      console.error('[TradingDashboardSimple] Failed to initialize BackendAgentProvider:', err);
+    });
+
+    // Cleanup on unmount
+    return () => {
+      if (backendProviderRef.current) {
+        backendProviderRef.current.destroy().catch(err => {
+          console.error('[TradingDashboardSimple] Error destroying provider:', err);
+        });
+        backendProviderRef.current = null;
+        setStreamingProvider(null);
+      }
+    };
+  }, []);
+
+  // Streaming Chart Commands: Enable chart integration with provider
+  useAgentChartIntegration({
+    provider: streamingProvider || undefined,
   });
 
   // ChatKit conversation (Agent Builder workflow)
@@ -999,8 +1055,43 @@ export const TradingDashboardSimple: React.FC = () => {
             throw error;
           }
         } else {
-          console.error('ChatKit control not available');
-          throw new Error('ChatKit not initialized - control unavailable');
+          console.error('ChatKit not ready - control unavailable');
+          
+          // Increment attempts each time we try to send while ChatKit is not ready
+          setChatKitInitAttempts(prev => prev + 1);
+          
+          // Check if we've exceeded max attempts
+          if (chatKitInitAttempts >= MAX_CHATKIT_INIT_ATTEMPTS) {
+            // After max attempts, show unavailable message
+            const failedMessage: Message = {
+              id: `chatkit-failed-${Date.now()}`,
+              role: 'assistant',
+              content: 'ChatKit is currently unavailable. Please try using voice or another provider.',
+              timestamp: new Date().toISOString(),
+              provider: 'chatkit',
+            };
+            setMessages(prev => [...prev, failedMessage]);
+          } else if (!chatKitInitMessageShown) {
+            // Show initialization message only once
+            const offlineMessage: Message = {
+              id: `offline-init-single`,  // Use fixed ID to prevent duplicates
+              role: 'assistant',
+              content: 'ChatKit Agent Builder is initializing. Please wait a moment...',
+              timestamp: new Date().toISOString(),
+              provider: 'chatkit',
+            };
+            
+            // Check if this message already exists
+            setMessages(prev => {
+              const exists = prev.some(m => m.id === 'offline-init-single');
+              if (!exists) {
+                setChatKitInitMessageShown(true);
+                return [...prev, offlineMessage];
+              }
+              return prev;
+            });
+          }
+          // If message already shown and still under limit, just silently fail
         }
       },
       sendAudioChunk: () => {
@@ -1222,15 +1313,23 @@ export const TradingDashboardSimple: React.FC = () => {
               setMessages(prev => [...prev, agentMessage]);
               console.log('✅ Added backend agent response to chat');
 
-              if (Array.isArray(data.chart_commands) && data.chart_commands.length > 0) {
+              const legacyCommands = Array.isArray(data.chart_commands) ? data.chart_commands : [];
+              const structuredCommands = Array.isArray(data.chart_commands_structured)
+                ? data.chart_commands_structured
+                : [];
+
+              if (legacyCommands.length > 0 || structuredCommands.length > 0) {
                 console.info('[agent] executing_chart_commands', JSON.stringify({
                   timestamp: responseTimestamp,
                   messageId,
-                  chartCommands: data.chart_commands
+                  legacyCommands,
+                  structuredCommands
                 }));
-                enhancedChartControl.processEnhancedResponse(data.chart_commands.join(' ')).catch(err => {
-                  console.error('Failed to execute chart commands from agent response:', err);
-                });
+                enhancedChartControl
+                  .processEnhancedResponse(data.text || '', legacyCommands, structuredCommands)
+                  .catch(err => {
+                    console.error('Failed to execute chart commands from agent response:', err);
+                  });
               }
 
               // Extract and apply swing trade levels if present in response
@@ -2098,16 +2197,18 @@ export const TradingDashboardSimple: React.FC = () => {
                     setMessages((prev: Message[]) => [...prev, newMessage]);
                   }}
                   onChartCommand={(command) => {
-                    console.log('ChatKit chart command:', command);
-                    
-                    // Defensive: handle both array and string formats
-                    const commandString = Array.isArray(command) 
-                      ? command.join(' ') 
-                      : command;
-                    
-                    enhancedChartControl.processEnhancedResponse(commandString).catch(err => {
-                      console.error('Failed to execute ChatKit chart command:', err);
-                    });
+                    const payload = normalizeChartCommandPayload(command, message.content);
+                    console.log('ChatKit chart command:', payload);
+
+                    enhancedChartControl
+                      .processEnhancedResponse(
+                        payload.responseText || '',
+                        payload.legacy,
+                        payload.structured
+                      )
+                      .catch(err => {
+                        console.error('Failed to execute ChatKit chart command:', err);
+                      });
                   }}
                 />
               ) : (
@@ -2116,13 +2217,13 @@ export const TradingDashboardSimple: React.FC = () => {
                   <div className="conversation-messages-compact">
                     {unifiedMessages.length === 0 ? (
                       <div className="no-messages-state">
-                        <p>🎤 {isConversationConnected ? 'Listening...' : 'Click mic to start'}</p>
+                        <p>{isConversationConnected ? 'Listening...' : 'Click mic to start'}</p>
                       </div>
                     ) : (
                       unifiedMessages.map((msg) => (
                         <div key={msg.id} className="conversation-message-enhanced" data-role={msg.role}>
                           <div className="message-avatar">
-                            {msg.role === 'user' ? '👤' : '🤖'}
+                            {msg.role === 'user' ? '' : ''}
                           </div>
                           <div className="message-bubble">
                             {msg.role === 'assistant' ? (
@@ -2204,16 +2305,14 @@ export const TradingDashboardSimple: React.FC = () => {
                 setMessages((prev: Message[]) => [...prev, newMessage]);
               }}
               onChartCommand={(command) => {
-                console.log('ChatKit chart command:', command);
-                
-                // Defensive: handle both array and string formats
-                const commandString = Array.isArray(command) 
-                  ? command.join(' ') 
-                  : command;
-                
-                enhancedChartControl.processEnhancedResponse(commandString).catch(err => {
-                  console.error('Failed to execute ChatKit chart command:', err);
-                });
+                const payload = normalizeChartCommandPayload(command, message.content);
+                console.log('ChatKit chart command:', payload);
+
+                enhancedChartControl
+                  .processEnhancedResponse(payload.responseText || '', payload.legacy, payload.structured)
+                  .catch(err => {
+                    console.error('Failed to execute ChatKit chart command:', err);
+                  });
               }}
             />
           ) : (

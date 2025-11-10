@@ -1,10 +1,14 @@
 /**
  * useAgentChartIntegration - Hook that connects agent voice responses to chart manipulation
  * Allows the agent to control the chart while speaking to users
+ *
+ * Streaming Chart Commands: Now supports listening to provider chartCommands events
  */
 
 import { useEffect, useCallback, useRef } from 'react';
 import { enhancedChartControl } from '../services/enhancedChartControl';
+import type { ChatProvider } from '../providers/types';
+import type { StructuredChartCommand } from '../services/agentOrchestratorService';
 
 interface AgentResponse {
   text: string;
@@ -12,20 +16,39 @@ interface AgentResponse {
   commands?: string[];
 }
 
-export function useAgentChartIntegration() {
+interface ChartIntegrationOptions {
+  provider?: ChatProvider;  // Optional provider to listen for streaming chart commands
+}
+
+export function useAgentChartIntegration(options: ChartIntegrationOptions = {}) {
+  const { provider } = options;
   const processingRef = useRef(false);
   
   /**
    * Process agent's voice response and execute chart commands
    * This runs while the agent is speaking to the user
    */
-  const processAgentResponse = useCallback(async (response: string) => {
+  const processAgentResponse = useCallback(async (response: string, commandsFromApi?: {
+    chart_commands?: string[];
+    chart_commands_structured?: StructuredChartCommand[];
+  }) => {
     if (processingRef.current) return;
     processingRef.current = true;
     
     try {
       // Extract and execute chart commands from agent's speech
-      const commands = await enhancedChartControl.processEnhancedResponse(response);
+      const legacyCommands = Array.isArray(commandsFromApi?.chart_commands)
+        ? commandsFromApi?.chart_commands
+        : [];
+      const structuredCommands = Array.isArray(commandsFromApi?.chart_commands_structured)
+        ? commandsFromApi.chart_commands_structured
+        : [];
+
+      const commands = await enhancedChartControl.processEnhancedResponse(
+        response,
+        legacyCommands,
+        structuredCommands
+      );
       
       // Log actions for debugging
       if (commands.length > 0) {
@@ -67,7 +90,38 @@ export function useAgentChartIntegration() {
       processingRef.current = false;
     }
   }, []);
-  
+
+  /**
+   * Streaming Chart Commands: Listen for provider chartCommands events
+   * When the provider emits chart commands during streaming, process them immediately
+   */
+  useEffect(() => {
+    if (!provider) return;
+
+    const handleChartCommands = async (event: {
+      legacy: string[];
+      structured: StructuredChartCommand[];
+      responseText: string;
+    }) => {
+      console.log('[useAgentChartIntegration] Received chart commands from streaming:', {
+        legacyCount: event.legacy.length,
+        structuredCount: event.structured.length,
+      });
+
+      // Process commands using existing logic
+      await processAgentResponse(event.responseText, {
+        chart_commands: event.legacy,
+        chart_commands_structured: event.structured,
+      });
+    };
+
+    provider.on('chartCommands', handleChartCommands);
+
+    return () => {
+      provider.off('chartCommands', handleChartCommands);
+    };
+  }, [provider, processAgentResponse]);
+
   /**
    * Handle agent's educational mode - walk through indicators step by step
    */

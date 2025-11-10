@@ -5,8 +5,7 @@ import {
   ChartData, 
   TechnicalOverview, 
   RelatedNews, 
-  StrategicInsights, 
-  TimeRange 
+  StrategicInsights 
 } from '../types/dashboard';
 import getApiUrl, { getWebSocketUrl } from '../utils/apiConfig';
 

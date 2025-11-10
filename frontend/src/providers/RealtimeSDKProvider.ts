@@ -265,7 +265,8 @@ Always be professional, accurate, and helpful.`,
               text: response.text,
               tools_used: response.tools_used,
               data: response.data,
-              chart_commands: response.chart_commands
+              chart_commands: response.chart_commands,
+              chart_commands_structured: response.chart_commands_structured
             })
           }
         };

@@ -3,14 +3,18 @@ import { ChatKit, useChatKit } from '@openai/chatkit-react';
 import { useAgentVoiceConversation } from '../hooks/useAgentVoiceConversation';
 import { AgentResponseParser } from '../services/agentResponseParser';
 import { useDataPersistence } from '../hooks/useDataPersistence';
+import { getApiUrl } from '../utils/apiConfig';
+import {
+  normalizeChartCommandPayload,
+  type ChartCommandPayload,
+} from '../utils/chartCommandUtils';
 
 interface RealtimeChatKitProps {
-  className?: string;
   onMessage?: (message: Message) => void;
-  onChartCommand?: (command: any) => void;
-  symbol?: string;          // NEW: Current chart symbol
-  timeframe?: string;       // NEW: Current chart timeframe
-  snapshotId?: string;      // NEW: Current snapshot ID if available
+  onChartCommand?: (command: ChartCommandPayload) => void;
+  symbol?: string;
+  timeframe?: string;
+  snapshotId?: string;
 }
 
 interface Message {
@@ -22,7 +26,6 @@ interface Message {
 }
 
 export function RealtimeChatKit({ 
-  className = "h-[600px] w-full", 
   onMessage,
   onChartCommand,
   symbol,
@@ -32,7 +35,6 @@ export function RealtimeChatKit({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [chatKitControl, setChatKitControl] = useState<any>(null);
-  const [showHistory, setShowHistory] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   
   // Initialize data persistence
@@ -41,10 +43,7 @@ export function RealtimeChatKit({
     conversationHistory,
     isSaving,
     createConversation,
-    queueMessage,
-    loadConversationHistory,
-    getRecentConversations,
-    flushMessages
+    queueMessage
   } = useDataPersistence({
     autoSave: true,
     saveInterval: 1000,
@@ -55,6 +54,11 @@ export function RealtimeChatKit({
   const agentVoice = useAgentVoiceConversation({
     chartContext: { symbol, timeframe, snapshot_id: snapshotId },  // Pass chart context
     onMessage: (agentMessage) => {
+      // DEBUG: Log full agent message structure
+      console.log('[ChatKit DEBUG] Full agentMessage received:', JSON.stringify(agentMessage, null, 2));
+      console.log('[ChatKit DEBUG] agentMessage.data:', agentMessage.data);
+      console.log('[ChatKit DEBUG] agentMessage.data?.chart_commands:', agentMessage.data?.chart_commands);
+      
       // Convert AgentVoiceMessage to Message format for compatibility
       const message: Message = {
         id: agentMessage.id,
@@ -68,14 +72,21 @@ export function RealtimeChatKit({
       // Persist the message
       queueMessage(message);
       
+      // UPDATE DEBUG INFO - Production-safe visual debugging
+      const payload = normalizeChartCommandPayload(
+        {
+          chart_commands: agentMessage.data?.chart_commands,
+          chart_commands_structured: agentMessage.data?.chart_commands_structured,
+        },
+        agentMessage.content,
+      );
+
       // Handle chart commands if present
-      if (agentMessage.data?.chart_commands) {
-        // Normalize chart_commands to string (Agent Builder returns array, but callback expects string)
-        const commands = Array.isArray(agentMessage.data.chart_commands)
-          ? agentMessage.data.chart_commands.join(' ')
-          : agentMessage.data.chart_commands;
-        console.log('[ChatKit] Processing chart_commands:', { raw: agentMessage.data.chart_commands, normalized: commands });
-        onChartCommand?.(commands);
+      if (payload.legacy.length > 0 || payload.structured.length > 0) {
+        console.log('[ChatKit] Processing chart commands:', payload);
+        onChartCommand?.(payload);
+      } else {
+        console.log('[ChatKit DEBUG] NO chart_commands in agentMessage.data');
       }
     },
     onError: (errorMsg) => {
@@ -91,7 +102,7 @@ export function RealtimeChatKit({
   const chatKitConfig = useMemo(() => ({
     api: {
       async getClientSecret(existing: any) {
-        const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const backendUrl = getApiUrl();
 
         try {
           const deviceId = localStorage.getItem('chatkit_device_id') || `device_${Date.now()}`;
@@ -128,6 +139,8 @@ export function RealtimeChatKit({
       },
     },
     onMessage: (message: any) => {
+      console.log('🔥🔥🔥 [ChatKit CONFIG] onMessage CALLED!!!', message);
+
       const msg: Message = {
         id: `chatkit-${Date.now()}`,
         role: message.role,
@@ -136,35 +149,48 @@ export function RealtimeChatKit({
         provider: 'chatkit-agent-builder'
       };
       onMessage?.(msg);
-      
+
       // Persist the message
       queueMessage(msg);
 
       // Enhanced agent response processing
       if (message.role === 'assistant' && message.content) {
         console.log('[ChatKit] Processing agent response:', message.content);
-        
-        // Check for drawing commands using the new parser
+
+        // PRIORITY 1: Check if response is JSON with chart_commands
+        try {
+          const jsonResponse = JSON.parse(message.content);
+          const payload = normalizeChartCommandPayload(jsonResponse, message.content);
+
+          if (payload.legacy.length > 0 || payload.structured.length > 0) {
+            console.log('[ChatKit] Found JSON with chart_commands:', payload);
+            onChartCommand?.(payload);
+            return; // Stop processing if we found and executed JSON commands
+          }
+        } catch (e) {
+          // Not JSON or doesn't have chart_commands, continue with other parsers
+          console.log('[ChatKit] Response is not JSON with chart_commands, trying other parsers');
+        }
+
+        // PRIORITY 2: Check for drawing commands using the new parser
         if (AgentResponseParser.containsDrawingCommands(message.content)) {
           const chartCommands = AgentResponseParser.parseResponse(message.content);
-          
+
           if (chartCommands.length > 0) {
-            console.log('[ChatKit] Parsed chart commands:', chartCommands);
-            // Send each command to the chart
-            chartCommands.forEach(command => {
-              console.log('[ChatKit] Sending chart command:', command);
-              onChartCommand?.(command);
-            });
+            const payload = normalizeChartCommandPayload({ legacy: chartCommands }, message.content);
+            console.log('[ChatKit] Parsed chart commands:', payload);
+            onChartCommand?.(payload);
           } else {
             console.log('[ChatKit] No chart commands found in drawing response');
           }
         }
-        
-        // Legacy fallback for basic chart/symbol commands
+
+        // PRIORITY 3: Legacy fallback for basic chart/symbol commands
         const content = message.content.toLowerCase();
         if (content.includes('chart') || content.includes('symbol')) {
           console.log('[ChatKit] Legacy chart command detection:', message.content);
-          onChartCommand?.(message.content);
+          const payload = normalizeChartCommandPayload({ legacy: [message.content] }, message.content);
+          onChartCommand?.(payload);
         }
       }
     }
@@ -213,7 +239,7 @@ export function RealtimeChatKit({
       }
 
       try {
-        const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const backendUrl = getApiUrl();
         
         const response = await fetch(`${backendUrl}/api/chatkit/update-context`, {
           method: 'POST',
@@ -367,7 +393,6 @@ export function RealtimeChatKit({
         {chatKitControl ? (
           <ChatKit 
             control={chatKitControl}
-            domainPublicKey={import.meta.env.VITE_CHATKIT_DOMAIN_PK || "domain_pk_68f817e0d8c08190922b1575cf3ffd760e268e4f4191db83"}
             className="h-full w-full"
             style={{
               height: '100%',

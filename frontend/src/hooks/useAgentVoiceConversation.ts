@@ -12,8 +12,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { agentOrchestratorService, type AgentResponse } from '../services/agentOrchestratorService';
 import { OpenAIRealtimeService } from '../services/OpenAIRealtimeService';
+import {
+  normalizeChartCommandPayload,
+  type ChartCommandPayload,
+} from '../utils/chartCommandUtils';
 import { getApiUrl } from '../utils/apiConfig';
-import { chartControlService } from '../services/chartControlService';
 import { enhancedChartControl } from '../services/enhancedChartControl';
 import { useOpenAIAudioProcessor } from './useOpenAIAudioProcessor';
 
@@ -181,14 +184,17 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
     }
   }, [initAudioContext]);
 
-  const executeChartCommands = useCallback(async (commands?: string[]) => {
-    if (!commands || commands.length === 0) {
+  const executeChartCommands = useCallback(async (payload: ChartCommandPayload) => {
+    if (!payload.responseText && payload.legacy.length === 0 && payload.structured.length === 0) {
       return;
     }
 
-    const serialized = commands.join(' ');
     try {
-      await enhancedChartControl.processEnhancedResponse(serialized);
+      await enhancedChartControl.processEnhancedResponse(
+        payload.responseText || '',
+        payload.legacy,
+        payload.structured
+      );
     } catch (err) {
       console.warn('Enhanced chart command processing failed (non-critical):', err);
       // Chart commands are optional - don't block voice assistant if they fail
@@ -201,7 +207,6 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
       setIsThinking(true);
       callbacksRef.current.onThinking?.(true);
 
-      // Add user message immediately
       const userMessage: AgentVoiceMessage = {
         id: `user-${Date.now()}-${Math.random()}`,
         role: 'user',
@@ -209,90 +214,228 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
         timestamp: new Date().toISOString(),
         source
       };
-      
+
       setMessages(prev => [...prev, userMessage]);
       callbacksRef.current.onMessage?.(userMessage);
 
-      // Update conversation history
       conversationHistoryRef.current.push({
         role: 'user',
         content: userTranscript
       });
 
-      // Send to agent orchestrator
-      console.log('[AGENT VOICE] 🚀 Calling agentOrchestratorService.sendQuery() with:', {
-        userTranscript,
-        historyLength: conversationHistoryRef.current.length
-      });
+      const history = conversationHistoryRef.current.slice(-10);
 
-      const agentResponse: AgentResponse = await agentOrchestratorService.sendQuery(
-        userTranscript,
-        conversationHistoryRef.current.slice(-10), // Last 10 messages for context
-        chartContext  // Pass chart context to backend
-      );
-
-      console.log('[AGENT VOICE] 📦 Received agent response:', {
-        hasText: !!agentResponse.text,
-        textLength: agentResponse.text?.length || 0,
-        textPreview: agentResponse.text?.substring(0, 100),
-        toolsUsed: agentResponse.tools_used,
-        hasData: !!agentResponse.data,
-        hasChartCommands: !!(agentResponse.chart_commands || agentResponse.data?.chart_commands)
-      });
-
-      await executeChartCommands(agentResponse.chart_commands || agentResponse.data?.chart_commands);
-
-      const mergedData = { ...(agentResponse.data || {}) };
-      if (agentResponse.chart_commands?.length) {
-        mergedData.chart_commands = agentResponse.chart_commands;
-      }
-
-      // Add agent message
-      const assistantMessage: AgentVoiceMessage = {
-        id: `assistant-${Date.now()}-${Math.random()}`,
+      const assistantMessageId = `assistant-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const placeholderMessage: AgentVoiceMessage = {
+        id: assistantMessageId,
         role: 'assistant',
-        content: agentResponse.text,
+        content: '',
         timestamp: new Date().toISOString(),
         source,
-        toolsUsed: agentResponse.tools_used,
-        data: mergedData
+        toolsUsed: [],
+        data: {}
       };
-      
-      setMessages(prev => [...prev, assistantMessage]);
-      callbacksRef.current.onMessage?.(assistantMessage);
 
-      // Update conversation history
+      setMessages(prev => [...prev, placeholderMessage]);
+
+      const updateAssistantMessage = (updater: (msg: AgentVoiceMessage) => AgentVoiceMessage) => {
+        setMessages(prev => prev.map(msg => (msg.id === assistantMessageId ? updater(msg) : msg)));
+      };
+
+      let streamingText = '';
+      let structuredOutput: any = null;
+      let chartPayloadFromStream: ChartCommandPayload | null = null;
+      const streamingTools = new Set<string>();
+      let streamingData: Record<string, any> = {};
+      let streamingSucceeded = false;
+
+      try {
+        await agentOrchestratorService.streamQuery(
+          userTranscript,
+          history,
+          chartContext,
+          (chunk) => {
+            if (!chunk) return;
+
+            switch (chunk.type) {
+              case 'content':
+                if (chunk.text) {
+                  streamingText += chunk.text;
+                  updateAssistantMessage(prev => ({
+                    ...prev,
+                    content: streamingText,
+                  }));
+                }
+                break;
+
+              case 'structured':
+                structuredOutput = chunk.data;
+                streamingData = {
+                  ...streamingData,
+                  structured_output: structuredOutput,
+                };
+                updateAssistantMessage(prev => ({
+                  ...prev,
+                  data: streamingData,
+                }));
+                break;
+
+              case 'tool_start':
+              case 'tool_result':
+                // Tool telemetry is emitted by BackendAgentProvider; log for debugging if needed
+                break;
+
+              case 'done':
+                chartPayloadFromStream = normalizeChartCommandPayload(
+                  {
+                    chart_commands: chunk.chart_commands,
+                    chart_commands_structured: chunk.chart_commands_structured,
+                  },
+                  streamingText,
+                );
+
+                if (chunk.tools_used) {
+                  chunk.tools_used.forEach(tool => streamingTools.add(tool));
+                }
+
+                if (chartPayloadFromStream.legacy.length) {
+                  streamingData = {
+                    ...streamingData,
+                    chart_commands: chartPayloadFromStream.legacy,
+                  };
+                }
+
+                if (chartPayloadFromStream.structured.length) {
+                  streamingData = {
+                    ...streamingData,
+                    chart_commands_structured: chartPayloadFromStream.structured,
+                  };
+                }
+
+                updateAssistantMessage(prev => ({
+                  ...prev,
+                  data: streamingData,
+                }));
+                break;
+            }
+          }
+        );
+
+        streamingSucceeded = true;
+      } catch (streamErr) {
+        console.error('Agent streaming failed, falling back to non-streaming response:', streamErr);
+      }
+
+      let finalAssistantMessage: AgentVoiceMessage | null = null;
+      let finalChartPayload: ChartCommandPayload | null = null;
+
+      if (streamingSucceeded) {
+        const finalTools = Array.from(streamingTools);
+
+        if (structuredOutput) {
+          streamingData = {
+            ...streamingData,
+            structured_output: structuredOutput,
+          };
+        }
+
+        if (!chartPayloadFromStream) {
+          chartPayloadFromStream = normalizeChartCommandPayload(null, streamingText);
+        }
+
+        if (chartPayloadFromStream.legacy.length) {
+          streamingData = {
+            ...streamingData,
+            chart_commands: chartPayloadFromStream.legacy,
+          };
+        }
+
+        if (chartPayloadFromStream.structured.length) {
+          streamingData = {
+            ...streamingData,
+            chart_commands_structured: chartPayloadFromStream.structured,
+          };
+        }
+
+        const finalizedMessage: AgentVoiceMessage = {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: streamingText,
+          timestamp: new Date().toISOString(),
+          source,
+          toolsUsed: finalTools.length ? finalTools : undefined,
+          data: streamingData,
+        };
+
+        updateAssistantMessage(() => finalizedMessage);
+        finalAssistantMessage = finalizedMessage;
+        finalChartPayload = chartPayloadFromStream;
+      } else {
+        setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
+
+        const agentResponse: AgentResponse = await agentOrchestratorService.sendQuery(
+          userTranscript,
+          history,
+          chartContext
+        );
+
+        const fallbackPayload = normalizeChartCommandPayload(
+          {
+            legacy: agentResponse.chart_commands || agentResponse.data?.chart_commands,
+            chart_commands_structured:
+              agentResponse.chart_commands_structured || agentResponse.data?.chart_commands_structured,
+          },
+          agentResponse.text,
+        );
+
+        const mergedData = { ...(agentResponse.data || {}) };
+        if (fallbackPayload.legacy.length) {
+          mergedData.chart_commands = fallbackPayload.legacy;
+        }
+        if (fallbackPayload.structured.length) {
+          mergedData.chart_commands_structured = fallbackPayload.structured;
+        }
+
+        const fallbackMessage: AgentVoiceMessage = {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: agentResponse.text,
+          timestamp: new Date().toISOString(),
+          source,
+          toolsUsed: agentResponse.tools_used,
+          data: mergedData
+        };
+
+        setMessages(prev => [...prev, fallbackMessage]);
+        finalAssistantMessage = fallbackMessage;
+        finalChartPayload = fallbackPayload;
+      }
+
+      if (!finalAssistantMessage) {
+        throw new Error('Agent response unavailable');
+      }
+
+      await executeChartCommands(
+        finalChartPayload ?? { legacy: [], structured: [], responseText: finalAssistantMessage.content }
+      );
+
+      callbacksRef.current.onMessage?.(finalAssistantMessage);
+
       conversationHistoryRef.current.push({
         role: 'assistant',
-        content: agentResponse.text
+        content: finalAssistantMessage.content
       });
 
-      // If this was a voice interaction, send response to TTS
-      // CRITICAL FIX: Check the OpenAI service's actual connection state, not React state
       const actuallyConnected = openAIServiceRef.current?.isConnected() || false;
-      console.log('🚨 [TTS CHECK] source:', source, 'hasRef:', !!openAIServiceRef.current, 'reactState:', isConnected, 'actualConnection:', actuallyConnected);
-      
       if (source === 'voice' && openAIServiceRef.current && actuallyConnected) {
-        console.log('[AGENT VOICE] 🔊 Sending to TTS:', agentResponse.text.substring(0, 100));
-
-        // Send to Realtime API for TTS
-        openAIServiceRef.current.sendTextMessage(agentResponse.text);
+        openAIServiceRef.current.sendTextMessage(finalAssistantMessage.content);
       } else if (source === 'voice' && openAIServiceRef.current && !actuallyConnected) {
-        // Handle race condition: sometimes connection succeeds but state hasn't updated yet
-        console.log('⏳ [TTS CHECK] Connection state may be updating, retrying in 100ms...');
         setTimeout(() => {
           const retryConnected = openAIServiceRef.current?.isConnected() || false;
-          console.log('🔄 [TTS RETRY] actualConnection after delay:', retryConnected);
           if (retryConnected) {
-            console.log('[AGENT VOICE] 🔊 Sending to TTS (retry):', agentResponse.text.substring(0, 100));
-            openAIServiceRef.current?.sendTextMessage(agentResponse.text);
-          } else {
-            console.log('🚨 [TTS RETRY] Still not connected after retry');
+            openAIServiceRef.current?.sendTextMessage(finalAssistantMessage.content);
           }
         }, 100);
-      } else {
-        console.log('🚨 [TTS CHECK] TTS SKIPPED - Condition not met');
-        console.log('🚨 [TTS CHECK] Reason - source:', source, 'hasRef:', !!openAIServiceRef.current, 'actuallyConnected:', actuallyConnected);
       }
 
     } catch (err) {
@@ -304,7 +447,7 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
       setIsThinking(false);
       callbacksRef.current.onThinking?.(false);
     }
-  }, [isConnected, executeChartCommands]);
+  }, [chartContext, executeChartCommands, isConnected]);
 
   // Initialize OpenAI Realtime Service (voice I/O only)
   useEffect(() => {
@@ -335,16 +478,20 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
           setIsLoading(false);
           callbacksRef.current.onConnectionChange?.(false);
         },
-        onError: (error) => {
+        onError: (error: unknown) => {
           console.error('Agent Voice: OpenAI error:', error);
-          const errorMessage = error?.message || 'Voice connection error';
+          const errorMessage = error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : 'Voice connection error';
           setError(errorMessage);
           setIsLoading(false);
           setIsConnected(false);
           callbacksRef.current.onConnectionChange?.(false);
           callbacksRef.current.onError?.(errorMessage);
         },
-        onTranscript: (text, final) => {
+        onTranscript: (text: string, final: boolean) => {
           console.log(`🎤 [AGENT VOICE] Transcript received - Final: ${final}, Text: "${text}"`);
           if (final) {
             // User spoke - send FINAL transcript to agent orchestrator
@@ -412,7 +559,7 @@ export const useAgentVoiceConversation = (config: UseAgentVoiceConfig = {}) => {
         console.log('✅ [AGENT VOICE] Connected to OpenAI Realtime');
 
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Connection failed';
+        const errorMessage = err instanceof Error ? err.message : String(err ?? 'Connection failed');
         console.error('❌ [AGENT VOICE] Connection failed:', err);
         setError(errorMessage);
         setIsLoading(false);

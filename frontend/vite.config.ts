@@ -34,7 +34,7 @@ export default defineConfig(({ command, mode }) => {
     },
     build: {
       target: 'esnext',
-      minify: 'esbuild',
+      minify: false, // DISABLE MINIFICATION TO PRESERVE CONSOLE.LOG
       sourcemap: false,
       rollupOptions: {
         onwarn(warning, warn) {

@@ -97,6 +97,8 @@ cd frontend && npm install
 npm run dev      # Development server (port 5174)
 npm run build    # Production build with TypeScript checking
 npm run lint     # ESLint checking
+# Run validation/unit tests (Vitest)
+npx vitest frontend/src/utils/__tests__/chartCommandUtils.test.ts
 ```
 
 ### Market MCP Server
@@ -393,6 +395,13 @@ const { searchResults, isSearching, searchError, hasSearched } = useSymbolSearch
 - **Chart Navigation**: Voice-controlled symbol switching
 
 ## Recent Updates
+
+### Structured Chart Payload Rollout (Nov 9, 2025)
+- Phase 1 migration complete: backend now emits `chart_objects` (ChartCommandPayloadV2) alongside legacy strings.
+- Frontend normalizers validate payloads with Zod before execution; fall back to legacy safely.
+- Feature flags documented in `FEATURE_FLAGS.md`; staged rollout plan lives in `PHASE_1_ROLLOUT_PLAN.md`.
+- New backend integration coverage: `backend/tests/test_dual_mode_integration.py` verifies hybrid vs. structured-first behavior.
+- Run frontend validation tests with `npx vitest frontend/src/utils/__tests__/chartCommandUtils.test.ts`.
 
 ### HTTP MCP Integration for OpenAI Agent Builder (Oct 11, 2025)
 - **HTTP MCP Endpoint**: New `POST /api/mcp` endpoint for OpenAI Agent Builder integration

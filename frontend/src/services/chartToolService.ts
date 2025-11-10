@@ -5,6 +5,8 @@
  * Integrates with voice commands and UI controls.
  */
 
+import { getApiUrl } from '../utils/apiConfig'
+
 export interface ChartTool {
   name: string
   description: string
@@ -37,7 +39,7 @@ class ChartToolService {
   private cacheTimestamp: number | null
 
   constructor() {
-    this.baseUrl = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')
+    this.baseUrl = getApiUrl()
     this.toolsCache = new Map()
     this.cacheTimestamp = null
   }
