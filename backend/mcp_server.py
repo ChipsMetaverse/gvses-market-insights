@@ -669,6 +669,7 @@ async def stream_news(request: Request, symbol: str = "TSLA", interval: int = 10
     logged_completion = False
 
     async def event_generator():
+        nonlocal logged_completion
         try:
             client = await get_http_mcp_client()
             logger.info(f"Starting news stream for {symbol_upper}")
@@ -680,7 +681,7 @@ async def stream_news(request: Request, symbol: str = "TSLA", interval: int = 10
                     "status": "started",
                 },
             )
-            
+
             async for event in client.call_tool_streaming(
                 "stream_market_news",
                 {"symbol": symbol, "interval": interval, "duration": duration}
@@ -688,9 +689,9 @@ async def stream_news(request: Request, symbol: str = "TSLA", interval: int = 10
                 # Forward SSE event to client
                 event_data = json_lib.dumps(event)
                 yield f"data: {event_data}\n\n"
-                
+
             logger.info(f"News stream completed for {symbol}")
-            
+
         except Exception as e:
             logger.error(f"Error in news stream: {e}")
             error_event = {
@@ -712,7 +713,6 @@ async def stream_news(request: Request, symbol: str = "TSLA", interval: int = 10
                     "error": str(e),
                 },
             )
-            nonlocal logged_completion
             logged_completion = True
         else:
             completed = telemetry.with_duration((time.perf_counter() - start_time) * 1000)
@@ -724,7 +724,6 @@ async def stream_news(request: Request, symbol: str = "TSLA", interval: int = 10
                     "status": "success",
                 },
             )
-            nonlocal logged_completion
             logged_completion = True
     
     return StreamingResponse(
