@@ -1058,6 +1058,22 @@ class HybridMarketService:
         else:
             raise RuntimeError("Market overview not available - MCP service required")
     
+    async def get_service_info(self) -> dict:
+        """Return consolidated service info for health checks."""
+        info = self.get_service_status().copy()
+        info["direct_available"] = self.direct_available
+        info["mcp_available"] = self.mcp_available
+
+        mcp_status = {}
+        if self.mcp_available:
+            try:
+                mcp_status = await self.get_mcp_status()
+            except Exception as e:
+                logger.warning(f"Failed to collect MCP status: {e}")
+        info["mcp_status"] = mcp_status
+
+        return info
+
     async def search_assets(self, query: str, limit: int = 20) -> list:
         """Search for stock symbols using Alpaca API with fallback to MCP."""
         # First try Alpaca via the market service's search function
