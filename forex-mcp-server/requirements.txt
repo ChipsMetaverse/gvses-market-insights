@@ -1,0 +1,18 @@
+# FastMCP framework for rapid MCP server development
+fastmcp>=2.12.3
+
+# Browser automation for ForexFactory scraping
+playwright>=1.55.0
+
+# HTTP client for API requests
+httpx>=0.28.1
+
+# Data manipulation
+pandas>=2.3.2
+
+# Validation and settings
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Timezone support
+tzlocal>=5.3.1
