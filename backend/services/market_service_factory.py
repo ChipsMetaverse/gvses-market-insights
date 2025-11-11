@@ -1086,28 +1086,128 @@ class HybridMarketService:
 
         return info
 
-    async def search_assets(self, query: str, limit: int = 20) -> list:
-        """Search for stock symbols using Alpaca API with fallback to MCP."""
-        # First try Alpaca via the market service's search function
+    async def search_assets(
+        self,
+        query: str,
+        limit: int = 20,
+        asset_classes: List[str] = None
+    ) -> list:
+        """
+        Search for symbols across multiple asset classes (stocks, crypto, forex).
+
+        Args:
+            query: Search query (symbol or company/coin name)
+            limit: Max results per asset class
+            asset_classes: List of ['stock', 'crypto', 'forex'] or None for all
+
+        Returns:
+            List of search results with asset_class field
+        """
+        import asyncio
+        from services.crypto_aggregator import CryptoAggregatorService
+        from services.forex_pairs import search_forex_pairs
+
+        # Default to all asset classes if not specified
+        if asset_classes is None:
+            asset_classes = ['stock', 'crypto', 'forex']
+
+        all_results = []
+        tasks = []
+
+        # Create async tasks for each requested asset class
+        if 'stock' in asset_classes:
+            tasks.append(('stock', self._search_stocks(query, limit)))
+
+        if 'crypto' in asset_classes:
+            tasks.append(('crypto', self._search_crypto(query, limit)))
+
+        if 'forex' in asset_classes:
+            # Forex search is synchronous, wrap in async
+            tasks.append(('forex', self._search_forex_async(query, limit)))
+
+        # Execute all searches in parallel
+        if tasks:
+            task_labels, task_coroutines = zip(*tasks)
+            results_list = await asyncio.gather(*task_coroutines, return_exceptions=True)
+
+            for label, result in zip(task_labels, results_list):
+                if isinstance(result, Exception):
+                    logger.warning(f"{label.capitalize()} search failed: {result}")
+                elif result:
+                    all_results.extend(result)
+
+        # Deduplicate by symbol (prioritize first occurrence)
+        seen_symbols = set()
+        unique_results = []
+        for result in all_results:
+            symbol = result.get('symbol', '').upper()
+            if symbol and symbol not in seen_symbols:
+                seen_symbols.add(symbol)
+                unique_results.append(result)
+
+        logger.info(f"Multi-market search for '{query}': {len(unique_results)} total results")
+        return unique_results[:limit * len(asset_classes)]
+
+    async def _search_stocks(self, query: str, limit: int) -> list:
+        """Search stocks via Alpaca."""
         try:
             from services.market_service import search_assets_with_alpaca, ALPACA_AVAILABLE
-            
+
             if ALPACA_AVAILABLE:
-                logger.info(f"Using Alpaca for symbol search: '{query}'")
+                logger.info(f"Searching stocks via Alpaca: '{query}'")
                 results = await search_assets_with_alpaca(query, limit)
+                # Ensure asset_class is set
+                for result in results:
+                    result['asset_class'] = 'stock'
                 return results
         except Exception as e:
-            logger.warning(f"Alpaca symbol search failed: {e}, falling back to MCP")
-        
-        # If MCP service is available, try it as fallback (though it may not have search_assets)
-        if self.mcp_available and hasattr(self.mcp_service, 'search_assets'):
-            try:
-                return await self.mcp_service.search_assets(query, limit)
-            except Exception as e:
-                logger.warning(f"MCP symbol search failed: {e}")
-        
-        # If neither works, return empty results
-        logger.warning(f"No symbol search service available for query: '{query}'")
+            logger.warning(f"Alpaca stock search failed: {e}")
+
+        return []
+
+    async def _search_crypto(self, query: str, limit: int) -> list:
+        """Search crypto via Alpaca + CoinGecko aggregation."""
+        try:
+            from services.market_service import get_alpaca_service
+            from services.crypto_aggregator import CryptoAggregatorService
+
+            alpaca_service = get_alpaca_service()
+            if alpaca_service and alpaca_service.is_available:
+                aggregator = CryptoAggregatorService(alpaca_service)
+                logger.info(f"Searching crypto via Alpaca + CoinGecko: '{query}'")
+                results = await aggregator.search_all_crypto(query, limit)
+                return results
+        except Exception as e:
+            logger.warning(f"Crypto search failed: {e}")
+
+        return []
+
+    async def _search_forex_async(self, query: str, limit: int) -> list:
+        """Search forex pairs (static list)."""
+        try:
+            from services.forex_pairs import search_forex_pairs
+
+            logger.info(f"Searching forex pairs: '{query}'")
+            forex_results = search_forex_pairs(query, limit)
+
+            # Format to match other search results
+            formatted = []
+            for pair in forex_results:
+                formatted.append({
+                    "symbol": pair["symbol"],
+                    "name": pair["name"],
+                    "exchange": "FOREX",
+                    "asset_class": "forex",
+                    "tradable": False,  # Forex data-only via Yahoo Finance
+                    "status": "active",
+                    "category": pair["category"],
+                    "description": pair["description"]
+                })
+
+            return formatted
+        except Exception as e:
+            logger.warning(f"Forex search failed: {e}")
+
         return []
     
     async def warm_up(self):

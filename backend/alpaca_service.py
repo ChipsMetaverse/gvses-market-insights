@@ -14,11 +14,14 @@ from dotenv import load_dotenv
 load_dotenv()
 from alpaca.trading.client import TradingClient
 from alpaca.data.historical.stock import StockHistoricalDataClient
+from alpaca.data.historical.crypto import CryptoHistoricalDataClient
 from alpaca.data.requests import (
     StockBarsRequest,
     StockQuotesRequest,
     StockTradesRequest,
-    StockSnapshotRequest
+    StockSnapshotRequest,
+    CryptoLatestQuoteRequest,
+    CryptoBarsRequest
 )
 from alpaca.data.timeframe import TimeFrame
 from alpaca.trading.requests import GetOrdersRequest, GetAssetsRequest
@@ -59,14 +62,19 @@ class AlpacaService:
                 secret_key=self.secret_key,
                 paper=True  # Always use paper trading for safety
             )
-            
+
             self.data_client = StockHistoricalDataClient(
                 api_key=self.api_key,
                 secret_key=self.secret_key
             )
-            
+
+            self.crypto_client = CryptoHistoricalDataClient(
+                api_key=self.api_key,
+                secret_key=self.secret_key
+            )
+
             self.is_available = True
-            logger.info("Alpaca service initialized successfully")
+            logger.info("Alpaca service initialized successfully (stocks + crypto)")
         except Exception as e:
             logger.error(f"Failed to initialize Alpaca clients: {e}")
             self.is_available = False
@@ -439,11 +447,95 @@ class AlpacaService:
             
             logger.info(f"Found {len(results)} assets for query '{query}'")
             return results
-            
+
         except Exception as e:
             logger.error(f"Error searching assets with query '{query}': {e}")
             return []
-    
+
+    async def search_crypto_assets(self, query: str = "", limit: int = 20) -> List[Dict[str, Any]]:
+        """Search for crypto assets that match the query string."""
+        try:
+            # Create search request for crypto assets
+            search_params = GetAssetsRequest(
+                asset_class=AssetClass.CRYPTO,
+                status=AssetStatus.ACTIVE
+            )
+
+            # Get all active crypto assets
+            assets = self.trading_client.get_all_assets(search_params)
+
+            # Filter by query if provided
+            if query:
+                query_lower = query.lower().strip()
+                filtered_assets = []
+
+                for asset in assets:
+                    # Search in symbol (e.g., "BTC/USD")
+                    symbol_match = query_lower in asset.symbol.lower()
+                    # Extract base currency (BTC from "BTC/USD")
+                    base_currency = asset.symbol.split('/')[0].lower() if '/' in asset.symbol else asset.symbol.lower()
+                    base_match = query_lower in base_currency
+
+                    if symbol_match or base_match:
+                        filtered_assets.append(asset)
+
+                # Sort by relevance - exact base currency match first
+                filtered_assets.sort(key=lambda x: (
+                    x.symbol.split('/')[0].lower() != query_lower,  # Exact base currency match first
+                    not x.symbol.lower().startswith(query_lower),  # Symbol starts with query second
+                    x.symbol  # Alphabetical for the rest
+                ))
+
+                assets = filtered_assets[:limit]
+            else:
+                # If no query, return first N assets
+                assets = list(assets)[:limit]
+
+            # Format results
+            results = []
+            for asset in assets:
+                results.append({
+                    "symbol": asset.symbol,
+                    "name": asset.name or asset.symbol,
+                    "exchange": asset.exchange.value if asset.exchange else "CRYPTO",
+                    "asset_class": "crypto",
+                    "tradable": asset.tradable,
+                    "status": asset.status.value if asset.status else "active",
+                    "source": "alpaca"
+                })
+
+            logger.info(f"Found {len(results)} crypto assets for query '{query}'")
+            return results
+
+        except Exception as e:
+            logger.error(f"Error searching crypto assets with query '{query}': {e}")
+            return []
+
+    async def get_crypto_quote(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get latest crypto quote (bid/ask)."""
+        try:
+            request = CryptoLatestQuoteRequest(symbol_or_symbols=symbol)
+            quotes = self.crypto_client.get_crypto_latest_quote(request)
+
+            if symbol in quotes:
+                quote = quotes[symbol]
+                return {
+                    "symbol": symbol,
+                    "bid_price": float(quote.bid_price),
+                    "ask_price": float(quote.ask_price),
+                    "bid_size": float(quote.bid_size),
+                    "ask_size": float(quote.ask_size),
+                    "timestamp": quote.timestamp.isoformat(),
+                    "data_source": "alpaca_crypto"
+                }
+            else:
+                logger.warning(f"No crypto quote found for {symbol}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error getting crypto quote for {symbol}: {e}")
+            return None
+
     async def get_market_status(self) -> Dict[str, Any]:
         """Check if market is open."""
         try:

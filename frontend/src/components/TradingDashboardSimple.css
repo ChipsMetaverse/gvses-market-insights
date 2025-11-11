@@ -153,10 +153,44 @@
   text-overflow: ellipsis;
 }
 
+.search-result-item .search-result-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
 .search-result-item .result-exchange {
   font-size: 11px;
   color: #9ca3af;
   text-transform: uppercase;
+}
+
+.asset-class-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+.asset-class-badge.stock {
+  background-color: #3b82f6;
+  color: #ffffff;
+}
+
+.asset-class-badge.crypto {
+  background-color: #f59e0b;
+  color: #ffffff;
+}
+
+.asset-class-badge.forex {
+  background-color: #10b981;
+  color: #ffffff;
 }
 
 .search-status {

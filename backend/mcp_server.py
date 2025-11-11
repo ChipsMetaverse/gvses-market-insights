@@ -572,21 +572,51 @@ async def get_stock_news(request: Request, symbol: str):
 
 # Symbol search endpoint
 @app.get("/api/symbol-search")
-@limiter.limit("100/minute")  
-async def symbol_search(request: Request, query: str, limit: int = 10):
-    """Search for stock symbols by company name or ticker"""
+@limiter.limit("100/minute")
+async def symbol_search(
+    request: Request,
+    query: str,
+    limit: int = 10,
+    asset_classes: Optional[str] = None
+):
+    """
+    Search for symbols across stocks, crypto, and forex markets.
+
+    Query params:
+        query: Search query (company name, ticker, crypto name, currency)
+        limit: Max results per asset class (default: 10)
+        asset_classes: Comma-separated list (e.g., "stock,crypto") or None for all
+    """
     request_id = request.headers.get("X-Request-ID") or generate_request_id()
     set_request_id(request_id)
     telemetry = build_request_telemetry(request, request_id)
     start_time = time.perf_counter()
+
     try:
-        if hasattr(market_service, 'search_symbols'):
-            results = await market_service.search_symbols(query, limit)
+        # Parse asset_classes filter
+        classes = None
+        if asset_classes:
+            classes = [c.strip() for c in asset_classes.split(',')]
+
+        # Use the new multi-market search
+        if hasattr(market_service, 'search_assets'):
+            results = await market_service.search_assets(query, limit, classes)
             duration_ms = (time.perf_counter() - start_time) * 1000
             completed = telemetry.with_duration(duration_ms)
+
+            # Count results by asset class
+            asset_counts = {}
+            for result in results:
+                asset_class = result.get('asset_class', 'unknown')
+                asset_counts[asset_class] = asset_counts.get(asset_class, 0) + 1
+
             logger.info(
                 "symbol_search_completed",
-                extra=completed.for_logging(matches=len(results), query=query)
+                extra=completed.for_logging(
+                    matches=len(results),
+                    query=query,
+                    asset_counts=asset_counts
+                )
             )
             await persist_request_log(
                 completed,
@@ -595,9 +625,18 @@ async def symbol_search(request: Request, query: str, limit: int = 10):
                     "query": query,
                     "status": "success",
                     "matches": len(results),
+                    "asset_classes": classes or ['stock', 'crypto', 'forex'],
+                    "asset_counts": asset_counts
                 },
             )
-            return {"results": results}
+
+            return {
+                "query": query,
+                "results": results,
+                "total": len(results),
+                "asset_classes": classes or ['stock', 'crypto', 'forex'],
+                "asset_counts": asset_counts
+            }
         else:
             # Fallback - return empty results if search not supported
             duration_ms = (time.perf_counter() - start_time) * 1000
@@ -615,7 +654,7 @@ async def symbol_search(request: Request, query: str, limit: int = 10):
                     "matches": 0,
                 },
             )
-            return {"results": []}
+            return {"query": query, "results": [], "total": 0}
     except Exception as e:
         duration_ms = (time.perf_counter() - start_time) * 1000
         errored = telemetry.with_duration(duration_ms)

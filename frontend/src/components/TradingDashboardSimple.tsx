@@ -1839,48 +1839,7 @@ export const TradingDashboardSimple: React.FC = () => {
           <h1 className="brand">GVSES</h1>
           <span className="subtitle">Market Assistant</span>
         </div>
-        
-        {/* Ticker Display - Desktop cards or Mobile dropdown */}
-        {isMobile ? (
-          <div className="mobile-ticker-select">
-            <select 
-              value={selectedSymbol}
-              onChange={(e) => setSelectedSymbol(e.target.value)}
-            >
-              {stocksData.map((stock) => (
-                <option key={stock.symbol} value={stock.symbol}>
-                  {stock.symbol} - ${stock.price.toFixed(2)} ({stock.change >= 0 ? '+' : ''}{stock.changePercent.toFixed(1)}%)
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <div className="header-tickers">
-            {isLoadingStocks ? (
-              <div className="ticker-loading">Loading...</div>
-            ) : (
-              stocksData.slice(0, 5).map((stock) => (
-                <div
-                  key={stock.symbol}
-                  className={`ticker-compact ${selectedSymbol === stock.symbol ? 'selected' : ''}`}
-                  onClick={() => setSelectedSymbol(stock.symbol)}
-                  title={`${stock.symbol}: ${stock.label}`}
-                >
-                  <div className="ticker-compact-left">
-                    <div className="ticker-symbol-compact">{stock.symbol}</div>
-                    <div className="ticker-price-compact">${stock.price.toFixed(2)}</div>
-                  </div>
-                  <div className="ticker-compact-right">
-                    <div className={`ticker-change-compact ${stock.change >= 0 ? 'positive' : 'negative'}`}>
-                      {stock.change >= 0 ? '+' : ''}{stock.changePercent.toFixed(1)}%
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-        
+
         <div className={`header-search ${isSearchExpanded ? 'expanded' : ''}`} ref={searchContainerRef}>
           <button
             type="button"
@@ -1920,8 +1879,13 @@ export const TradingDashboardSimple: React.FC = () => {
                         setSearchQuery('');
                       }}
                     >
-                      <span className="result-symbol">{result.symbol}</span>
-                      <span className="result-name">{result.name}</span>
+                      <div className="search-result-content">
+                        <span className="result-symbol">{result.symbol}</span>
+                        <span className="result-name">{result.name}</span>
+                        <span className={`asset-class-badge ${result.asset_class || 'stock'}`}>
+                          {(result.asset_class || 'stock').toUpperCase()}
+                        </span>
+                      </div>
                       <span className="result-exchange">{result.exchange}</span>
                     </button>
                   ))}
@@ -1930,6 +1894,47 @@ export const TradingDashboardSimple: React.FC = () => {
             </>
           )}
         </div>
+
+        {/* Ticker Display - Desktop cards or Mobile dropdown */}
+        {isMobile ? (
+          <div className="mobile-ticker-select">
+            <select
+              value={selectedSymbol}
+              onChange={(e) => setSelectedSymbol(e.target.value)}
+            >
+              {stocksData.map((stock) => (
+                <option key={stock.symbol} value={stock.symbol}>
+                  {stock.symbol} - ${stock.price.toFixed(2)} ({stock.change >= 0 ? '+' : ''}{stock.changePercent.toFixed(1)}%)
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="header-tickers">
+            {isLoadingStocks ? (
+              <div className="ticker-loading">Loading...</div>
+            ) : (
+              stocksData.slice(0, 5).map((stock) => (
+                <div
+                  key={stock.symbol}
+                  className={`ticker-compact ${selectedSymbol === stock.symbol ? 'selected' : ''}`}
+                  onClick={() => setSelectedSymbol(stock.symbol)}
+                  title={`${stock.symbol}: ${stock.label}`}
+                >
+                  <div className="ticker-compact-left">
+                    <div className="ticker-symbol-compact">{stock.symbol}</div>
+                    <div className="ticker-price-compact">${stock.price.toFixed(2)}</div>
+                  </div>
+                  <div className="ticker-compact-right">
+                    <div className={`ticker-change-compact ${stock.change >= 0 ? 'positive' : 'negative'}`}>
+                      {stock.change >= 0 ? '+' : ''}{stock.changePercent.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
         <div className="header-controls">
           <span className="status-indicator">
