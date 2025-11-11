@@ -48,6 +48,10 @@ from utils.request_context import generate_request_id, set_request_id
 from middleware.metrics import PrometheusMiddleware, get_metrics, get_metrics_content_type
 from fastapi.responses import Response as FastAPIResponse
 
+# Enhanced rate limiting with Redis backend
+from middleware.rate_limiter import RateLimitMiddleware
+from routers.rate_limit_router import router as rate_limit_router
+
 # Load environment variables from .env if present
 load_dotenv()
 
@@ -58,7 +62,8 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(title="Voice Assistant MCP Server")
 
-# Initialize rate limiter
+# Legacy rate limiter (slowapi) - kept for backward compatibility with existing decorators
+# New endpoints should rely on RateLimitMiddleware instead
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -80,6 +85,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add enhanced rate limiting middleware
+app.add_middleware(RateLimitMiddleware)
+logger.info("Enhanced rate limiting middleware enabled (Redis-backed with in-memory fallback)")
 
 # Sprint 1, Day 2: Add Prometheus metrics middleware
 app.add_middleware(PrometheusMiddleware)
@@ -1361,6 +1370,9 @@ app.include_router(chart_control_router, tags=["chart-control"])
 
 # Agent router for MCP orchestration
 app.include_router(agent_router, tags=["agent"])
+
+# Rate limiting monitoring and management
+app.include_router(rate_limit_router, tags=["rate-limiting"])
 
 # Ask endpoint
 @app.post("/ask")

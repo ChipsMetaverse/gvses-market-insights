@@ -19,6 +19,7 @@ openai==1.105.0
 playwright>=1.45.0
 tenacity>=8.2.3  # Retry logic with exponential backoff
 prometheus-client>=0.20.0  # Sprint 1 Day 2: Prometheus metrics
+redis>=5.0.0  # Redis backend for distributed rate limiting
 
 # PDF Processing (Keep minimal for now, review later)
 pypdf==3.17.4
