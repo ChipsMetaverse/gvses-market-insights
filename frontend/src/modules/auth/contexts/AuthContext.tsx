@@ -4,6 +4,7 @@ import type { User, AuthState, SignInCredentials } from '../types'
 
 interface AuthContextValue extends AuthState {
   signIn: (credentials: SignInCredentials) => Promise<void>
+  signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -43,6 +44,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const signInWithGoogle = async () => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }))
+    try {
+      await authService.signInWithGoogle()
+      // OAuth redirect happens automatically, no setState needed
+    } catch (error) {
+      setState({ user: null, isLoading: false, error: error.message })
+      throw error
+    }
+  }
+
   const signOut = async () => {
     setState(prev => ({ ...prev, isLoading: true }))
     try {
@@ -55,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signOut }}>
+    <AuthContext.Provider value={{ ...state, signIn, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   )

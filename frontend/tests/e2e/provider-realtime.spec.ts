@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const APP_BASE = process.env.APP_BASE || 'http://localhost:5173'
+const APP_BASE = process.env.APP_BASE || 'http://localhost:5174'
 const API_BASE = process.env.API_BASE || 'http://localhost:8000'
 
 test.describe('ProviderTest - OpenAI Realtime (voice-only)', () => {

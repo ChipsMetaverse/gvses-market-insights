@@ -1,0 +1,342 @@
+.economic-calendar {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.12);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.calendar-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.calendar-subtitle {
+  font-size: 12px;
+  color: #475569;
+}
+
+.calendar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-refresh {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: linear-gradient(145deg, #ffffff, #f8fafc);
+  color: #0f172a;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.calendar-refresh:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+}
+
+.calendar-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #475569;
+  text-transform: uppercase;
+}
+
+.filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pill {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  background: linear-gradient(145deg, #ffffff, #f8fafc);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pill--active {
+  background: linear-gradient(145deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  border-color: rgba(37, 99, 235, 0.2);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+}
+
+.impact-emoji {
+  margin-right: 6px;
+}
+
+.impact-summary {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.impact-summary li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-flex;
+}
+
+.summary-dot[data-impact="high"] {
+  background: #ef4444;
+}
+
+.summary-dot[data-impact="medium"] {
+  background: #f59e0b;
+}
+
+.summary-dot[data-impact="low"] {
+  background: #10b981;
+}
+
+.summary-label {
+  font-weight: 500;
+}
+
+.summary-count {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.calendar-loading,
+.calendar-empty,
+.calendar-error {
+  border-radius: 12px;
+  padding: 20px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.calendar-loading {
+  background: #f8fafc;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.calendar-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid rgba(185, 28, 28, 0.2);
+}
+
+.calendar-empty {
+  background: #f8fafc;
+  color: #475569;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(37, 99, 235, 0.2);
+  border-top-color: #2563eb;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.calendar-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.timeline-day {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeline-day__header h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.timeline-day__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeline-event {
+  display: grid;
+  grid-template-columns: auto 90px 1fr;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+}
+
+.timeline-event__indicator {
+  width: 6px;
+  height: 100%;
+  border-radius: 999px;
+  background: #cbd5f5;
+}
+
+.timeline-event__indicator[data-impact="high"] {
+  background: linear-gradient(180deg, #f87171, #ef4444);
+}
+
+.timeline-event__indicator[data-impact="medium"] {
+  background: linear-gradient(180deg, #fbbf24, #f59e0b);
+}
+
+.timeline-event__indicator[data-impact="low"] {
+  background: linear-gradient(180deg, #34d399, #10b981);
+}
+
+.timeline-event__time {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.timeline-event__currency {
+  margin-top: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.timeline-event__content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeline-event__title {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.timeline-event__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.metric {
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(15, 23, 42, 0.05);
+  font-weight: 600;
+}
+
+.Tag--actual {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.timeline-event__link {
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.timeline-event__link:hover {
+  text-decoration: underline;
+}
+
+.timeline-event__notes {
+  font-size: 11px;
+  color: #475569;
+  background: rgba(15, 23, 42, 0.04);
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.calendar-updated {
+  font-size: 11px;
+  text-align: right;
+  color: #64748b;
+}
+
+@media (max-width: 640px) {
+  .economic-calendar {
+    padding: 14px;
+  }
+
+  .timeline-event {
+    grid-template-columns: 4px 1fr;
+    gap: 12px;
+  }
+
+  .timeline-event__indicator {
+    grid-row: span 2;
+  }
+
+  .timeline-event__time {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+  }
+}

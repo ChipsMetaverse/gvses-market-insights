@@ -34,6 +34,7 @@ from market_data_service import MarketDataService
 from routers.dashboard_router import router as dashboard_router
 from routers.agent_router import router as agent_router
 from services.http_mcp_client import get_http_mcp_client as get_direct_mcp_client  # Using HTTP for better performance
+from services.forex_mcp_client import get_forex_mcp_client
 from services.market_service_factory import MarketServiceFactory
 from services.openai_relay_server import openai_relay_server
 from chart_control_api import router as chart_control_router
@@ -290,6 +291,126 @@ async def metrics_endpoint():
         logger.error(f"Failed to generate metrics: {e}")
         raise HTTPException(status_code=500, detail="Metrics generation failed")
 
+
+async def _fetch_forex_calendar(
+    request: Request,
+    *,
+    time_period: str,
+    start: str | None = None,
+    end: str | None = None,
+    impact: str | None = None,
+) -> Dict[str, Any]:
+    """Shared helper to call the Forex MCP client and format telemetry logs."""
+
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+
+    try:
+        client = await get_forex_mcp_client()
+        calendar = await client.get_calendar_events(
+            time_period=time_period,
+            start=start,
+            end=end,
+            impact=impact,
+        )
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "forex_calendar_request_completed",
+            extra=completed.for_logging(
+                time_period=time_period,
+                start=start,
+                end=end,
+                impact=impact,
+                event="forex_calendar",
+                count=len(calendar.get("events", [])),
+            ),
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "forex_calendar",
+                "time_period": time_period,
+                "start": start,
+                "end": end,
+                "impact": impact,
+                "count": len(calendar.get("events", [])),
+            },
+        )
+        return calendar
+    except ValueError as err:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.warning(
+            "forex_calendar_request_invalid",
+            extra=errored.for_logging(event="forex_calendar", error=str(err), time_period=time_period),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "forex_calendar_error",
+                "time_period": time_period,
+                "error": str(err),
+                "status": "invalid_arguments",
+            },
+        )
+        raise HTTPException(status_code=400, detail=str(err))
+    except Exception as err:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            "forex_calendar_request_failed",
+            extra=errored.for_logging(event="forex_calendar", error=str(err), time_period=time_period),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "forex_calendar_error",
+                "time_period": time_period,
+                "error": str(err),
+                "status": "exception",
+            },
+        )
+        raise HTTPException(status_code=502, detail="Failed to fetch ForexFactory calendar data")
+
+
+@app.get("/api/forex/calendar")
+@limiter.limit("60/minute")
+async def get_forex_calendar(
+    request: Request,
+    time_period: str = "today",
+    start: str | None = None,
+    end: str | None = None,
+    impact: str | None = None,
+) -> Dict[str, Any]:
+    """Generic economic calendar endpoint with optional filters."""
+
+    return await _fetch_forex_calendar(
+        request,
+        time_period=time_period,
+        start=start,
+        end=end,
+        impact=impact,
+    )
+
+
+@app.get("/api/forex/events-today")
+@limiter.limit("60/minute")
+async def get_forex_events_today(request: Request) -> Dict[str, Any]:
+    """Convenience endpoint for today's events."""
+
+    return await _fetch_forex_calendar(request, time_period="today")
+
+
+@app.get("/api/forex/events-week")
+@limiter.limit("60/minute")
+async def get_forex_events_week(request: Request) -> Dict[str, Any]:
+    """Convenience endpoint for current week events."""
+
+    return await _fetch_forex_calendar(request, time_period="week")
+
 # Stock quote endpoint
 @app.get("/api/stock-price")
 @limiter.limit("100/minute")
@@ -516,15 +637,15 @@ async def symbol_search(request: Request, query: str, limit: int = 10):
 # Stock history endpoint  
 @app.get("/api/stock-history")
 @limiter.limit("100/minute")
-async def get_stock_history(request: Request, symbol: str, days: int = 30):
-    """Get historical stock data"""
+async def get_stock_history(request: Request, symbol: str, days: int = 30, interval: str = "1d"):
+    """Get historical stock data with configurable interval (1m, 5m, 15m, 30m, 1h, 1d, 1wk, 1mo)"""
     request_id = request.headers.get("X-Request-ID") or generate_request_id()
     set_request_id(request_id)
     telemetry = build_request_telemetry(request, request_id)
     start_time = time.perf_counter()
     symbol_upper = symbol.upper()
     try:
-        history = await market_service.get_stock_history(symbol_upper, days)
+        history = await market_service.get_stock_history(symbol_upper, days, interval)
         duration_ms = (time.perf_counter() - start_time) * 1000
         completed = telemetry.with_duration(duration_ms)
         logger.info(
@@ -902,7 +1023,6 @@ async def get_technical_indicators(
                 
             # Moving averages
             if "moving_averages" in indicator_list:
-                import time
                 current_time = int(time.time())
                 ma_data = {}
                 if mcp_indicators.get("sma20"):

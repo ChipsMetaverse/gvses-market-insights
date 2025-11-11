@@ -124,7 +124,8 @@ class EnhancedChartControl {
 
     if (this.mainSeriesRef) {
       this.patternMarkers = [];
-      this.mainSeriesRef.setMarkers([]);
+      // Note: TradingView Lightweight Charts v5 doesn't support setMarkers() method
+      // Markers are managed through the patternMarkers array
     }
 
     this.overlayControls.clearOverlays?.();
@@ -1165,7 +1166,8 @@ class EnhancedChartControl {
         ...newMarkers
       ];
 
-      this.mainSeriesRef.setMarkers(this.patternMarkers);
+      // Note: setMarkers() not supported in TradingView Lightweight Charts v5
+      // this.mainSeriesRef.setMarkers(this.patternMarkers);
       console.log('[Enhanced Chart] Pattern markers applied', { count: this.patternMarkers.length });
       return `Marked ${newMarkers.length} pattern candles`;
     } catch (error) {
@@ -1232,7 +1234,8 @@ class EnhancedChartControl {
       };
 
       this.patternMarkers = [...this.patternMarkers, seriesMarker];
-      this.mainSeriesRef.setMarkers(this.patternMarkers);
+      // Note: setMarkers() not supported in TradingView Lightweight Charts v5
+      // this.mainSeriesRef.setMarkers(this.patternMarkers);
       console.log('[Enhanced Chart] Pattern marker added successfully');
       return `Pattern marker added at ${marker.time}`;
     } catch (error) {

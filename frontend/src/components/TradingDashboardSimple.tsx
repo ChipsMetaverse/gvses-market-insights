@@ -20,12 +20,18 @@ import { VoiceCommandHelper } from './VoiceCommandHelper';
 import StructuredResponse from './StructuredResponse';
 import { Tooltip } from './Tooltip';
 import { OnboardingTour } from './OnboardingTour';
+import { EconomicCalendar } from './EconomicCalendar';
 import { TimeRange } from '../types/dashboard';
 import {
   normalizeChartCommandPayload,
+  type ChartCommandPayload,
 } from '../utils/chartCommandUtils';
+import type { StructuredChartCommand as ChartControlStructuredCommand } from '../services/chartControlService';
+import type { ProviderConfig } from '../providers/types';
 import './TradingDashboardSimple.css';
 import './TradingDashboardMobile.css';
+import { useSymbolSearch } from '../hooks/useSymbolSearch';
+import { Search } from 'lucide-react';
 
 interface StockData {
   symbol: string;
@@ -133,12 +139,12 @@ const timeframeToDays = (timeframe: TimeRange): { fetch: number, display: number
     '8H': { fetch: 7, display: 7 },
     '12H': { fetch: 7, display: 7 },
     
-    // Daily+ - Fetch extra historical data for technical indicators (MA200, etc.)
-    '1D': { fetch: 200, display: 1 },    // Fetch 200, display 1
-    '2D': { fetch: 200, display: 2 },    // Fetch 200, display 2
-    '3D': { fetch: 200, display: 3 },    // Fetch 200, display 3
-    '5D': { fetch: 200, display: 5 },    // Fetch 200, display 5
-    '1W': { fetch: 200, display: 7 },    // Fetch 200, display 7
+    // Daily+ - Use intraday intervals (15m, 1h) so fetch recent data only
+    '1D': { fetch: 1, display: 1 },      // 1 day with 15m bars (~26 bars)
+    '2D': { fetch: 2, display: 2 },      // 2 days with 15m bars
+    '3D': { fetch: 3, display: 3 },      // 3 days with 15m bars
+    '5D': { fetch: 5, display: 5 },      // 5 days with 1h bars (~30 bars)
+    '1W': { fetch: 7, display: 7 },      // 7 days with 1h bars (~42 bars)
     
     // Months - Fetch extra for MA200 but display only requested range
     '1M': { fetch: 250, display: 30 },   // Fetch 250, display 30
@@ -161,6 +167,54 @@ const timeframeToDays = (timeframe: TimeRange): { fetch: number, display: number
   return map[timeframe] || { fetch: 365, display: 365 };
 };
 
+// Helper function to convert TimeRange to data interval for API
+const timeframeToInterval = (timeframe: TimeRange): string => {
+  const map: Record<TimeRange, string> = {
+    // Intraday - Use minute-based intervals
+    '10S': '1m',
+    '30S': '1m',
+    '1m': '1m',
+    '3m': '1m',
+    '5m': '5m',
+    '10m': '5m',
+    '15m': '15m',
+    '30m': '30m',
+
+    // Hours - Use hourly interval
+    '1H': '1h',
+    '2H': '1h',
+    '3H': '1h',
+    '4H': '1h',
+    '6H': '1h',
+    '8H': '1h',
+    '12H': '1h',
+
+    // Daily+ - Use daily interval
+    '1D': '15m',    // Use 15-minute bars for 1D to show intraday movement
+    '2D': '15m',    // Use 15-minute bars for 2D
+    '3D': '15m',    // Use 15-minute bars for 3D
+    '5D': '1h',     // Use hourly for 5D
+    '1W': '1h',     // Use hourly for 1W
+
+    // Longer periods - Use daily interval
+    '1M': '1d',
+    '3M': '1d',
+    '6M': '1d',
+    '1Y': '1d',
+    '2Y': '1d',
+    '3Y': '1d',
+    '5Y': '1d',
+    'YTD': '1d',
+    'MAX': '1d'
+  };
+  return map[timeframe] || '1d';
+};
+
+const CRYPTO_SYMBOLS = new Set([
+  'BTC', 'ETH', 'ADA', 'DOT', 'SOL', 'MATIC', 'AVAX', 'LTC',
+  'XRP', 'DOGE', 'SHIB', 'UNI', 'LINK', 'BCH', 'XLM',
+]);
+
 export const TradingDashboardSimple: React.FC = () => {
   console.log('%c📺 [COMPONENT RENDER] TradingDashboardSimple rendering...', 'background: #4CAF50; color: white; font-size: 16px; font-weight: bold;');
 
@@ -178,6 +232,8 @@ export const TradingDashboardSimple: React.FC = () => {
   const [newsError, setNewsError] = useState<string | null>(null);
   const [technicalLevels, setTechnicalLevels] = useState<any>({});
   const [detectedPatterns, setDetectedPatterns] = useState<any[]>([]);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Streaming news state
   const [streamingNews] = useState<any[]>([]);
@@ -186,7 +242,11 @@ export const TradingDashboardSimple: React.FC = () => {
   const [backendPatterns, setBackendPatterns] = useState<any[]>([]);
   const [currentSnapshot, setCurrentSnapshot] = useState<ChartSnapshot | null>(null);
   const pendingPatternFocusRef = useRef<number | null>(null);
-  
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const { searchResults, isSearching, searchError, hasSearched } = useSymbolSearch(searchQuery);
+  const shouldShowSearchResults = isSearchExpanded && searchQuery.trim().length > 0;
+
   // Pattern visualization state - Phase 1: Smart Visibility Controls
   const [patternVisibility, setPatternVisibility] = useState<{ [patternId: string]: boolean }>({});
   const [hoveredPatternId, setHoveredPatternId] = useState<string | null>(null);
@@ -194,6 +254,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [showMorePatterns, setShowMorePatterns] = useState(false);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
+  const [isCalendarCollapsed, setIsCalendarCollapsed] = useState(false);
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [chartTimeframe, setChartTimeframe] = useState('1D');
   const [voiceProvider] = useState<ConversationProviderKey>('chatkit');
@@ -238,6 +299,30 @@ export const TradingDashboardSimple: React.FC = () => {
   const handleLeftPanelResize = useCallback((delta: number) => {
     setLeftPanelWidth(prev => Math.max(200, Math.min(400, prev + delta)));
   }, []);
+
+  useEffect(() => {
+    if (isSearchExpanded && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isSearchExpanded]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (!isSearchExpanded) return;
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsSearchExpanded(false);
+        setSearchQuery('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isSearchExpanded]);
 
   const handleRightPanelResize = useCallback((delta: number) => {
     setRightPanelWidth(prev => Math.max(300, Math.min(500, prev - delta)));
@@ -287,6 +372,7 @@ export const TradingDashboardSimple: React.FC = () => {
   });
   const [activePanel, setActivePanel] = useState<'analysis' | 'chart' | 'voice'>('chart');
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const tabBarRef = useRef<HTMLElement | null>(null);
 
   // Streaming Chart Commands: BackendAgentProvider for chart command streaming
   const backendProviderRef = useRef<BackendAgentProvider | null>(null);
@@ -298,7 +384,7 @@ export const TradingDashboardSimple: React.FC = () => {
     }
 
     const handleResize = () => {
-      const mobile = window.innerWidth <= 768;
+      const mobile = window.innerWidth <= 1024;
       setIsMobile(mobile);
       if (!mobile) {
         setActivePanel('chart');
@@ -321,16 +407,28 @@ export const TradingDashboardSimple: React.FC = () => {
     // Mobile tabs: only 2 tabs now (analysis | chart+voice merged)
     const tabs: Array<'analysis' | 'chart' | 'voice'> = ['analysis', 'chart'];
     let touchStartX: number | null = null;
+    let touchStartedInTabBar = false;
 
     const handleTouchStart = (event: TouchEvent) => {
       if (event.touches.length > 0) {
-        touchStartX = event.touches[0].clientX;
+        const touch = event.touches[0];
+        touchStartX = touch.clientX;
+
+        // Check if touch started inside the tab bar
+        if (tabBarRef.current) {
+          const tabBarRect = tabBarRef.current.getBoundingClientRect();
+          const touchY = touch.clientY;
+          touchStartedInTabBar = touchY >= tabBarRect.top && touchY <= tabBarRect.bottom;
+        } else {
+          touchStartedInTabBar = false;
+        }
       }
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
-      if (touchStartX === null || event.changedTouches.length === 0) {
+      if (touchStartX === null || event.changedTouches.length === 0 || !touchStartedInTabBar) {
         touchStartX = null;
+        touchStartedInTabBar = false;
         return;
       }
 
@@ -346,6 +444,7 @@ export const TradingDashboardSimple: React.FC = () => {
       }
 
       touchStartX = null;
+      touchStartedInTabBar = false;
     };
 
     element.addEventListener('touchstart', handleTouchStart, { passive: true });
@@ -406,12 +505,6 @@ export const TradingDashboardSimple: React.FC = () => {
   // Add symbol to watchlist
   const addToWatchlist = async (symbol: string) => {
     const upperSymbol = symbol.toUpperCase().trim();
-    
-    // Popular cryptocurrency symbols that should be allowed
-    const CRYPTO_SYMBOLS = new Set([
-      'BTC', 'ETH', 'ADA', 'DOT', 'SOL', 'MATIC', 'AVAX', 'LTC', 
-      'XRP', 'DOGE', 'SHIB', 'UNI', 'LINK', 'BCH', 'XLM'
-    ]);
     
     // Basic format validation
     const isStockFormat = /^[A-Z]{1,5}$/.test(upperSymbol);
@@ -734,7 +827,7 @@ export const TradingDashboardSimple: React.FC = () => {
       trendlines?.forEach((trendline: any, idx: number) => {
         const color = trendline.type === 'upper_trendline' ? '#ef4444' : '#3b82f6';
         console.log('[Pattern] Drawing trendline', idx, trendline);
-        enhancedChartControl.drawTrendline(
+        enhancedChartControl.drawTrendLine(
           trendline.start.time,
           trendline.start.price,
           trendline.end.time,
@@ -744,7 +837,6 @@ export const TradingDashboardSimple: React.FC = () => {
       });
 
       levels?.forEach((level: any, idx: number) => {
-        const color = level.type === 'support' ? '#10b981' : '#ef4444';
         const label = level.type === 'support' ? 'Support' : 'Resistance';
         console.log('[Pattern] Drawing level', idx, level);
         
@@ -756,7 +848,7 @@ export const TradingDashboardSimple: React.FC = () => {
         }
         
         console.log(`[Pattern] Time range for level: ${new Date(startTime * 1000).toISOString()} → ${new Date(endTime * 1000).toISOString()}`);
-        enhancedChartControl.drawHorizontalLine(level.price, startTime, endTime, color, label);
+        enhancedChartControl.highlightLevel(level.price, label.toLowerCase() === 'support' ? 'support' : 'resistance', label);
       });
     }
 
@@ -915,13 +1007,17 @@ export const TradingDashboardSimple: React.FC = () => {
   useEffect(() => {
     const initProvider = async () => {
       if (!backendProviderRef.current) {
-        const provider = new BackendAgentProvider({
-          apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
-        });
+        const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
+        const providerConfig: ProviderConfig = {
+          type: 'custom',
+          name: 'Backend Agent',
+          apiUrl,
+          capabilities: BackendAgentProvider.getDefaultCapabilities(),
+        };
 
-        await provider.initialize({
-          apiUrl: import.meta.env.VITE_API_URL || window.location.origin,
-        });
+        const provider = new BackendAgentProvider(providerConfig);
+
+        await provider.initialize(providerConfig);
 
         backendProviderRef.current = provider;
         setStreamingProvider(provider);
@@ -1474,7 +1570,7 @@ export const TradingDashboardSimple: React.FC = () => {
   // Fetch news and analysis for selected stock
   const fetchStockAnalysis = async (symbol: string) => {
     setIsLoadingNews(true);
-    
+
     // Fetch news independently
     try {
       const news = await marketDataService.getStockNews(symbol);
@@ -1579,10 +1675,7 @@ export const TradingDashboardSimple: React.FC = () => {
         
         // Check if it's a valid symbol format
         const isValidFormat = /^[A-Z]{1,5}(-USD)?$/.test(upperSymbol) || /^BRK\.[AB]$/.test(upperSymbol);
-        
-        // Check if it's in the watchlist or is a known crypto symbol
-        const isInWatchlist = watchlist.includes(upperSymbol.replace('-USD', ''));
-        const isCrypto = metadata?.assetType === 'crypto' || upperSymbol.endsWith('-USD');
+        const isKnownCrypto = CRYPTO_SYMBOLS.has(upperSymbol);
         
         if (!isValidFormat) {
           console.warn(`Invalid symbol format rejected: ${symbol}`);
@@ -1592,7 +1685,7 @@ export const TradingDashboardSimple: React.FC = () => {
         }
         
         // For stocks, check if it's in the watchlist (unless it's crypto)
-        if (!isCrypto && !isInWatchlist) {
+        if (!isKnownCrypto && !watchlist.includes(upperSymbol.replace('-USD', ''))) {
           // Try to add it to the watchlist first
           addToWatchlist(upperSymbol.replace('-USD', '')).then(() => {
             // If successfully added, then select it
@@ -1609,7 +1702,7 @@ export const TradingDashboardSimple: React.FC = () => {
         // Valid symbol, proceed with update
         setSelectedSymbol(upperSymbol);
         fetchStockAnalysis(upperSymbol);
-        const icon = metadata?.assetType === 'crypto' ? '₿' : '📈';
+        const icon = isKnownCrypto ? '₿' : '📈';
         setToastCommand({ command: `${icon} Symbol: ${upperSymbol}`, type: 'success' });
         setTimeout(() => setToastCommand(null), 3000);
       },
@@ -1767,8 +1860,8 @@ export const TradingDashboardSimple: React.FC = () => {
               <div className="ticker-loading">Loading...</div>
             ) : (
               stocksData.slice(0, 5).map((stock) => (
-                <div 
-                  key={stock.symbol} 
+                <div
+                  key={stock.symbol}
                   className={`ticker-compact ${selectedSymbol === stock.symbol ? 'selected' : ''}`}
                   onClick={() => setSelectedSymbol(stock.symbol)}
                   title={`${stock.symbol}: ${stock.label}`}
@@ -1788,6 +1881,56 @@ export const TradingDashboardSimple: React.FC = () => {
           </div>
         )}
         
+        <div className={`header-search ${isSearchExpanded ? 'expanded' : ''}`} ref={searchContainerRef}>
+          <button
+            type="button"
+            className="search-toggle"
+            aria-label="Search symbols"
+            onClick={() => setIsSearchExpanded(prev => !prev)}
+          >
+            <Search size={18} />
+          </button>
+
+          {isSearchExpanded && (
+            <>
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="search-input"
+                placeholder="Search tickers or companies"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                aria-label="Search tickers or companies"
+              />
+              {shouldShowSearchResults && (
+                <div className="search-results" role="listbox">
+                  {isSearching && <div className="search-status">Searching...</div>}
+                  {searchError && <div className="search-status error">{searchError}</div>}
+                  {!isSearching && !searchError && hasSearched && searchResults.length === 0 && (
+                    <div className="search-status">No matches found</div>
+                  )}
+                  {searchResults.map((result) => (
+                    <button
+                      key={result.symbol}
+                      type="button"
+                      className="search-result-item"
+                      onMouseDown={() => {
+                        setSelectedSymbol(result.symbol);
+                        setIsSearchExpanded(false);
+                        setSearchQuery('');
+                      }}
+                    >
+                      <span className="result-symbol">{result.symbol}</span>
+                      <span className="result-name">{result.name}</span>
+                      <span className="result-exchange">{result.exchange}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
         <div className="header-controls">
           <span className="status-indicator">
             {isConversationConnected ? '🟢' : '⚪'}
@@ -1808,6 +1951,25 @@ export const TradingDashboardSimple: React.FC = () => {
 
           <h2 className="panel-title">CHART ANALYSIS</h2>
           <div className="analysis-content">
+            <div className="calendar-card">
+              <button
+                type="button"
+                className="calendar-card__header"
+                onClick={() => setIsCalendarCollapsed(prev => !prev)}
+                aria-expanded={!isCalendarCollapsed}
+              >
+                <span>ECONOMIC CALENDAR</span>
+                <span className="calendar-card__toggle" aria-hidden="true">
+                  {isCalendarCollapsed ? 'Show' : 'Hide'}
+                </span>
+              </button>
+              {!isCalendarCollapsed && (
+                <div className="calendar-card__body">
+                  <EconomicCalendar />
+                </div>
+              )}
+            </div>
+
             {isLoadingNews ? (
               <div className="loading-spinner">Loading analysis...</div>
             ) : (
@@ -2116,6 +2278,7 @@ export const TradingDashboardSimple: React.FC = () => {
                 symbol={selectedSymbol}
                 days={timeframeToDays(selectedTimeframe).fetch}
                 displayDays={timeframeToDays(selectedTimeframe).display}
+                interval={timeframeToInterval(selectedTimeframe)}
                 technicalLevels={technicalLevels}
                 onChartReady={(chart: any) => {
                   chartRef.current = chart;
@@ -2183,34 +2346,42 @@ export const TradingDashboardSimple: React.FC = () => {
                 style={{ flex: `1 1 ${100 - mobileChartRatio}%`, maxHeight: `${100 - mobileChartRatio}%`, minHeight: '200px' }}
               >
               {voiceProvider === 'chatkit' ? (
-                <RealtimeChatKit 
-                  className="h-full w-full"
-                  symbol={selectedSymbol}
-                  timeframe={selectedTimeframe}
-                  snapshotId={currentSnapshot?.symbol === selectedSymbol ? currentSnapshot?.metadata?.snapshot_id : undefined}
-                  onMessage={(message) => {
-                    console.log('ChatKit message:', message);
-                    const newMessage: Message = {
-                      ...message,
-                      provider: 'chatkit'
-                    };
-                    setMessages((prev: Message[]) => [...prev, newMessage]);
-                  }}
-                  onChartCommand={(command) => {
-                    const payload = normalizeChartCommandPayload(command, message.content);
-                    console.log('ChatKit chart command:', payload);
+                <div className="h-full w-full">
+                  <RealtimeChatKit
+                    symbol={selectedSymbol}
+                    timeframe={selectedTimeframe}
+                    snapshotId={currentSnapshot?.symbol === selectedSymbol ? currentSnapshot?.metadata?.snapshot_id : undefined}
+                    onMessage={(message) => {
+                      console.log('ChatKit message:', message);
+                      const newMessage: Message = {
+                        ...message,
+                        provider: 'chatkit'
+                      };
+                      setMessages((prev: Message[]) => [...prev, newMessage]);
+                    }}
+                    onChartCommand={(command: ChartCommandPayload) => {
+                      console.log('ChatKit chart command:', command);
+                      const normalized = normalizeChartCommandPayload(command);
+                      const legacyCommands = normalized.legacy ?? [];
+                      const structuredCommands = (normalized.structured ?? []).map(item => ({
+                        type: item.type,
+                        payload: { ...(item.payload ?? {}) },
+                        description: item.description ?? null,
+                        legacy: item.legacy ?? null,
+                      })) as ChartControlStructuredCommand[];
 
-                    enhancedChartControl
-                      .processEnhancedResponse(
-                        payload.responseText || '',
-                        payload.legacy,
-                        payload.structured
-                      )
-                      .catch(err => {
-                        console.error('Failed to execute ChatKit chart command:', err);
-                      });
-                  }}
-                />
+                      if (legacyCommands.length === 0 && structuredCommands.length === 0) {
+                        return;
+                      }
+
+                      enhancedChartControl
+                        .processEnhancedResponse(normalized.responseText ?? '', legacyCommands, structuredCommands)
+                        .catch(err => {
+                          console.error('Failed to execute ChatKit chart command:', err);
+                        });
+                    }}
+                  />
+                </div>
               ) : (
                 <div className="voice-conversation-section" style={{ height: '100%' }}>
                   <h2 className="panel-title">VOICE ASSISTANT</h2>
@@ -2290,31 +2461,42 @@ export const TradingDashboardSimple: React.FC = () => {
         >
           {voiceProvider === 'chatkit' ? (
             // Render RealtimeChatKit when using ChatKit provider - no wrapper needed
-            <RealtimeChatKit 
-              className="h-full w-full"
-              symbol={selectedSymbol}
-              timeframe={selectedTimeframe}
-              snapshotId={currentSnapshot?.symbol === selectedSymbol ? currentSnapshot?.metadata?.snapshot_id : undefined}
-              onMessage={(message) => {
-                console.log('ChatKit message:', message);
-                // Add message to messages array
-                const newMessage: Message = {
-                  ...message,
-                  provider: 'chatkit'
-                };
-                setMessages((prev: Message[]) => [...prev, newMessage]);
-              }}
-              onChartCommand={(command) => {
-                const payload = normalizeChartCommandPayload(command, message.content);
-                console.log('ChatKit chart command:', payload);
+            <div className="h-full w-full">
+              <RealtimeChatKit
+                symbol={selectedSymbol}
+                timeframe={selectedTimeframe}
+                snapshotId={currentSnapshot?.symbol === selectedSymbol ? currentSnapshot?.metadata?.snapshot_id : undefined}
+                onMessage={(message) => {
+                  console.log('ChatKit message:', message);
+                  const newMessage: Message = {
+                    ...message,
+                    provider: 'chatkit'
+                  };
+                  setMessages((prev: Message[]) => [...prev, newMessage]);
+                }}
+                onChartCommand={(command: ChartCommandPayload) => {
+                  console.log('ChatKit chart command:', command);
+                  const normalized = normalizeChartCommandPayload(command);
+                  const legacyCommands = normalized.legacy ?? [];
+                  const structuredCommands = (normalized.structured ?? []).map(item => ({
+                    type: item.type,
+                    payload: { ...(item.payload ?? {}) },
+                    description: item.description ?? null,
+                    legacy: item.legacy ?? null,
+                  })) as ChartControlStructuredCommand[];
 
-                enhancedChartControl
-                  .processEnhancedResponse(payload.responseText || '', payload.legacy, payload.structured)
-                  .catch(err => {
-                    console.error('Failed to execute ChatKit chart command:', err);
-                  });
-              }}
-            />
+                  if (legacyCommands.length === 0 && structuredCommands.length === 0) {
+                    return;
+                  }
+
+                  enhancedChartControl
+                    .processEnhancedResponse(normalized.responseText ?? '', legacyCommands, structuredCommands)
+                    .catch(err => {
+                      console.error('Failed to execute ChatKit chart command:', err);
+                    });
+                }}
+              />
+            </div>
           ) : (
             // Original voice conversation UI for other providers
             <div className="voice-conversation-section" style={{ height: '100%' }}>
@@ -2422,7 +2604,7 @@ export const TradingDashboardSimple: React.FC = () => {
       
       {/* Mobile Tab Bar - Fixed at bottom (2 tabs: Analysis | Chart+Voice) */}
         {isMobile && (
-          <nav className="mobile-tab-bar" aria-label="Dashboard navigation">
+          <nav ref={tabBarRef} className="mobile-tab-bar" aria-label="Dashboard navigation">
             <ul className="mobile-tab-bar__list mobile-tab-bar__list--two-tabs">
               <li>
                 <button

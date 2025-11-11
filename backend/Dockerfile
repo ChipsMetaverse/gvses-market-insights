@@ -23,6 +23,13 @@ WORKDIR /app
 COPY alpaca-mcp-server/ ./alpaca-mcp-server/
 RUN pip install -r alpaca-mcp-server/requirements.txt
 
+# Copy and setup forex-mcp-server (Python + Playwright)
+WORKDIR /app
+COPY forex-mcp-server/ ./forex-mcp-server/
+RUN pip install --no-cache-dir -r forex-mcp-server/requirements.txt
+RUN playwright install chromium
+RUN playwright install-deps chromium
+
 # Copy requirements first for better caching
 COPY backend/requirements.txt .
 

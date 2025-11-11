@@ -14,11 +14,12 @@ interface TradingChartProps {
   symbol: string
   days?: number  // Number of days of historical data to FETCH (for indicators)
   displayDays?: number  // Number of days to DISPLAY on chart
+  interval?: string  // Data interval: '1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo'
   technicalLevels?: any
   onChartReady?: (chart: any) => void
 }
 
-export function TradingChart({ symbol, days = 100, displayDays, technicalLevels, onChartReady }: TradingChartProps) {
+export function TradingChart({ symbol, days = 100, displayDays, interval = "1d", technicalLevels, onChartReady }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -167,8 +168,8 @@ export function TradingChart({ symbol, days = 100, displayDays, technicalLevels,
     setError(null)
 
     try {
-      const history = await marketDataService.getStockHistory(symbolToFetch, days)
-      
+      const history = await marketDataService.getStockHistory(symbolToFetch, days, interval)
+
       // Check if component is still mounted and request wasn't aborted
       if (!isMountedRef.current || abortControllerRef.current.signal.aborted) {
         return null
@@ -576,7 +577,7 @@ export function TradingChart({ symbol, days = 100, displayDays, technicalLevels,
       chartRef.current = null
       candlestickSeriesRef.current = null
     }
-  }, [symbol, days]) // Recreate chart when symbol or days changes
+  }, [symbol, days, interval]) // Recreate chart when symbol, days, or interval changes
   
   // Subscribe to chart events for label synchronization
   useEffect(() => {

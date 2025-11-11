@@ -90,26 +90,32 @@ class DirectMarketDataService:
             logger.error(f"Error fetching direct stock price for {symbol}: {e}")
             raise
     
-    async def get_stock_history(self, symbol: str, days: int = 50) -> dict:
-        """Get stock history with direct Yahoo Finance API call."""
+    async def get_stock_history(self, symbol: str, days: int = 50, interval: str = "1d") -> dict:
+        """Get stock history with direct Yahoo Finance API call.
+
+        Args:
+            symbol: Stock symbol (e.g., 'AAPL', 'TSLA')
+            days: Number of days to fetch
+            interval: Data interval - '1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo'
+        """
         try:
             # Map crypto symbols to Yahoo Finance format
             original_symbol = symbol
             mapped_symbol, is_crypto = self._map_crypto_symbol(symbol)
-            
+
             # Calculate date range
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)
-            
+
             period1 = int(start_date.timestamp())
             period2 = int(end_date.timestamp())
-            
+
             async with httpx.AsyncClient() as client:
                 url = f"https://query1.finance.yahoo.com/v8/finance/chart/{mapped_symbol.upper()}"
                 params = {
                     'period1': period1,
                     'period2': period2,
-                    'interval': '1d'
+                    'interval': interval  # Use the provided interval parameter
                 }
                 response = await client.get(url, headers=self.headers, params=params, timeout=self.timeout)
                 

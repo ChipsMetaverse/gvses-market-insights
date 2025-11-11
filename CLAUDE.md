@@ -77,6 +77,7 @@ React + TypeScript + Vite application with professional trading interface:
 ### MCP Servers
 - **market-mcp-server** (`market-mcp-server/`): Node.js, 35+ Yahoo Finance and CNBC tools
 - **alpaca-mcp-server** (`alpaca-mcp-server/`): Python, Alpaca Markets API integration
+- **forex-mcp-server** (`forex-mcp-server/`): Python + FastMCP + Playwright, ForexFactory economic calendar scraping
 
 ## Development Commands
 
@@ -107,6 +108,17 @@ cd market-mcp-server && npm install
 npm start        # Production mode
 npm run dev      # Development with watch
 npm test         # Run tests
+```
+
+### Forex MCP Server
+```bash
+cd forex-mcp-server && pip install -r requirements.txt
+playwright install chromium
+playwright install-deps chromium
+python src/forex_mcp/server.py --transport http --host 0.0.0.0 --port 3002
+
+# Testing
+python test_server.py    # Standalone server test
 ```
 
 ### Docker
@@ -166,6 +178,14 @@ All endpoints support both MCP and Direct modes transparently:
 - `GET /api/enhanced/market-data` - Auto-selects best data source
 - `GET /api/enhanced/historical-data` - Intelligent routing
 - `GET /api/enhanced/compare-sources` - Debug tool for data comparison
+
+### Forex Economic Calendar (Nov 10, 2025)
+- `GET /api/forex/calendar?time_period=today&impact=high` - Economic calendar events
+- `GET /api/forex/events-today` - Today's forex events (convenience endpoint)
+- `GET /api/forex/events-week` - This week's forex events (convenience endpoint)
+- **Parameters**: time_period (today|tomorrow|this_week|next_week|custom), start, end, impact (high|medium|low)
+- **Data Source**: ForexFactory via forex-mcp-server (Playwright scraping)
+- **Events**: NFP, CPI, Fed meetings, GDP, unemployment, retail sales, etc.
 
 ### MCP Integration (Oct 11, 2025)
 - `POST /api/mcp` - **NEW**: HTTP MCP endpoint for OpenAI Agent Builder integration
@@ -258,6 +278,8 @@ The system uses **live market data validation** instead of blacklists to determi
 - `test_server.py` - API endpoint functionality
 - `test_dual_mcp.py` - Dual MCP server integration
 - `test_alpaca_mcp.py` - Alpaca Markets testing
+- `test_forex_mcp.py` - Forex MCP integration testing
+- `forex-mcp-server/test_server.py` - Forex MCP standalone server test
 - `test_elevenlabs_conversation.py` - Voice conversation
 - `test_supabase.py` - Database connection
 
@@ -299,6 +321,15 @@ The system uses **live market data validation** instead of blacklists to determi
 5. **Set Custom Defaults**: `localStorage.setItem('marketWatchlist', JSON.stringify(['AAPL', 'GOOGL', 'AMZN']))`
 6. **Professional Validation**: Alpaca API ensures only tradable symbols are added
 7. **Search Features**: 300ms debounced search with real-time dropdown suggestions
+
+### Working with Forex Economic Calendar
+1. **Start Forex MCP Server**: `cd forex-mcp-server && python src/forex_mcp/server.py --transport http --host 0.0.0.0 --port 3002`
+2. **Test Standalone**: `cd forex-mcp-server && python test_server.py`
+3. **Test Integration**: `cd backend && python test_forex_mcp.py`
+4. **Frontend Display**: Economic calendar appears in TradingDashboard with filters
+5. **API Testing**: `curl "http://localhost:8000/api/forex/calendar?time_period=today&impact=high"`
+6. **View Logs**: Check `/var/log/app/forex-mcp-server.err.log` in Docker
+7. **Scraping Configuration**: Edit `forex-mcp-server/src/forex_mcp/settings.py` for timeout/URL adjustments
 
 ## Architecture Philosophy
 
@@ -395,6 +426,17 @@ const { searchResults, isSearching, searchError, hasSearched } = useSymbolSearch
 - **Chart Navigation**: Voice-controlled symbol switching
 
 ## Recent Updates
+
+### Forex Factory MCP Integration (Nov 10, 2025)
+- **Economic Calendar Data**: New forex-mcp-server provides NFP, CPI, Fed meetings, GDP, unemployment data
+- **ForexFactory Scraping**: Playwright-based scraper for real-time economic event data
+- **FastMCP Framework**: Modern Python MCP server with HTTP transport on port 3002
+- **Backend Integration**: Complete forex_mcp_client with HTTPMCPClient pattern
+- **API Endpoints**: `/api/forex/calendar`, `/api/forex/events-today`, `/api/forex/events-week`
+- **Frontend Display**: Economic calendar panel in TradingDashboard with impact filtering
+- **Test Coverage**: Standalone and integration tests (test_forex_mcp.py, forex-mcp-server/test_server.py)
+- **Docker Integration**: Supervisord manages forex-mcp-server with auto-restart
+- **Documentation**: Complete integration guide in FOREX_MCP_INTEGRATION_COMPLETE.md
 
 ### Structured Chart Payload Rollout (Nov 9, 2025)
 - Phase 1 migration complete: backend now emits `chart_objects` (ChartCommandPayloadV2) alongside legacy strings.

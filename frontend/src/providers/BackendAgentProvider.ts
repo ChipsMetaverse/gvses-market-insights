@@ -8,7 +8,6 @@ import { AbstractBaseProvider } from './BaseProvider';
 import {
   ProviderConfig,
   Message,
-  ConnectionState,
   ProviderCapabilities,
   ChatProvider,
 } from './types';
@@ -66,7 +65,14 @@ export class BackendAgentProvider extends AbstractBaseProvider implements ChatPr
   private eventSource: EventSource | null = null;
 
   constructor(config: ProviderConfig) {
-    super(config);
+    const capabilities = config.capabilities ?? BackendAgentProvider.getDefaultCapabilities();
+    super({
+      ...config,
+      type: config.type ?? 'custom',
+      name: config.name ?? 'Backend Agent',
+      capabilities,
+    });
+    this._capabilities = capabilities;
     this.sessionId = this.generateSessionId();
   }
 

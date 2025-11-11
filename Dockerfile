@@ -51,6 +51,12 @@ WORKDIR /app
 COPY alpaca-mcp-server/ ./alpaca-mcp-server/
 RUN pip install --no-cache-dir mcp>=1.0.0 alpaca-py>=0.33.0 python-dotenv>=1.0.0
 
+# Setup forex-mcp-server (Python + Playwright)
+COPY forex-mcp-server/ ./forex-mcp-server/
+RUN pip install --no-cache-dir -r forex-mcp-server/requirements.txt
+RUN playwright install chromium
+RUN playwright install-deps chromium
+
 # Install backend dependencies
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

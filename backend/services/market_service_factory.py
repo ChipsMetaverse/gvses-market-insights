@@ -128,9 +128,15 @@ class MarketServiceWrapper:
         
         return quote
     
-    async def get_stock_history(self, symbol: str, days: int = 50) -> dict:
-        """Get stock history - includes caching, crypto symbol mapping and intelligent routing."""
-        
+    async def get_stock_history(self, symbol: str, days: int = 50, interval: str = "1d") -> dict:
+        """Get stock history - includes caching, crypto symbol mapping and intelligent routing.
+
+        Args:
+            symbol: Stock symbol
+            days: Number of days to fetch
+            interval: Data interval - '1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo'
+        """
+
         # Map crypto symbols to proper format
         mapped_symbol, asset_type = self._map_crypto_symbol(symbol)
         
@@ -985,21 +991,27 @@ class HybridMarketService:
         else:
             raise RuntimeError("No market service available")
     
-    async def get_stock_history(self, symbol: str, days: int = 50) -> dict:
-        """Get stock history - prefer MCP/Alpaca for accurate data, fallback to Direct."""
+    async def get_stock_history(self, symbol: str, days: int = 50, interval: str = "1d") -> dict:
+        """Get stock history - prefer MCP/Alpaca for accurate data, fallback to Direct.
+
+        Args:
+            symbol: Stock symbol
+            days: Number of days to fetch
+            interval: Data interval - '1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo'
+        """
         # Try MCP/Alpaca first (has better data quality)
         if self.mcp_available:
             try:
-                result = await self.mcp_service.get_stock_history(symbol, days)
+                result = await self.mcp_service.get_stock_history(symbol, days, interval)
                 logger.info(f"Stock history fetched via {result.get('data_source', 'MCP')}")
                 return result
             except Exception as e:
                 logger.warning(f"MCP/Alpaca history fetch failed: {e}")
                 if self.direct_available:
-                    return await self.direct_service.get_stock_history(symbol, days)
+                    return await self.direct_service.get_stock_history(symbol, days, interval)
                 raise
         elif self.direct_available:
-            return await self.direct_service.get_stock_history(symbol, days)
+            return await self.direct_service.get_stock_history(symbol, days, interval)
         else:
             raise RuntimeError("No market service available")
     

@@ -1,258 +1,178 @@
-# Playwright Voice Assistant Test Results
-**Date**: October 5, 2025, 3:25 PM
-**Test Duration**: 32.2 seconds
+# Playwright Test Results - Authentication Integration
+
+**Test Date**: 2025-11-10
+**Test Environment**: Local Development (localhost:5174)
+**Credentials Tested**: kennyfwk@gmail.com:Stitched1!
+
+## Summary
+
+✅ **Authentication UI**: Sign-in page renders correctly
+❌ **Authentication Flow**: Credentials rejected (user not in database)
+✅ **Demo Mode**: Route accessible, bypasses auth
+❌ **Dashboard**: Critical JavaScript error causing blank screen
+⚠️  **Backend**: Running with errors
 
 ---
 
-## 🎯 Test Summary
+## Test Results
 
-**Status**: ✅ **CRITICAL BUG FOUND & FIXED**
+### 1. Sign-In Page ✅
+**Status**: PASS
+**URL**: http://localhost:5174/signin
+**Screenshot**: `.playwright-mcp/signin-page.png`
 
-The Playwright automated browser test successfully:
-1. ✅ Loaded the application
-2. ✅ Found and clicked the voice button
-3. ✅ Established WebSocket connection to OpenAI Realtime
-4. ✅ Verified agent endpoint works correctly
-5. 🔴 **DISCOVERED CRITICAL ERROR**: `Unknown parameter: 'session.type'`
+**Findings**:
+- Professional GVSES branding displayed correctly
+- Email and password fields functional
+- "Remember me" checkbox present
+- "Try Demo Mode" button accessible
+- "Forgot password" link present
+- Form validation working (button disabled until fields filled)
+
+### 2. Authentication with Credentials ❌
+**Status**: FAIL
+**URL**: http://localhost:5174/signin
+**Screenshot**: `.playwright-mcp/signin-error.png`
+**Credentials**: kennyfwk@gmail.com:Stitched1!
+
+**Error Message**: "Invalid login credentials"
+**HTTP Response**: 400 Bad Request from Supabase
+
+**Root Cause**: User does not exist in Supabase auth.users table
+
+**Recommendation**:
+- Create user in Supabase dashboard, or
+- Use existing valid credentials, or
+- Test with Demo Mode
+
+### 3. Demo Mode Access ✅ ❌
+**Status**: PARTIAL - Route accessible, dashboard crashes
+**URL**: http://localhost:5174/demo
+**Screenshot**: `.playwright-mcp/dashboard-demo-mode.png`
+
+**Findings**:
+- Demo mode button successfully navigates to /demo
+- Route bypasses authentication as expected
+- Dashboard component initializes
+- **Critical**: Dashboard renders blank screen due to JavaScript error
 
 ---
 
-## 🔴 Critical Error Discovered
+## Critical Frontend Error
 
-### Error Message
-```
-❌ OpenAI server error: Unknown parameter: 'session.type'.
+### TypeError: this.mainSeriesRef.setMarkers is not a function
+**Location**: frontend/src/services/enhancedChartControl.ts:72
+**Impact**: Complete React component crash, blank dashboard
+**Severity**: HIGH
+
+**Error Details**:
+```javascript
+TypeError: this.mainSeriesRef.setMarkers is not a function
+    at EnhancedChartControl.clearDrawings (enhancedChartControl.ts:72:26)
+    at TradingDashboardSimple.tsx:1348:26
 ```
 
-### Root Cause
-The backend session configuration included an invalid parameter:
+**Affected Component**: <TradingDashboardSimple>
+
+**Issue**: The TradingView Lightweight Charts mainSeriesRef object does not have a setMarkers() method.
+
+**Impact**:
+- Dashboard completely non-functional
+- Users see blank white screen
+- No market data displayed
+- Voice assistant not accessible
+
+**Fix Required**:
+1. Check TradingView Lightweight Charts v5 API documentation
+2. Remove or replace setMarkers() call with correct method
+3. Add error boundary to prevent full component crash
+
+---
+
+## Backend Issues
+
+### 1. UnboundLocalError in Technical Indicators ❌
+**Location**: backend/mcp_server.py:817
+**Endpoint**: /api/technical-indicators
+**Severity**: HIGH
+
+**Error**:
 ```python
-# INCORRECT (causes error)
-"session": {
-    "type": "realtime",  # ❌ OpenAI doesn't recognize this field
-    ...
-}
+UnboundLocalError: cannot access local variable 'time' where it is not associated with a value
+    at start_time = time.perf_counter()
 ```
 
-### Fix Applied
-```python
-# CORRECT (error removed)
-"session": {
-    # NO session.type field
-    "model": self.model,
-    "instructions": instructions,
-    "input_audio_transcription": {"model": "whisper-1"},
-    "turn_detection": None,
-    "voice": "alloy",
-    "tools": []
-}
-```
+**Impact**: Technical indicators endpoint returns HTTP 500
+**Fix Required**: Import time module or rename conflicting variable
 
-**File Modified**: `backend/services/openai_relay_server.py` (Lines 190-213)
+### 2. Supabase Database Schema Missing ⚠️
+**Tables Not Found**:
+- public.market_candles (42P01)
+- public.market_news (42P01)
+- public.request_logs missing timestamp column (PGRST204)
+
+**Impact**: Non-blocking - backend falls back to direct API calls
+**Recommendation**: Run database migrations
+
+### 3. MCP HTTP Client Connection Failed ⚠️
+**Error**: "All connection attempts failed"
+**Target**: http://127.0.0.1:3001/mcp
+
+**Impact**: Comprehensive stock data endpoint has reduced functionality
+**Recommendation**: Start market-mcp-server on port 3001
 
 ---
 
-## 📊 Test Metrics
+## Backend Health Status ✅
 
-### Infrastructure
-- ✅ **Page Loaded**: Successfully
-- ✅ **Voice Button Found**: Yes
-- ✅ **Voice Button Clicked**: Yes
-- ✅ **WebSocket Connected**: Yes (ws://localhost:8000/realtime-relay/...)
-- ✅ **Microphone Permission**: Granted
-- ✅ **Agent Responding**: Yes
+**Endpoint**: /health - Status: Healthy
 
-### Detailed Metrics
-| Metric | Count |
-|--------|-------|
-| Console Logs | 103 |
-| Errors | 0 |
-| Network Requests | 6 |
-| WebSocket Messages | 4 |
-| STT Events | 0 (none fired yet - need real voice input) |
-| Transcription Messages | 0 (need real voice input) |
+### Services Operational:
+- ✅ Alpaca Markets integration (TSLA $446.59, AAPL $269.09, NVDA $194.27)
+- ✅ Yahoo Finance news (6 TSLA articles)
+- ✅ OpenAI Relay active
+- ✅ Vector retriever (2643 chunks)
+- ✅ Pattern sweep enabled
 
 ---
 
-## 🎬 Test Flow Timeline
+## Route Structure Verification ✅
 
-```
-1. Browser opens → http://localhost:5175
-2. Page loads with OpenAI Realtime hooks initialized
-3. Test finds voice button (🎙️)
-4. Clicks voice button
-5. Microphone permission granted
-6. POST /openai/realtime/session → session created
-7. WebSocket connects: ws://localhost:8000/realtime-relay/{id}
-8. Client sends: session.update event
-9. Server sends: session.created event
-10. ❌ Server sends: ERROR - Unknown parameter: 'session.type'
-11. Connection closes due to error
-```
+| Route | Access | Status | Notes |
+|-------|--------|--------|-------|
+| / | Public | ✅ | Redirects to /signin |
+| /signin | Public | ✅ | Professional UI |
+| /dashboard | Protected | ⚠️ | Requires auth + crashes |
+| /demo | Public | ⚠️ | Accessible but crashes |
 
 ---
 
-## 📝 Console Output (Key Events)
+## Screenshots Captured
 
-### Successful Steps
-```
-✅ [AUDIO PROCESSOR] Microphone access granted
-✅ [AGENT VOICE] Microphone access granted and recording started
-🌐 [AGENT VOICE] Step 2: Connecting to OpenAI Realtime...
-🔗 Connecting to relay server: ws://localhost:8000/realtime-relay/...
-✅ WebSocket connection established
-📡 RealtimeEvent: client session.update
-📡 RealtimeEvent: server session.created
-🚀 OpenAI session created - connection established!
-```
-
-### Critical Error
-```
-❌ OpenAI server error: Unknown parameter: 'session.type'.
-Agent Voice: OpenAI error: {
-  type: invalid_request_error,
-  code: unknown_parameter,
-  message: Unknown parameter: 'session.type'.,
-  param: session.type,
-  event_id: null
-}
-Agent Voice: OpenAI disconnected
-```
+1. signin-page.png - Professional GVSES login screen
+2. signin-error.png - Invalid credentials error state
+3. dashboard-demo-mode.png - Blank dashboard (crash state)
 
 ---
 
-## 🧪 Agent Endpoint Test
+## Recommendations
 
-**Separate test verified the agent works perfectly**:
+### Immediate (Blocking)
+1. Fix chart control error in enhancedChartControl.ts:72
+2. Add React error boundary
+3. Fix technical indicators time variable error
 
-**Query**: "What is the price of Tesla?"
-
-**Response**:
-```
-Tesla (TSLA) current price: $203.41 (source: marketdata.lol)
-
-If you want, I can:
-- Provide recent intraday/high/low and volume,
-- Give 3 key support/resistance levels and a brief technical read,
-- Or generate a swing-trade setup (entry, stop, targets) with the JSON structure.
-```
-
-**Tools Used**: get_stock_price
-**Status**: ✅ **Working Perfectly**
+### Short-term
+4. Create test user in Supabase
+5. Run database migrations
+6. Start MCP server or disable client
 
 ---
 
-## 📸 Screenshots Generated
+## Conclusion
 
-1. **voice-test-1-initial.png** - Initial page load
-2. **voice-test-2-button-found.png** - Voice button located
-3. **voice-test-3-connected.png** - WebSocket connected (before error)
-4. **voice-test-4-final.png** - Final state after error
+**Production Readiness**: ❌ NOT READY
+- Critical fixes required before deployment
+- Estimated fix time: 2-4 hours
 
----
-
-## 🔧 What The Test Revealed
-
-### ✅ Working Components
-1. Frontend React app loads correctly
-2. Voice button renders and is clickable
-3. Microphone access granted successfully
-4. WebSocket connection establishes
-5. Session creation endpoint works
-6. Agent endpoint responds correctly
-
-### 🔴 Broken Component (FIXED)
-- **Backend session configuration** had invalid `session.type` parameter
-- **Impact**: OpenAI rejected the session configuration
-- **Result**: Voice pipeline couldn't proceed past connection
-- **Fix**: Removed invalid parameter, added correct transcription config
-
-### 🟡 Not Yet Tested
-- **Actual voice input** (requires human speech)
-- **STT transcription events** (will fire with real voice)
-- **TTS playback** (will work once transcription flows)
-
----
-
-## 📋 Next Steps After Fix
-
-### 1. Backend Restarted ✅
-- Config changes applied
-- Backend healthy: `openai_relay_ready: true`
-
-### 2. Ready For Manual Test
-Now that the error is fixed, the voice pipeline should work:
-
-```bash
-# 1. Open browser
-open http://localhost:5175
-
-# 2. Open console (F12)
-
-# 3. Click 🎙️ button
-
-# 4. Speak: "What is the price of Tesla?"
-
-# 5. Watch for these logs:
-📝 [STT DELTA] User speech transcription: "What"
-📝 [STT DELTA] User speech transcription: "is"
-...
-✅ [STT COMPLETE] Final user transcript: "What is the price of Tesla?"
-🎯 Sending to agent: What is the price of Tesla?
-```
-
-### 3. Expected Behavior
-With the fix applied:
-1. ✅ WebSocket connects without error
-2. ✅ Session configures successfully
-3. ✅ User speech → STT transcription
-4. ✅ Transcript → Agent orchestrator
-5. ✅ Agent response → TTS synthesis
-6. ✅ Audio playback
-
----
-
-## 🎓 Key Learnings
-
-### 1. **Playwright is Essential**
-- Caught error that code review missed
-- Showed exact error message from OpenAI
-- Monitored complete WebSocket flow
-- Verified infrastructure working
-
-### 2. **OpenAI API Strictness**
-- Rejects unknown parameters immediately
-- Error messages are clear and actionable
-- Schema must match exactly
-
-### 3. **Automated Testing Value**
-- Found critical bug in 32 seconds
-- Would have taken much longer manually
-- Generated comprehensive diagnostics
-- Created visual evidence (screenshots)
-
----
-
-## 📄 Test Artifacts
-
-- **Test Report**: `voice-assistant-test-report.json`
-- **Test Code**: `test-voice-assistant.spec.ts`
-- **Screenshots**: `voice-test-*.png` (4 files)
-- **This Summary**: `PLAYWRIGHT_TEST_RESULTS.md`
-
----
-
-## ✅ Conclusion
-
-**Before Playwright Test**: Configuration looked correct on review
-**After Playwright Test**: Critical error discovered and fixed
-**Current Status**: Voice pipeline ready for manual testing
-**Confidence Level**: 🟢 **98%** (up from 95%)
-
-The only remaining unknown is actual voice input/output, which requires human testing. All infrastructure is verified working.
-
----
-
-**Test completed**: October 5, 2025, 3:25 PM
-**Tester**: Playwright (automated by Claude Code)
-**Outcome**: ✅ **CRITICAL BUG FIXED, PIPELINE READY**
+**Auth System**: Visually complete, functionally blocked by errors

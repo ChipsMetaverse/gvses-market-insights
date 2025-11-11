@@ -1,0 +1,200 @@
+# End Node Root Cause Confirmed - November 5, 2025
+
+## ✅ ROOT CAUSE IDENTIFIED
+
+### Problem
+Chart control commands are not reaching the frontend despite:
+1. ✅ MCP tool correctly generating `["LOAD:NVDA"]`
+2. ✅ Chart Control Agent outputting correct `chart_commands`
+3. ✅ Agent Builder Preview showing correct data
+4. ❌ **Frontend receiving `undefined` for `chart_commands`**
+
+### Root Cause: End Node Has NO Output Schema
+
+**Confirmed via Playwright Investigation:**
+
+**Agent Builder Workflow:** v36 (production)
+**Workflow ID:** `wf_68e5c49989448190bafbdad788a4747005aa1bda218ab736`
+
+**End Node Configuration:**
+```
+Output: [NO SCHEMA CONFIGURED]
+Button shown: "Add schema"
+```
+
+### Why This Causes the Issue
+
+The End node in Agent Builder workflows acts as the final output transformer. Without an output schema:
+
+1. **Chart Control Agent** generates:
+   ```json
+   {
+     "text": "Switched to NVDA. Would you like a specific timeframe or indicators?",
+     "chart_commands": ["LOAD:NVDA"]
+   }
+   ```
+
+2. **End Node** receives this data BUT:
+   - Has no schema to define output structure
+   - Doesn't know which fields to extract
+   - Doesn't map `chart_commands` to the final output
+
+3. **Frontend Receives:**
+   ```json
+   {
+     "output_text": undefined,
+     "chart_commands": undefined
+   }
+   ```
+
+### Evidence from Previous Investigations
+
+#### From `MCP_FIX_VERIFICATION_COMPLETE.md`:
+```
+End node's final workflow output:
+{
+  "output_text": "undefined",
+  "chart_commands": ["undefined"]
+}
+```
+
+#### From `PRODUCTION_TEST_RESULTS_POST_RECHARGE.md`:
+```
+Chart still did not switch (remained on TSLA, should be NVDA)
+News articles remained for TSLA instead of NVDA
+```
+
+#### From Agent Builder Preview (Previous Tests):
+```
+Chart Control Agent Output:
+{
+  "text": "Switched to NVDA. Would you like...",
+  "chart_commands": ["LOAD:NVDA"],
+  "_meta": {
+    "chart_commands": ["LOAD:NVDA"]
+  }
+}
+
+BUT End Node Output:
+{
+  "output_text": "undefined",
+  "chart_commands": ["undefined"]
+}
+```
+
+### Solution Required
+
+The End node needs an output schema that maps the agent outputs to the final workflow output.
+
+#### Required Schema Structure:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "output_text": {
+      "type": "string",
+      "description": "The agent's response text"
+    },
+    "chart_commands": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Chart control commands (e.g., ['LOAD:NVDA'])"
+    }
+  },
+  "required": ["output_text"]
+}
+```
+
+#### Required Field Mappings:
+
+The End node needs to extract values from the incoming agent output:
+
+**Option A: Direct Field Mapping (if supported)**
+```
+output_text: input.text
+chart_commands: input.chart_commands
+```
+
+**Option B: CEL Expression Mapping**
+```
+output_text: input.text || input.output_text || ""
+chart_commands: input.chart_commands || input._meta.chart_commands || []
+```
+
+**Option C: Transform Node Before End** (Alternative Approach)
+Add a Transform node before the End node that reshapes the data:
+```javascript
+{
+  "output_text": input.text,
+  "chart_commands": input.chart_commands || input._meta.chart_commands
+}
+```
+
+### Implementation Steps
+
+1. **Click "Add schema" button** in the End node
+2. **Define output schema** with `output_text` and `chart_commands` properties
+3. **Map fields** from the incoming agent output to the schema
+4. **Test in Preview** to confirm `chart_commands` are in final output
+5. **Publish** new version (v37)
+6. **Deploy** to production
+
+### Why This Wasn't Caught Earlier
+
+1. **Agent outputs were correct** - The Chart Control Agent was working perfectly
+2. **MCP tool was correct** - The tool was generating the right format
+3. **Preview panel showed truncated data** - We couldn't see the full End node output
+4. **Focus was on routing** - We spent time fixing If/else and Transform nodes
+5. **End node looked "simple"** - It's easy to overlook configuration needs
+
+### Verification After Fix
+
+Once the End node schema is configured, test:
+
+```bash
+# Test via ChatKit
+curl -X POST https://gvses-market-insights-api.fly.dev/api/chatkit/session
+
+# In production app, send: "Switch to NVDA"
+# Expected: Chart switches from TSLA to NVDA
+```
+
+**Frontend Debug Logs Should Show:**
+```javascript
+[ChatKit] Processing chart_commands: 
+  { raw: ["LOAD:NVDA"], normalized: "LOAD:NVDA" }
+[ChatKit DEBUG] Calling onChartCommand with: LOAD:NVDA
+```
+
+## Files for Reference
+
+### Previous Investigation Reports:
+- `ROOT_CAUSE_CONFIRMED_VIA_PLAYWRIGHT.md`
+- `MCP_FIX_VERIFICATION_COMPLETE.md`
+- `END_TO_END_VERIFICATION_COMPLETE.md`
+- `PRODUCTION_TEST_RESULTS_POST_RECHARGE.md`
+
+### Code Files with Debug Logging:
+- `frontend/src/components/RealtimeChatKit.tsx` (comprehensive debug logging)
+- `market-mcp-server/sse-server.js` (fixed MCP tool)
+
+## Summary
+
+**The End node in Agent Builder workflow v36 has NO output schema configured.**
+
+This is why `chart_commands` are not reaching the frontend despite being correctly generated by the MCP tool and Chart Control Agent. The End node needs:
+
+1. ✅ **Output schema** defining `output_text` and `chart_commands`
+2. ✅ **Field mappings** to extract these values from agent outputs
+3. ✅ **Testing** to confirm the fix works
+4. ✅ **Publishing** to production
+
+**This is a MANUAL configuration task that must be done in the Agent Builder UI.**
+
+**Status:** ✅ Root cause confirmed  
+**Next Action:** Configure End node output schema in Agent Builder  
+**Priority:** CRITICAL - This blocks all chart control functionality
+

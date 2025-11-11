@@ -42,6 +42,24 @@ export const authService = {
     }
   },
 
+  async signInWithGoogle(): Promise<void> {
+    const redirectTo = `${window.location.origin}/auth/callback`
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    })
+
+    if (error) throw error
+    // OAuth flow redirects automatically, no return value needed
+  },
+
   onAuthStateChange(callback: (user: User | null) => void) {
     return supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {

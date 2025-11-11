@@ -211,15 +211,15 @@ class MarketDataService {
     return Promise.all(promises);
   }
 
-  async getStockHistory(symbol: string, days: number = 50): Promise<StockHistory> {
-    const cacheKey = `history-${symbol}-${days}`;
+  async getStockHistory(symbol: string, days: number = 50, interval: string = "1d"): Promise<StockHistory> {
+    const cacheKey = `history-${symbol}-${days}-${interval}`;
     const cached = this.getCached<StockHistory>(cacheKey);
     if (cached) return cached;
 
     try {
       const apiUrl = resolveApiUrl();
       const response = await axios.get(`${apiUrl}/api/stock-history`, {
-        params: { symbol, days }
+        params: { symbol, days, interval }
       });
       this.setCache(cacheKey, response.data);
       return response.data;
