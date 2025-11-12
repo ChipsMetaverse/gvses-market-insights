@@ -14,6 +14,7 @@ import { RealtimeChatKit } from './RealtimeChatKit';
 // FIXED: Microphone now requested BEFORE connection (following official OpenAI pattern)
 import { chartControlService } from '../services/chartControlService';
 import { enhancedChartControl } from '../services/enhancedChartControl';
+import { ChartCommandPoller } from '../services/chartCommandPoller';
 import { useIndicatorContext } from '../contexts/IndicatorContext';
 import { CommandToast } from './CommandToast';
 import { VoiceCommandHelper } from './VoiceCommandHelper';
@@ -331,31 +332,75 @@ export const TradingDashboardSimple: React.FC = () => {
   // Mobile chart/chat divider resize handler
   const handleMobileDividerDrag = useCallback((startY: number) => {
     const containerHeight = window.innerHeight - 200; // Account for header and tab bar
-    
+
     const handleMove = (moveEvent: TouchEvent | MouseEvent) => {
       const currentY = 'touches' in moveEvent ? (moveEvent as TouchEvent).touches[0].clientY : (moveEvent as MouseEvent).clientY;
       const deltaY = currentY - startY;
       const deltaPercent = (deltaY / containerHeight) * 100;
-      
+
       setMobileChartRatio(prev => {
         const newRatio = Math.max(20, Math.min(70, prev + deltaPercent));
         localStorage.setItem('mobileChartRatio', newRatio.toString());
         return newRatio;
       });
     };
-    
+
     const handleEnd = () => {
       document.removeEventListener('mousemove', handleMove as any);
       document.removeEventListener('mouseup', handleEnd);
       (document as any).removeEventListener('touchmove', handleMove as any);
       document.removeEventListener('touchend', handleEnd);
     };
-    
+
     document.addEventListener('mousemove', handleMove as any);
     document.addEventListener('mouseup', handleEnd);
     (document as any).addEventListener('touchmove', handleMove as any, { passive: false });
     document.addEventListener('touchend', handleEnd);
   }, []);
+
+  // Chart Command Polling - Listen for chart control commands from Agent Builder HTTP actions
+  useEffect(() => {
+    console.log('[TradingDashboardSimple] Initializing chart command polling');
+
+    const poller = new ChartCommandPoller((command) => {
+      console.log('[TradingDashboardSimple] Received chart command from backend:', command);
+
+      try {
+        // Execute chart command
+        const executed = chartControlService.executeCommand(command);
+
+        if (executed) {
+          console.log('[TradingDashboardSimple] Chart command executed successfully:', command.type);
+
+          // Show toast notification
+          setToastCommand({
+            command: `Chart ${command.type} updated`,
+            type: 'success'
+          });
+
+          // Update local state if needed
+          if (command.type === 'symbol') {
+            setSelectedSymbol(command.value);
+          } else if (command.type === 'timeframe') {
+            setChartTimeframe(command.value);
+          }
+        } else {
+          console.warn('[TradingDashboardSimple] Chart command execution failed:', command);
+        }
+      } catch (error) {
+        console.error('[TradingDashboardSimple] Error executing chart command:', error);
+      }
+    });
+
+    // Start polling
+    poller.start();
+
+    // Cleanup on unmount
+    return () => {
+      console.log('[TradingDashboardSimple] Stopping chart command polling');
+      poller.stop();
+    };
+  }, []); // Empty dependency array - only initialize once
 
   // Message persistence storage keys
   const STORAGE_KEYS = {
