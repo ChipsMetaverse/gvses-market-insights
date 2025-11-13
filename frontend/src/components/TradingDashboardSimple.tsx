@@ -378,7 +378,6 @@ export const TradingDashboardSimple: React.FC = () => {
               const symbol = String(p.symbol || p.ticker || '').toUpperCase();
               if (symbol) {
                 setSelectedSymbol(symbol);
-                fetchStockAnalysis(symbol);
                 setToastCommand({ command: `📈 Symbol: ${symbol}`, type: 'success' });
                 setTimeout(() => setToastCommand(null), 3000);
               }
@@ -431,7 +430,7 @@ export const TradingDashboardSimple: React.FC = () => {
           setTimeout(() => setToastCommand(null), 3000);
         }
       }
-    }, [fetchStockAnalysis])
+    }, [])
   });
 
   // Message persistence storage keys
