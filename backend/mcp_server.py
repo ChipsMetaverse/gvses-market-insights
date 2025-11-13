@@ -52,6 +52,16 @@ from fastapi.responses import Response as FastAPIResponse
 from middleware.rate_limiter import RateLimitMiddleware
 from routers.rate_limit_router import router as rate_limit_router
 
+# Chart command polling system
+from services.command_bus import CommandBus
+from routers.chart_commands import router as chart_commands_router
+
+# Correlation IDs and error handling
+from middleware.correlation import CorrelationIdMiddleware
+from errors import http_exception_handler, validation_exception_handler, unhandled_exception_handler
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 # Load environment variables from .env if present
 load_dotenv()
 
@@ -62,11 +72,25 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(title="Voice Assistant MCP Server")
 
+# Initialize CommandBus for chart command polling
+app.state.command_bus = CommandBus()
+logger.info("CommandBus initialized for chart command polling")
+
 # Legacy rate limiter (slowapi) - kept for backward compatibility with existing decorators
 # New endpoints should rely on RateLimitMiddleware instead
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Add error handlers with correlation ID support
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
+logger.info("Error handlers registered with correlation ID support")
+
+# Add Correlation ID middleware (must be first to track all requests)
+app.add_middleware(CorrelationIdMiddleware)
+logger.info("Correlation ID middleware enabled")
 
 # Configure CORS - allow all localhost ports for development
 app.add_middleware(
@@ -88,6 +112,7 @@ app.add_middleware(
         "X-RateLimit-Limit",
         "X-RateLimit-Remaining",
         "X-RateLimit-Reset",
+        "X-Request-ID",  # Expose correlation ID header
         "Retry-After"
     ],
 )
@@ -311,9 +336,9 @@ async def _fetch_forex_calendar(
     request: Request,
     *,
     time_period: str,
-    start: str | None = None,
-    end: str | None = None,
-    impact: str | None = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    impact: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Shared helper to call the Forex MCP client and format telemetry logs."""
 
@@ -396,9 +421,9 @@ async def _fetch_forex_calendar(
 async def get_forex_calendar(
     request: Request,
     time_period: str = "today",
-    start: str | None = None,
-    end: str | None = None,
-    impact: str | None = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    impact: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Generic economic calendar endpoint with optional filters."""
 
@@ -1373,6 +1398,9 @@ app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 
 # Chart Control API router
 app.include_router(chart_control_router, tags=["chart-control"])
+
+# Chart Command Polling router
+app.include_router(chart_commands_router)
 
 # Agent router for MCP orchestration
 app.include_router(agent_router, tags=["agent"])
@@ -3323,14 +3351,16 @@ async def handle_function_call(request: Request):
 
             result = await chart_function_registry.call_function(function_name, arguments)
 
-            # Convert to ChartCommand for frontend polling
+            # Convert to ChartCommand for frontend polling and publish to CommandBus
             if result.get("success") and "command" in result:
                 chart_cmd = ChartCommand(
                     type=result["command"]["action"],
                     payload=result["command"]
                 )
-                # Store in chart command system (implement integration)
-                logger.info(f"[FUNCTION CALL] Chart command: {chart_cmd}")
+                # Publish to CommandBus for frontend polling
+                session_id = request.headers.get("X-Client-Session") or "global"
+                envelope = request.app.state.command_bus.publish(session_id, chart_cmd)
+                logger.info(f"[FUNCTION CALL] Chart command published to session '{session_id}': seq={envelope.seq}, type={chart_cmd.type}")
 
             results.append({
                 "function": function_name,
@@ -3350,7 +3380,10 @@ async def handle_function_call(request: Request):
                         type=result["command"]["action"],
                         payload=result["command"]
                     )
-                    logger.info(f"[FUNCTION CALL] Chart command: {chart_cmd}")
+                    # Publish to CommandBus for frontend polling
+                    session_id = request.headers.get("X-Client-Session") or "global"
+                    envelope = request.app.state.command_bus.publish(session_id, chart_cmd)
+                    logger.info(f"[FUNCTION CALL] Chart command published to session '{session_id}': seq={envelope.seq}, type={chart_cmd.type}")
 
                 results.append({
                     "function": function_name,

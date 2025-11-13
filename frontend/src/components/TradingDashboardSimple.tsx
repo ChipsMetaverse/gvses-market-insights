@@ -14,7 +14,8 @@ import { RealtimeChatKit } from './RealtimeChatKit';
 // FIXED: Microphone now requested BEFORE connection (following official OpenAI pattern)
 import { chartControlService } from '../services/chartControlService';
 import { enhancedChartControl } from '../services/enhancedChartControl';
-import { ChartCommandPoller } from '../services/chartCommandPoller';
+import { useChartCommandPolling } from '../hooks/useChartCommandPolling';
+import { getSessionId } from '../utils/session';
 import { useIndicatorContext } from '../contexts/IndicatorContext';
 import { CommandToast } from './CommandToast';
 import { VoiceCommandHelper } from './VoiceCommandHelper';
@@ -358,49 +359,80 @@ export const TradingDashboardSimple: React.FC = () => {
     document.addEventListener('touchend', handleEnd);
   }, []);
 
-  // Chart Command Polling - Listen for chart control commands from Agent Builder HTTP actions
-  useEffect(() => {
-    console.log('[TradingDashboardSimple] Initializing chart command polling');
+  // Chart Command Polling - NEW cursor-based system with CommandBus
+  useChartCommandPolling({
+    sessionId: getSessionId(),
+    enabled: true,
+    intervalMs: 2000,
+    onCommands: useCallback((envelopes) => {
+      console.log(`[TradingDashboardSimple] Received ${envelopes.length} chart command(s)`);
 
-    const poller = new ChartCommandPoller((command) => {
-      console.log('[TradingDashboardSimple] Received chart command from backend:', command);
+      for (const { seq, command } of envelopes) {
+        console.log(`[TradingDashboardSimple] Processing command #${seq}:`, command.type, command.payload);
 
-      try {
-        // Execute chart command
-        const executed = chartControlService.executeCommand(command);
+        try {
+          const p: any = command.payload || {};
 
-        if (executed) {
-          console.log('[TradingDashboardSimple] Chart command executed successfully:', command.type);
+          switch (command.type) {
+            case 'change_symbol': {
+              const symbol = String(p.symbol || p.ticker || '').toUpperCase();
+              if (symbol) {
+                setSelectedSymbol(symbol);
+                fetchStockAnalysis(symbol);
+                setToastCommand({ command: `📈 Symbol: ${symbol}`, type: 'success' });
+                setTimeout(() => setToastCommand(null), 3000);
+              }
+              break;
+            }
 
-          // Show toast notification
-          setToastCommand({
-            command: `Chart ${command.type} updated`,
-            type: 'success'
-          });
+            case 'set_timeframe': {
+              const timeframe = String(p.timeframe || p.interval || '');
+              if (timeframe) {
+                setChartTimeframe(timeframe);
+                setToastCommand({ command: `⏱️ Timeframe: ${timeframe}`, type: 'success' });
+                setTimeout(() => setToastCommand(null), 3000);
+              }
+              break;
+            }
 
-          // Update local state if needed
-          if (command.type === 'symbol') {
-            setSelectedSymbol(command.value);
-          } else if (command.type === 'timeframe') {
-            setChartTimeframe(command.value);
+            case 'toggle_indicator': {
+              const name = String(p.name || p.indicator || '');
+              const enabled = Boolean(p.enabled ?? true);
+              if (name) {
+                enhancedChartControl.toggleIndicator(name, enabled);
+                setToastCommand({
+                  command: `${name} ${enabled ? 'enabled' : 'disabled'}`,
+                  type: 'info'
+                });
+                setTimeout(() => setToastCommand(null), 3000);
+              }
+              break;
+            }
+
+            case 'highlight_pattern': {
+              const pattern = String(p.pattern || '');
+              if (pattern) {
+                const message = enhancedChartControl.revealPattern(pattern, p.info);
+                setToastCommand({ command: message, type: 'info' });
+                setTimeout(() => setToastCommand(null), 3000);
+              }
+              break;
+            }
+
+            default:
+              console.warn('[TradingDashboardSimple] Unknown command type:', command.type);
           }
-        } else {
-          console.warn('[TradingDashboardSimple] Chart command execution failed:', command);
+        } catch (error) {
+          console.error('[TradingDashboardSimple] Error executing command #' + seq, error);
+          setToastCommand({
+            command: `❌ Command failed: ${command.type}`,
+            type: 'error'
+          });
+          setTimeout(() => setToastCommand(null), 3000);
         }
-      } catch (error) {
-        console.error('[TradingDashboardSimple] Error executing chart command:', error);
       }
-    });
-
-    // Start polling
-    poller.start();
-
-    // Cleanup on unmount
-    return () => {
-      console.log('[TradingDashboardSimple] Stopping chart command polling');
-      poller.stop();
-    };
-  }, []); // Empty dependency array - only initialize once
+    }, [fetchStockAnalysis])
+  });
 
   // Message persistence storage keys
   const STORAGE_KEYS = {
