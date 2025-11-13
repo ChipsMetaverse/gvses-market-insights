@@ -1,0 +1,224 @@
+{
+  "type": "Card",
+  "size": "md",
+  "children": [
+    {
+      "type": "Col",
+      "gap": 3,
+      "children": [
+        {
+          "type": "Title",
+          "value": "Trading Chart Controls",
+          "size": "md"
+        }
+      ]
+    },
+    {
+      "type": "Divider"
+    },
+    {
+      "type": "Col",
+      "gap": 2,
+      "children": [
+        {
+          "type": "Caption",
+          "value": "Symbol"
+        },
+        {
+          "type": "Row",
+          "wrap": "wrap",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Button",
+              "label": "AAPL",
+              "variant": "solid",
+              "onClickAction": {
+                "type": "chart.setSymbol",
+                "payload": {
+                  "symbol": "AAPL"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "TSLA",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "chart.setSymbol",
+                "payload": {
+                  "symbol": "TSLA"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "NVDA",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "chart.setSymbol",
+                "payload": {
+                  "symbol": "NVDA"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "MSFT",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "chart.setSymbol",
+                "payload": {
+                  "symbol": "MSFT"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Divider"
+    },
+    {
+      "type": "Col",
+      "gap": 2,
+      "children": [
+        {
+          "type": "Caption",
+          "value": "Timeframe"
+        },
+        {
+          "type": "Row",
+          "wrap": "wrap",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Button",
+              "label": "1m",
+              "variant": "solid",
+              "onClickAction": {
+                "type": "chart.setTimeframe",
+                "payload": {
+                  "timeframe": "1m"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "5m",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "chart.setTimeframe",
+                "payload": {
+                  "timeframe": "5m"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "15m",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "chart.setTimeframe",
+                "payload": {
+                  "timeframe": "15m"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "1h",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "chart.setTimeframe",
+                "payload": {
+                  "timeframe": "1h"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "1d",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "chart.setTimeframe",
+                "payload": {
+                  "timeframe": "1d"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Divider"
+    },
+    {
+      "type": "Col",
+      "gap": 2,
+      "children": [
+        {
+          "type": "Caption",
+          "value": "Indicators"
+        },
+        {
+          "type": "Row",
+          "wrap": "wrap",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Button",
+              "label": "SMA",
+              "variant": "outline",
+              "color": "info",
+              "onClickAction": {
+                "type": "chart.toggleIndicator",
+                "payload": {
+                  "key": "sma"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "EMA",
+              "variant": "outline",
+              "color": "info",
+              "onClickAction": {
+                "type": "chart.toggleIndicator",
+                "payload": {
+                  "key": "ema"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "Bollinger Bands",
+              "variant": "outline",
+              "color": "info",
+              "onClickAction": {
+                "type": "chart.toggleIndicator",
+                "payload": {
+                  "key": "bb"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "RSI",
+              "variant": "outline",
+              "color": "info",
+              "onClickAction": {
+                "type": "chart.toggleIndicator",
+                "payload": {
+                  "key": "rsi"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

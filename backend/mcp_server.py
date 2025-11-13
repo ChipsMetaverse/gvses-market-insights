@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Header
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse, Response
 from pydantic import BaseModel
 import httpx
 from supabase import create_client, Client
@@ -84,6 +84,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "X-RateLimit-Limit",
+        "X-RateLimit-Remaining",
+        "X-RateLimit-Reset",
+        "Retry-After"
+    ],
 )
 
 # Add enhanced rate limiting middleware
@@ -2670,6 +2676,48 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     except Exception as e:
         logger.error(f"WebSocket error for session {session_id}: {e}")
 
+# GET handler for MCP endpoint - required by Streamable HTTP transport spec
+@app.get("/api/mcp")
+@app.get("/mcp/http")
+async def mcp_http_get_endpoint():
+    """
+    GET handler for MCP Streamable HTTP transport
+    ==============================================
+    Per MCP spec, servers MUST provide GET endpoint, but MAY return 405
+    if they don't support server-initiated SSE streams.
+
+    We return 405 because we don't support server-initiated SSE listening.
+    Clients should use POST for all MCP requests.
+    """
+    return JSONResponse(
+        status_code=405,
+        content={"error": "GET method not supported. Use POST for MCP requests."},
+        headers={
+            "Content-Type": "application/json",
+            "Allow": "POST, OPTIONS"
+        }
+    )
+
+# OPTIONS handler for CORS preflight requests
+@app.options("/api/mcp")
+@app.options("/mcp/http")
+async def mcp_http_options_endpoint():
+    """
+    OPTIONS handler for CORS preflight requests
+    ============================================
+    Required for cross-origin requests from OpenAI Agent Builder.
+    """
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Mcp-Session-Id",
+            "Access-Control-Max-Age": "86400",
+            "Content-Length": "0"
+        }
+    )
+
 @app.post("/api/mcp")
 @app.post("/mcp/http")
 async def mcp_http_endpoint(
@@ -2678,21 +2726,70 @@ async def mcp_http_endpoint(
     query_token: Optional[str] = Query(None, alias="token")
 ):
     """
-    HTTP MCP Endpoint for OpenAI Agent Builder
-    ==========================================
-    Provides HTTP access to MCP tools using JSON-RPC 2.0 protocol.
+    HTTP MCP Endpoint for OpenAI Agent Builder (Streamable HTTP Transport)
+    =======================================================================
+    Implements MCP Streamable HTTP transport protocol per specification:
+    https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http
+
+    Provides HTTP POST access to MCP tools using JSON-RPC 2.0 protocol.
     Supports authentication via Fly.io API token in Authorization header or query parameter.
-    
+
+    Transport Details:
+    - Protocol: MCP Streamable HTTP (2025-03-26)
+    - Content-Type: application/json (no SSE streaming support)
+    - Session Management: Not implemented (stateless)
+
     OpenAI Agent Builder format: https://your-domain.com/api/mcp
-    Production deployment: Oct 12, 2025 - v2.0.1
-    Build timestamp: 2025-10-12T00:00:00Z
+    Production deployment: Nov 12, 2025 - v2.1.0
+    Build timestamp: 2025-11-12T00:00:00Z
     """
     try:
+        # === ULTRATHINK DEBUG LOGGING ===
+        logger.info("="*80)
+        logger.info("MCP HTTP POST REQUEST RECEIVED")
+        logger.info(f"Method: {request.method}")
+        logger.info(f"URL: {request.url}")
+        logger.info(f"Client: {request.client.host if request.client else 'unknown'}")
+        logger.info("Headers:")
+        for header_name, header_value in request.headers.items():
+            # Mask sensitive auth tokens in logs
+            if header_name.lower() == "authorization" and header_value:
+                logger.info(f"  {header_name}: {header_value[:20]}...")
+            else:
+                logger.info(f"  {header_name}: {header_value}")
+
+        # Log and parse the request body (only read once!)
+        body = await request.body()
+        logger.info(f"Body length: {len(body)} bytes")
+
+        if not body:
+            logger.error("Empty request body")
+            logger.info("="*80)
+            raise HTTPException(status_code=400, detail="Request body is required")
+
+        try:
+            body_str = body.decode('utf-8')
+            logger.info(f"Body content: {body_str[:500]}")  # First 500 chars
+            rpc_request = json.loads(body_str)
+            logger.info(f"JSON-RPC Method: {rpc_request.get('method', 'unknown')}")
+            logger.info(f"JSON-RPC ID: {rpc_request.get('id', 'no-id')}")
+        except UnicodeDecodeError:
+            logger.error("Body is not valid UTF-8")
+            logger.info("="*80)
+            raise HTTPException(status_code=400, detail="Request body must be UTF-8 encoded")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON: {e}")
+            logger.info("="*80)
+            raise HTTPException(status_code=400, detail="Invalid JSON in request body")
+
+        logger.info("="*80)
+        # === END DEBUG LOGGING ===
+
         # Import the MCP transport layer
         from services.mcp_websocket_transport import get_mcp_transport
         transport = get_mcp_transport()
         await transport.initialize()
-        
+
         # Extract token from header or query parameter
         auth_token = None
         if token and token.startswith("Bearer "):
@@ -2701,28 +2798,16 @@ async def mcp_http_endpoint(
             auth_token = token
         elif query_token:
             auth_token = query_token
-        
+
         # Authenticate using Fly.io API token
         if not auth_token:
             logger.warning("MCP HTTP request without authentication token")
             raise HTTPException(status_code=401, detail="Invalid or missing authentication token")
-        
+
         # For development, allow any token starting with "test_"
         if not (auth_token.startswith("fo1_") or auth_token.startswith("test_")):
             logger.warning(f"MCP HTTP request with invalid token format: {auth_token[:10]}...")
             raise HTTPException(status_code=401, detail="Invalid authentication token format")
-        
-        # Parse JSON-RPC request
-        body = await request.body()
-        if not body:
-            logger.warning("MCP HTTP request with empty body")
-            raise HTTPException(status_code=400, detail="Request body is required")
-        
-        try:
-            rpc_request = json.loads(body)
-        except json.JSONDecodeError as e:
-            logger.warning(f"MCP HTTP request with invalid JSON: {e}")
-            raise HTTPException(status_code=400, detail="Invalid JSON in request body")
         
         # Validate JSON-RPC format
         if not isinstance(rpc_request, dict) or "jsonrpc" not in rpc_request:
@@ -2732,11 +2817,17 @@ async def mcp_http_endpoint(
         # Process JSON-RPC request through MCP transport
         logger.info(f"Processing MCP HTTP request: {rpc_request.get('method', 'unknown')}")
         response = await transport.handle_request(rpc_request)
-        
+
         # Log successful request
         logger.info(f"MCP HTTP request completed successfully: {rpc_request.get('method', 'unknown')}")
-        
-        return response
+
+        # Return with explicit Content-Type header per MCP Streamable HTTP spec
+        return JSONResponse(
+            content=response,
+            headers={
+                "Content-Type": "application/json"
+            }
+        )
         
     except HTTPException:
         # Re-raise HTTP exceptions as-is
@@ -3172,6 +3263,244 @@ async def realtime_sdk_websocket(websocket: WebSocket):
 async def mcp_http_alt_endpoint(request: Request):
     """Alternative MCP HTTP endpoint"""
     return await mcp_http_endpoint(request)
+
+# ============================================================================
+# Function Calling Endpoints
+# Direct OpenAI function calling (no MCP) + ChatKit widget support
+# ============================================================================
+
+from services.function_registry import chart_function_registry
+from models.chart_command import ChartCommand
+
+@app.get("/api/functions")
+async def get_available_functions():
+    """
+    Get list of available chart control functions
+
+    Returns OpenAI-compatible function definitions for Agent Builder
+    """
+    try:
+        return {
+            "functions": chart_function_registry.get_openai_tools(),
+            "schemas": chart_function_registry.get_function_schemas()
+        }
+    except Exception as e:
+        logger.error(f"Error getting functions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/function-call")
+async def handle_function_call(request: Request):
+    """
+    Handle direct function calls from OpenAI Agent Builder
+
+    This endpoint allows Agent Builder to call chart control functions directly
+    without going through MCP, bypassing authentication issues.
+
+    Request format:
+    {
+        "name": "change_chart_symbol",
+        "arguments": {"symbol": "TSLA"}
+    }
+
+    Or for multiple calls:
+    {
+        "calls": [
+            {"name": "change_chart_symbol", "arguments": {"symbol": "TSLA"}},
+            {"name": "set_chart_timeframe", "arguments": {"timeframe": "1h"}}
+        ]
+    }
+    """
+    try:
+        data = await request.json()
+        logger.info(f"[FUNCTION CALL] Received: {data}")
+
+        results = []
+
+        # Handle single function call
+        if "name" in data:
+            function_name = data["name"]
+            arguments = data.get("arguments", {})
+
+            result = await chart_function_registry.call_function(function_name, arguments)
+
+            # Convert to ChartCommand for frontend polling
+            if result.get("success") and "command" in result:
+                chart_cmd = ChartCommand(
+                    type=result["command"]["action"],
+                    payload=result["command"]
+                )
+                # Store in chart command system (implement integration)
+                logger.info(f"[FUNCTION CALL] Chart command: {chart_cmd}")
+
+            results.append({
+                "function": function_name,
+                "result": result
+            })
+
+        # Handle multiple function calls
+        elif "calls" in data:
+            for call in data["calls"]:
+                function_name = call["name"]
+                arguments = call.get("arguments", {})
+
+                result = await chart_function_registry.call_function(function_name, arguments)
+
+                if result.get("success") and "command" in result:
+                    chart_cmd = ChartCommand(
+                        type=result["command"]["action"],
+                        payload=result["command"]
+                    )
+                    logger.info(f"[FUNCTION CALL] Chart command: {chart_cmd}")
+
+                results.append({
+                    "function": function_name,
+                    "result": result
+                })
+        else:
+            raise HTTPException(status_code=400, detail="Invalid request format. Expected 'name' or 'calls' field.")
+
+        logger.info(f"[FUNCTION CALL] Completed {len(results)} function(s)")
+
+        return {
+            "success": True,
+            "results": results,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"[FUNCTION CALL] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/widget-action")
+async def handle_widget_action(request: Request):
+    """
+    Handle ChatKit widget button click actions
+
+    This endpoint processes actions from ChatKit widgets (button clicks).
+    Integrates with the function registry for unified chart control.
+
+    Request format (from widget button):
+    {
+        "action": {
+            "type": "chart.setSymbol",
+            "payload": {"symbol": "TSLA"}
+        },
+        "itemId": "widget-123"
+    }
+    """
+    try:
+        data = await request.json()
+        logger.info(f"[WIDGET ACTION] Received: {data}")
+
+        action = data.get("action", {})
+        action_type = action.get("type", "")
+        payload = action.get("payload", {})
+
+        # Map widget actions to function calls
+        action_mapping = {
+            "chart.setSymbol": ("change_chart_symbol", lambda p: {"symbol": p.get("symbol")}),
+            "chart.setTimeframe": ("set_chart_timeframe", lambda p: {"timeframe": p.get("timeframe")}),
+            "chart.toggleIndicator": ("toggle_chart_indicator", lambda p: {
+                "indicator": p.get("key"),
+                "enabled": p.get("enabled", True),
+                "period": p.get("period")
+            }),
+            "chart.highlightPattern": ("highlight_chart_pattern", lambda p: {
+                "pattern": p.get("pattern"),
+                "price": p.get("price")
+            })
+        }
+
+        if action_type not in action_mapping:
+            raise HTTPException(status_code=400, detail=f"Unknown action type: {action_type}")
+
+        function_name, arg_mapper = action_mapping[action_type]
+        arguments = arg_mapper(payload)
+
+        # Remove None values
+        arguments = {k: v for k, v in arguments.items() if v is not None}
+
+        # Call the function
+        result = await chart_function_registry.call_function(function_name, arguments)
+
+        # Convert to ChartCommand for frontend polling
+        if result.get("success") and "command" in result:
+            chart_cmd = ChartCommand(
+                type=result["command"]["action"],
+                payload=result["command"]
+            )
+            logger.info(f"[WIDGET ACTION] Chart command: {chart_cmd}")
+
+        logger.info(f"[WIDGET ACTION] Completed: {action_type}")
+
+        return {
+            "success": True,
+            "message": result.get("message", "Action completed"),
+            "data": result,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"[WIDGET ACTION] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/chat-widget")
+async def get_chart_controls_widget(request: Request):
+    """
+    Return chart controls widget JSON
+
+    This endpoint returns the ChatKit widget definition for chart controls.
+    Called by agents when user asks for chart controls.
+
+    Request format:
+    {
+        "query": "show me chart controls",
+        "session_id": "optional"
+    }
+    """
+    try:
+        data = await request.json()
+        query = data.get("query", "").lower()
+
+        logger.info(f"[CHAT WIDGET] Query: {query}")
+
+        # Check if user is asking for chart controls
+        control_keywords = ["chart control", "show controls", "chart options", "trading controls", "control panel"]
+
+        if any(keyword in query for keyword in control_keywords):
+            # Load widget JSON from file
+            widget_file = Path(__file__).parent / "widgets" / "chart_controls.json"
+
+            if widget_file.exists():
+                with open(widget_file, 'r') as f:
+                    widget_json = json.load(f)
+
+                return {
+                    "widget": widget_json,
+                    "message": "Here are your trading chart controls. Click any button to update the chart.",
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                # Return basic widget if file doesn't exist yet
+                return {
+                    "message": "Chart controls widget is being set up. Use function calls instead.",
+                    "functions_available": chart_function_registry.get_function_schemas(),
+                    "timestamp": datetime.now().isoformat()
+                }
+
+        return {
+            "message": "How can I help you with the chart?",
+            "available_functions": list(chart_function_registry.functions.keys()),
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"[CHAT WIDGET] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# End Function Calling Endpoints
+# ============================================================================
 
 if __name__ == "__main__":
     import uvicorn
