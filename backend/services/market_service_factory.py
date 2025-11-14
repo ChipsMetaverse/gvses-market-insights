@@ -1136,13 +1136,17 @@ class HybridMarketService:
                 elif result:
                     all_results.extend(result)
 
-        # Deduplicate by symbol (prioritize first occurrence)
-        seen_symbols = set()
+        # Deduplicate by symbol-asset_class combination (allow same symbol across different markets)
+        seen_entries = set()
         unique_results = []
         for result in all_results:
             symbol = result.get('symbol', '').upper()
-            if symbol and symbol not in seen_symbols:
-                seen_symbols.add(symbol)
+            asset_class = result.get('asset_class', 'unknown')
+            # Use symbol + asset_class as unique key to allow same symbol in different markets
+            # e.g., "SUI" can appear as both "SUI-crypto" and "SUI-stock"
+            entry_key = f"{symbol}-{asset_class}"
+            if symbol and entry_key not in seen_entries:
+                seen_entries.add(entry_key)
                 unique_results.append(result)
 
         logger.info(f"Multi-market search for '{query}': {len(unique_results)} total results")
