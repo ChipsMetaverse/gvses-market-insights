@@ -102,7 +102,7 @@
 
   .mobile-chart-voice-merged .chart-section {
     /* Flex values now controlled by inline styles for dynamic resizing */
-    min-height: 150px;  /* Minimum height when fully collapsed */
+    min-height: max(180px, 25vh);  /* Responsive minimum height based on viewport */
     overflow: hidden;
     touch-action: pan-x pan-y pinch-zoom;  /* Allow all gestures on chart */
     transition: flex 0.1s ease-out;  /* Smooth resize animation */
@@ -110,7 +110,7 @@
 
   .mobile-chat-section {
     /* Flex values now controlled by inline styles for dynamic resizing */
-    min-height: 200px;  /* Minimum height when fully collapsed */
+    min-height: max(220px, 30vh);  /* Responsive minimum height for comfortable chat */
     overflow: visible;  /* Changed from hidden to visible */
     display: flex;
     flex-direction: column;
@@ -127,12 +127,16 @@
     cursor: ns-resize;
     -webkit-tap-highlight-color: transparent;
     flex-shrink: 0;
+    min-height: 44px;  /* Ensure adequate touch target size */
+    touch-action: pan-y;  /* Allow vertical dragging only */
+    user-select: none;  /* Prevent text selection during drag */
+    -webkit-user-select: none;
   }
-  
+
   .mobile-divider:hover {
     background: linear-gradient(to bottom, #d1d5db 0%, #9ca3af 50%, #d1d5db 100%) !important;
   }
-  
+
   .mobile-divider:active {
     background: linear-gradient(to bottom, #9ca3af 0%, #6b7280 50%, #9ca3af 100%) !important;
   }
@@ -177,12 +181,12 @@
   }
 
   .mobile-chat-section .conversation-messages-compact {
-    flex: 1 1 auto;
+    flex: 1 1 0;  /* Allow messages to grow and fill available space */
     overflow-y: auto;
     overflow-x: hidden;
     margin-bottom: 8px;
-    min-height: 150px;  /* Increased minimum space for messages */
-    max-height: 70%;  /* More flexible height */
+    min-height: max(180px, 20vh);  /* Responsive minimum space for messages */
+    /* Removed max-height constraint - let messages use all available space */
     -webkit-overflow-scrolling: touch;  /* Smooth scrolling on iOS */
     overscroll-behavior: contain;  /* Prevent scroll chaining */
   }
@@ -190,7 +194,7 @@
   .mobile-chat-section .voice-input-container {
     flex-shrink: 0;
     flex-grow: 0;
-    padding: 8px 0;  /* Add vertical padding for better spacing */
+    padding: 6px 0;  /* Reduced padding to give more space to messages */
     position: sticky;  /* Stick to bottom of chat section */
     bottom: 0;
     z-index: 5;  /* Ensure input is above other elements */

@@ -141,10 +141,37 @@ export function RealtimeChatKit({
     onMessage: (message: any) => {
       console.log('🔥🔥🔥 [ChatKit CONFIG] onMessage CALLED!!!', message);
 
+      // CRITICAL FIX: Extract human-readable text from JSON responses BEFORE displaying
+      let displayContent = message.content;
+      let isJsonResponse = false;
+
+      // Check if content is JSON and extract text field for display
+      if (message.role === 'assistant' && message.content) {
+        try {
+          const jsonResponse = JSON.parse(message.content);
+          isJsonResponse = true;
+
+          // Extract human-readable text from JSON
+          if (jsonResponse.text) {
+            displayContent = jsonResponse.text;
+            console.log('[ChatKit] ✅ Extracted text from JSON:', displayContent);
+          } else if (jsonResponse.message) {
+            displayContent = jsonResponse.message;
+            console.log('[ChatKit] ✅ Extracted message from JSON:', displayContent);
+          } else {
+            // If no text/message field, keep original (might be chart commands only)
+            console.log('[ChatKit] ⚠️ JSON has no text field, using original content');
+          }
+        } catch (e) {
+          // Not JSON, use content as-is (normal text message)
+          console.log('[ChatKit] Content is plain text, not JSON');
+        }
+      }
+
       const msg: Message = {
         id: `chatkit-${Date.now()}`,
         role: message.role,
-        content: message.content,
+        content: displayContent,  // ✅ FIXED: Use extracted text, not raw JSON
         timestamp: new Date().toISOString(),
         provider: 'chatkit-agent-builder'
       };
@@ -158,18 +185,19 @@ export function RealtimeChatKit({
         console.log('[ChatKit] Processing agent response:', message.content);
 
         // PRIORITY 1: Check if response is JSON with chart_commands
-        try {
-          const jsonResponse = JSON.parse(message.content);
-          const payload = normalizeChartCommandPayload(jsonResponse, message.content);
+        if (isJsonResponse) {
+          try {
+            const jsonResponse = JSON.parse(message.content);
+            const payload = normalizeChartCommandPayload(jsonResponse, message.content);
 
-          if (payload.legacy.length > 0 || payload.structured.length > 0) {
-            console.log('[ChatKit] Found JSON with chart_commands:', payload);
-            onChartCommand?.(payload);
-            return; // Stop processing if we found and executed JSON commands
+            if (payload.legacy.length > 0 || payload.structured.length > 0) {
+              console.log('[ChatKit] Found JSON with chart_commands:', payload);
+              onChartCommand?.(payload);
+              return; // Stop processing if we found and executed JSON commands
+            }
+          } catch (e) {
+            console.log('[ChatKit] Error re-parsing JSON:', e);
           }
-        } catch (e) {
-          // Not JSON or doesn't have chart_commands, continue with other parsers
-          console.log('[ChatKit] Response is not JSON with chart_commands, trying other parsers');
         }
 
         // PRIORITY 2: Check for drawing commands using the new parser
