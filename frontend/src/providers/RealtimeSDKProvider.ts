@@ -58,7 +58,7 @@ export class RealtimeSDKProvider extends AbstractBaseProvider implements VoicePr
       // Phase 2: Connect via backend relay to integrate with Agents SDK
       // Get ephemeral token from backend
       const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
-      const workflowId = import.meta.env.VITE_WORKFLOW_ID || 'wf_68e5c49989448190bafbdad788a4747005aa1bda218ab736';
+      const workflowId = import.meta.env.VITE_WORKFLOW_ID || 'wf_68fd82f972d48190abd7a9178b23dc05029433468c0d51ae';
       
       const tokenResponse = await fetch(`${apiUrl}/api/agent/realtime-token`, {
         method: 'POST',
