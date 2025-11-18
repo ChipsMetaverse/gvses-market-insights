@@ -146,7 +146,7 @@ market_service = MarketServiceFactory.get_service()
 active_voice_sessions = {}
 
 # ChatKit configuration
-CHART_AGENT_WORKFLOW_ID = "wf_68e5c49989448190bafbdad788a4747005aa1bda218ab736"
+CHART_AGENT_WORKFLOW_ID = "wf_68fd82f972d48190abd7a9178b23dc05029433468c0d51ae"
 
 class AIMessageRequest(BaseModel):
     """Request model for AI message endpoint"""
@@ -1184,6 +1184,233 @@ async def get_technical_indicators(
             "error": "Technical indicators temporarily unavailable",
             "error_details": str(e)
         }
+
+# Technical levels endpoint (Support/Resistance) - MCP ONLY, NO FALLBACK
+@app.get("/api/technical-levels")
+@limiter.limit("50/minute")
+async def get_technical_levels(
+    request: Request,
+    symbol: str = Query(..., description="Stock ticker symbol")
+):
+    """Get technical support and resistance levels for a stock symbol via MCP"""
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Symbol is required")
+
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
+    logger.info(f"Getting technical levels for {symbol_upper} via MCP")
+
+    try:
+        # Get MCP client - FAIL if unavailable (no fallback)
+        mcp_client = await get_direct_mcp_client()
+        if not mcp_client:
+            raise HTTPException(status_code=503, detail="MCP service unavailable")
+
+        # Call MCP get_support_resistance tool
+        mcp_result = await mcp_client.call_tool(
+            "get_support_resistance",
+            {"symbol": symbol_upper, "period": "3mo"}
+        )
+
+        # Parse MCP response - handle JSON-RPC wrapper
+        parsed_data: Dict[str, Any] = {}
+        # Extract result from JSON-RPC response
+        result_content = mcp_result.get("result", {}) if isinstance(mcp_result, dict) else {}
+        content = result_content.get("content", [])
+
+        # Parse content array
+        if isinstance(content, list) and content:
+            first_item = content[0]
+            if isinstance(first_item, dict) and "text" in first_item:
+                import json
+                try:
+                    parsed_data = json.loads(first_item["text"])
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"Failed to parse MCP JSON: {json_err}")
+                    raise HTTPException(status_code=500, detail="Failed to parse MCP response")
+        elif isinstance(result_content, dict):
+            parsed_data = result_content
+
+        # Extract support and resistance arrays
+        support = parsed_data.get("support", [])
+        resistance = parsed_data.get("resistance", [])
+        current_price = parsed_data.get("currentPrice", 0)
+
+        # FAIL if no data (no fallback)
+        if not support and not resistance:
+            raise HTTPException(status_code=404, detail=f"No technical levels available for {symbol_upper}")
+
+        # Transform to widget format
+        response = {
+            "symbol": symbol_upper,
+            "sell_high_level": round(resistance[0], 2) if resistance else None,
+            "buy_low_level": round(support[0], 2) if support else None,
+            "btd_level": round(support[-1], 2) if len(support) > 1 else (round(support[0], 2) if support else None),
+            "current_price": current_price,
+            "all_support": support,
+            "all_resistance": resistance,
+            "data_source": "mcp_support_resistance",
+            "timestamp": int(time.time())
+        }
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "technical_levels_completed",
+            extra=completed.for_logging(symbol=symbol_upper, data_source="mcp")
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "technical_levels",
+                "symbol": symbol_upper,
+                "status": "success",
+                "data_source": "mcp"
+            },
+        )
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Error getting technical levels for {symbol_upper}: {str(e)}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "technical_levels_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "error": str(e)
+            },
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to get technical levels: {str(e)}")
+
+# Pattern detection endpoint - MCP ONLY, NO MOCK DATA
+@app.get("/api/pattern-detection")
+@limiter.limit("50/minute")
+async def get_pattern_detection(
+    request: Request,
+    symbol: str = Query(..., description="Stock ticker symbol")
+):
+    """Get chart pattern detection for a stock symbol via MCP"""
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Symbol is required")
+
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
+    logger.info(f"Getting pattern detection for {symbol_upper} via MCP")
+
+    try:
+        # Get MCP client - FAIL if unavailable (no mock data)
+        mcp_client = await get_direct_mcp_client()
+        if not mcp_client:
+            raise HTTPException(status_code=503, detail="MCP service unavailable")
+
+        # Call MCP get_chart_patterns tool
+        mcp_result = await mcp_client.call_tool(
+            "get_chart_patterns",
+            {"symbol": symbol_upper, "timeframe": "1d"}
+        )
+
+        # Parse MCP response - handle JSON-RPC wrapper
+        parsed_data: Dict[str, Any] = {}
+        # Extract result from JSON-RPC response
+        result_content = mcp_result.get("result", {}) if isinstance(mcp_result, dict) else {}
+        content = result_content.get("content", [])
+
+        # Parse content array
+        if isinstance(content, list) and content:
+            first_item = content[0]
+            if isinstance(first_item, dict) and "text" in first_item:
+                import json
+                try:
+                    parsed_data = json.loads(first_item["text"])
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"Failed to parse MCP JSON: {json_err}")
+                    raise HTTPException(status_code=500, detail="Failed to parse MCP response")
+        elif isinstance(result_content, dict):
+            parsed_data = result_content
+
+        # Extract patterns array
+        patterns = parsed_data.get("patterns", [])
+
+        # FAIL if no data (no mock)
+        if not patterns:
+            raise HTTPException(status_code=404, detail=f"No patterns detected for {symbol_upper}")
+
+        # Transform patterns to widget format
+        formatted_patterns = []
+        for i, pattern in enumerate(patterns):
+            formatted_patterns.append({
+                "id": f"pattern_{i+1}",
+                "name": pattern.get("name", "Unknown Pattern"),
+                "signal": pattern.get("signal", "NEUTRAL").upper(),
+                "category": pattern.get("category", "Unknown"),
+                "confidence": pattern.get("confidence", 0),
+                "visible": True,
+                "description": pattern.get("description", ""),
+                "timeframe": pattern.get("timeframe", "1d"),
+                "start_time": pattern.get("startTime"),
+                "end_time": pattern.get("endTime")
+            })
+
+        response = {
+            "symbol": symbol_upper,
+            "patterns": formatted_patterns,
+            "total_patterns": len(formatted_patterns),
+            "visible_patterns": len(formatted_patterns),
+            "data_source": "mcp_chart_patterns",
+            "timestamp": int(time.time())
+        }
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+        logger.info(
+            "pattern_detection_completed",
+            extra=completed.for_logging(symbol=symbol_upper, pattern_count=len(formatted_patterns), data_source="mcp")
+        )
+        await persist_request_log(
+            completed,
+            {
+                "event": "pattern_detection",
+                "symbol": symbol_upper,
+                "status": "success",
+                "pattern_count": len(formatted_patterns),
+                "data_source": "mcp"
+            },
+        )
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Error getting pattern detection for {symbol_upper}: {str(e)}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "pattern_detection_error",
+                "symbol": symbol_upper,
+                "status": "exception",
+                "error": str(e)
+            },
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to get pattern detection: {str(e)}")
 
 # Market overview endpoint
 @app.get("/api/market-overview")
@@ -2621,6 +2848,33 @@ async def create_chatkit_session_old(request: ChatKitSessionRequest):
         logger.error(f"Failed to create ChatKit session: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
 
+
+@app.post("/chatkit/sdk")
+async def chatkit_sdk_endpoint(request: Request):
+    """ChatKit endpoint using Agents SDK for widget streaming"""
+    try:
+        from services.chatkit_gvses_server import get_chatkit_server
+
+        # Get the ChatKit server instance
+        chatkit_server = get_chatkit_server()
+
+        # Process the request
+        body = await request.body()
+        result = await chatkit_server.process(body, context={})
+
+        # Return streaming response or JSON
+        if hasattr(result, '__aiter__'):  # StreamingResult
+            return StreamingResponse(result, media_type="text/event-stream")
+        else:
+            return Response(
+                content=result.json if hasattr(result, 'json') else json.dumps(result),
+                media_type="application/json"
+            )
+
+    except Exception as e:
+        logger.error(f"ChatKit SDK endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=f"ChatKit SDK error: {str(e)}")
+
 # OpenAI proxy endpoints for voice relay
 @app.api_route("/openai/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def openai_proxy(request: Request, path: str):
@@ -3217,7 +3471,7 @@ async def create_realtime_token(request: dict):
     try:
         from services.realtime_sdk_service import realtime_sdk_service
         
-        workflow_id = request.get("workflow_id", "wf_68e5c49989448190bafbdad788a4747005aa1bda218ab736")
+        workflow_id = request.get("workflow_id", "wf_68fd82f972d48190abd7a9178b23dc05029433468c0d51ae")
         voice = request.get("voice", "marin")
         session_id = request.get("session_id")
         
