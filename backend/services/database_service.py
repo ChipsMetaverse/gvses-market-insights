@@ -9,8 +9,9 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 import asyncio
-from supabase.aio import create_client, AsyncClient
+from supabase import create_client, Client
 from dotenv import load_dotenv
+
 
 load_dotenv()
 
@@ -26,7 +27,7 @@ class DatabaseService:
         if not self.supabase_url or not self.supabase_key:
             raise ValueError("Supabase URL and key must be set in environment variables")
         
-        self.client: AsyncClient = create_client(self.supabase_url, self.supabase_key)
+        self.client: Client = create_client(self.supabase_url, self.supabase_key, is_async=True)
         
     # ============ Chat History Methods ============
     

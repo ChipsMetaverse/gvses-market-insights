@@ -18,8 +18,9 @@ from services.agent_orchestrator import get_orchestrator
 def get_test_client():
     """Get FastAPI test client."""
     from fastapi.testclient import TestClient
-    from mcp_server import app
-    return TestClient(app)
+    from mcp_server import app as fastapi_app  # Alias the app to avoid conflict
+    client = TestClient(app=fastapi_app)
+    return client
 
 
 class TestChartOnlyIntentStructuredCommands:
