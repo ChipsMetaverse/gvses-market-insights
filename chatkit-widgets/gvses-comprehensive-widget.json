@@ -1,0 +1,653 @@
+{
+  "type": "Card",
+  "size": "lg",
+  "status": {
+    "text": "GVSES Analysis",
+    "icon": "chart-line"
+  },
+  "children": [
+    {
+      "type": "Row",
+      "align": "center",
+      "gap": 3,
+      "children": [
+        {
+          "type": "Title",
+          "value": "{{company_name}} ({{symbol}})",
+          "size": "lg"
+        },
+        {
+          "type": "Spacer"
+        },
+        {
+          "type": "Caption",
+          "value": "{{timestamp}}",
+          "size": "sm",
+          "color": "secondary"
+        }
+      ]
+    },
+    {
+      "type": "Row",
+      "align": "baseline",
+      "gap": 2,
+      "children": [
+        {
+          "type": "Text",
+          "value": "${{price}}",
+          "size": "xl",
+          "weight": "bold"
+        },
+        {
+          "type": "Text",
+          "value": "{{price_change}} ({{price_change_percent}}%)",
+          "color": "{{price_change_color}}",
+          "weight": "semibold"
+        },
+        {
+          "type": "Spacer"
+        },
+        {
+          "type": "Button",
+          "icon": "refresh",
+          "variant": "ghost",
+          "size": "sm",
+          "onClickAction": {
+            "type": "analysis.refresh",
+            "payload": {
+              "symbol": "{{symbol}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "Divider",
+      "spacing": 12
+    },
+    {
+      "type": "Col",
+      "gap": 3,
+      "children": [
+        {
+          "type": "Row",
+          "align": "center",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Caption",
+              "value": "Price Chart",
+              "size": "sm",
+              "weight": "semibold",
+              "color": "secondary"
+            },
+            {
+              "type": "Spacer"
+            },
+            {
+              "type": "Button",
+              "label": "1D",
+              "pill": true,
+              "size": "xs",
+              "color": "{{chart_1d_color}}",
+              "variant": "{{chart_1d_variant}}",
+              "onClickAction": {
+                "type": "chart.setTimeframe",
+                "payload": {
+                  "symbol": "{{symbol}}",
+                  "timeframe": "1D"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "1W",
+              "pill": true,
+              "size": "xs",
+              "color": "{{chart_1w_color}}",
+              "variant": "{{chart_1w_variant}}",
+              "onClickAction": {
+                "type": "chart.setTimeframe",
+                "payload": {
+                  "symbol": "{{symbol}}",
+                  "timeframe": "1W"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "1M",
+              "pill": true,
+              "size": "xs",
+              "color": "{{chart_1m_color}}",
+              "variant": "{{chart_1m_variant}}",
+              "onClickAction": {
+                "type": "chart.setTimeframe",
+                "payload": {
+                  "symbol": "{{symbol}}",
+                  "timeframe": "1M"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "3M",
+              "pill": true,
+              "size": "xs",
+              "color": "{{chart_3m_color}}",
+              "variant": "{{chart_3m_variant}}",
+              "onClickAction": {
+                "type": "chart.setTimeframe",
+                "payload": {
+                  "symbol": "{{symbol}}",
+                  "timeframe": "3M"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "1Y",
+              "pill": true,
+              "size": "xs",
+              "color": "{{chart_1y_color}}",
+              "variant": "{{chart_1y_variant}}",
+              "onClickAction": {
+                "type": "chart.setTimeframe",
+                "payload": {
+                  "symbol": "{{symbol}}",
+                  "timeframe": "1Y"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "Image",
+          "src": "{{chart_image_url}}",
+          "alt": "{{symbol}} price chart ({{chart_timeframe}})",
+          "aspectRatio": "16:9",
+          "radius": "md"
+        }
+      ]
+    },
+    {
+      "type": "Divider",
+      "spacing": 12
+    },
+    {
+      "type": "Col",
+      "gap": 2,
+      "children": [
+        {
+          "type": "Caption",
+          "value": "Quick Stats",
+          "size": "sm",
+          "weight": "semibold",
+          "color": "secondary"
+        },
+        {
+          "type": "Row",
+          "gap": 4,
+          "children": [
+            {
+              "type": "Col",
+              "gap": 1,
+              "children": [
+                {
+                  "type": "Caption",
+                  "value": "Open",
+                  "size": "xs",
+                  "color": "secondary"
+                },
+                {
+                  "type": "Text",
+                  "value": "${{open}}",
+                  "size": "sm"
+                }
+              ]
+            },
+            {
+              "type": "Col",
+              "gap": 1,
+              "children": [
+                {
+                  "type": "Caption",
+                  "value": "Volume",
+                  "size": "xs",
+                  "color": "secondary"
+                },
+                {
+                  "type": "Text",
+                  "value": "{{volume}}",
+                  "size": "sm"
+                }
+              ]
+            },
+            {
+              "type": "Col",
+              "gap": 1,
+              "children": [
+                {
+                  "type": "Caption",
+                  "value": "Day Range",
+                  "size": "xs",
+                  "color": "secondary"
+                },
+                {
+                  "type": "Text",
+                  "value": "${{day_low}} - ${{day_high}}",
+                  "size": "sm"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Divider",
+      "spacing": 12
+    },
+    {
+      "type": "Col",
+      "gap": 2,
+      "children": [
+        {
+          "type": "Row",
+          "align": "center",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Caption",
+              "value": "Technical Position",
+              "size": "sm",
+              "weight": "semibold",
+              "color": "secondary"
+            },
+            {
+              "type": "Badge",
+              "label": "{{technical_position_label}}",
+              "color": "{{technical_position_color}}",
+              "variant": "soft",
+              "size": "sm"
+            }
+          ]
+        },
+        {
+          "type": "Col",
+          "gap": 1,
+          "children": [
+            {
+              "type": "Row",
+              "align": "baseline",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "Caption",
+                  "value": "QE",
+                  "size": "xs",
+                  "color": "secondary",
+                  "width": 40
+                },
+                {
+                  "type": "Text",
+                  "value": "${{qe_level}}",
+                  "size": "sm"
+                },
+                {
+                  "type": "Caption",
+                  "value": "(Target)",
+                  "size": "xs",
+                  "color": "secondary"
+                }
+              ]
+            },
+            {
+              "type": "Row",
+              "align": "baseline",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "Caption",
+                  "value": "ST",
+                  "size": "xs",
+                  "color": "secondary",
+                  "width": 40
+                },
+                {
+                  "type": "Text",
+                  "value": "${{st_level}}",
+                  "size": "sm"
+                },
+                {
+                  "type": "Caption",
+                  "value": "(Resistance)",
+                  "size": "xs",
+                  "color": "secondary"
+                }
+              ]
+            },
+            {
+              "type": "Row",
+              "align": "baseline",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "Caption",
+                  "value": "Now",
+                  "size": "xs",
+                  "color": "primary",
+                  "weight": "bold",
+                  "width": 40
+                },
+                {
+                  "type": "Text",
+                  "value": "${{price}}",
+                  "size": "sm",
+                  "weight": "bold",
+                  "color": "primary"
+                },
+                {
+                  "type": "Caption",
+                  "value": "(Current)",
+                  "size": "xs",
+                  "color": "primary"
+                }
+              ]
+            },
+            {
+              "type": "Row",
+              "align": "baseline",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "Caption",
+                  "value": "LTB",
+                  "size": "xs",
+                  "color": "secondary",
+                  "width": 40
+                },
+                {
+                  "type": "Text",
+                  "value": "${{ltb_level}}",
+                  "size": "sm"
+                },
+                {
+                  "type": "Caption",
+                  "value": "(Support)",
+                  "size": "xs",
+                  "color": "secondary"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Divider",
+      "spacing": 12
+    },
+    {
+      "type": "Col",
+      "gap": 2,
+      "children": [
+        {
+          "type": "Caption",
+          "value": "Pattern Detection",
+          "size": "sm",
+          "weight": "semibold",
+          "color": "secondary"
+        },
+        {
+          "type": "ListView",
+          "of": "{{patterns}}",
+          "limit": 3,
+          "children": [
+            {
+              "type": "ListViewItem",
+              "gap": 2,
+              "align": "center",
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 8,
+                  "radius": "full",
+                  "background": "{{pattern_confidence_color}}"
+                },
+                {
+                  "type": "Col",
+                  "gap": 0,
+                  "flex": 1,
+                  "children": [
+                    {
+                      "type": "Text",
+                      "value": "{{pattern_name}}",
+                      "size": "sm",
+                      "weight": "medium"
+                    },
+                    {
+                      "type": "Caption",
+                      "value": "{{pattern_confidence}} confidence • {{pattern_direction}}",
+                      "size": "xs",
+                      "color": "secondary"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Divider",
+      "spacing": 12
+    },
+    {
+      "type": "Col",
+      "gap": 2,
+      "children": [
+        {
+          "type": "Row",
+          "align": "center",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Caption",
+              "value": "Market News (Top 5)",
+              "size": "sm",
+              "weight": "semibold",
+              "color": "secondary"
+            },
+            {
+              "type": "Spacer"
+            },
+            {
+              "type": "Button",
+              "label": "All Sources",
+              "pill": true,
+              "size": "xs",
+              "color": "{{news_filter_all_color}}",
+              "variant": "{{news_filter_all_variant}}",
+              "onClickAction": {
+                "type": "news.setSource",
+                "payload": {
+                  "source": "all"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "CNBC",
+              "pill": true,
+              "size": "xs",
+              "color": "{{news_filter_cnbc_color}}",
+              "variant": "{{news_filter_cnbc_variant}}",
+              "onClickAction": {
+                "type": "news.setSource",
+                "payload": {
+                  "source": "cnbc"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "Yahoo",
+              "pill": true,
+              "size": "xs",
+              "color": "{{news_filter_yahoo_color}}",
+              "variant": "{{news_filter_yahoo_variant}}",
+              "onClickAction": {
+                "type": "news.setSource",
+                "payload": {
+                  "source": "yahoo"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "ListView",
+          "of": "{{news}}",
+          "limit": 5,
+          "children": [
+            {
+              "type": "ListViewItem",
+              "gap": 2,
+              "align": "start",
+              "onClickAction": {
+                "type": "browser.openUrl",
+                "payload": {
+                  "url": "{{news_url}}"
+                }
+              },
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 8,
+                  "radius": "full",
+                  "background": "{{news_source_color}}"
+                },
+                {
+                  "type": "Col",
+                  "gap": 1,
+                  "flex": 1,
+                  "children": [
+                    {
+                      "type": "Text",
+                      "value": "{{news_title}}",
+                      "size": "sm",
+                      "weight": "semibold",
+                      "maxLines": 2
+                    },
+                    {
+                      "type": "Row",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "Caption",
+                          "value": "{{news_source}}",
+                          "size": "xs",
+                          "color": "secondary"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "•",
+                          "size": "xs",
+                          "color": "secondary"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "{{news_time_ago}}",
+                          "size": "xs",
+                          "color": "secondary"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Row",
+          "children": [
+            {
+              "type": "Spacer"
+            },
+            {
+              "type": "Button",
+              "label": "More News",
+              "size": "sm",
+              "variant": "ghost",
+              "onClickAction": {
+                "type": "news.showMore",
+                "payload": {
+                  "symbol": "{{symbol}}"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Divider",
+      "spacing": 12
+    },
+    {
+      "type": "Col",
+      "gap": 2,
+      "children": [
+        {
+          "type": "Caption",
+          "value": "Upcoming Events",
+          "size": "sm",
+          "weight": "semibold",
+          "color": "secondary"
+        },
+        {
+          "type": "ListView",
+          "of": "{{events}}",
+          "limit": 2,
+          "children": [
+            {
+              "type": "ListViewItem",
+              "gap": 2,
+              "align": "center",
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 8,
+                  "radius": "full",
+                  "background": "{{event_impact_color}}"
+                },
+                {
+                  "type": "Col",
+                  "gap": 0,
+                  "flex": 1,
+                  "children": [
+                    {
+                      "type": "Text",
+                      "value": "{{event_name}}",
+                      "size": "sm",
+                      "weight": "medium"
+                    },
+                    {
+                      "type": "Caption",
+                      "value": "{{event_date}} ({{event_countdown}})",
+                      "size": "xs",
+                      "color": "secondary"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

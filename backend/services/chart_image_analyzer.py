@@ -133,7 +133,7 @@ class ChartImageAnalyzer:
 
                 response = await self.client.responses.create(
                     model=config.model_id,
-                    temperature=config.temperature,
+                    # Note: temperature parameter not supported by Responses API
                     input=[
                         {
                             "role": "system",

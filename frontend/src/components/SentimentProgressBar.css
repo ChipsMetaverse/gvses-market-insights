@@ -1,0 +1,179 @@
+/**
+ * Sentiment Progress Bar Styles
+ * Clean, modern design inspired by StockWisp
+ */
+
+.sentiment-progress-bar {
+  padding: 12px 0;
+}
+
+.sentiment-progress-bar.compact {
+  padding: 8px 0;
+}
+
+/* Header */
+.sentiment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sentiment-label {
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sentiment-score {
+  font-weight: 700;
+  font-size: 20px;
+  font-feature-settings: 'tnum';
+  font-variant-numeric: tabular-nums;
+}
+
+.sentiment-progress-bar.compact .sentiment-score {
+  font-size: 16px;
+}
+
+/* Progress Bar */
+.progress-bar-container {
+  position: relative;
+  margin-bottom: 4px;
+}
+
+.progress-bar-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+  position: relative;
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    transparent 100%
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Scale Markers */
+.progress-bar-markers {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.marker {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+}
+
+/* Component Breakdown */
+.sentiment-components {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.component {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.component-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.component-value {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+  font-feature-settings: 'tnum';
+  font-variant-numeric: tabular-nums;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .sentiment-label {
+    font-size: 12px;
+  }
+
+  .sentiment-score {
+    font-size: 18px;
+  }
+
+  .sentiment-progress-bar.compact .sentiment-score {
+    font-size: 14px;
+  }
+
+  .sentiment-components {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+/* Dark Mode Optimization */
+@media (prefers-color-scheme: dark) {
+  .progress-bar-track {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* Accessibility */
+.sentiment-progress-bar:focus-within {
+  outline: 2px solid rgba(255, 255, 255, 0.3);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Loading State */
+.sentiment-progress-bar.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.sentiment-progress-bar.loading .progress-bar-fill {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

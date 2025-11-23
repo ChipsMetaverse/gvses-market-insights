@@ -31,7 +31,7 @@ class ForexDataService {
 
   private normalizeResponse(data: ForexCalendarResponse): ForexCalendarResponse {
     const sortedEvents: ForexCalendarEvent[] = [...(data.events ?? [])];
-    sortedEvents.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    sortedEvents.sort((a, b) => new Date(a.datetime_utc).getTime() - new Date(b.datetime_utc).getTime());
 
     return {
       ...data,

@@ -1,0 +1,253 @@
+{
+  "type": "Card",
+  "size": "md",
+  "children": [
+    {
+      "type": "Col",
+      "gap": 3,
+      "children": [
+        {
+          "type": "Row",
+          "align": "center",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Title",
+              "value": "Technical Levels",
+              "size": "md"
+            },
+            {
+              "type": "Badge",
+              "label": "TSLA",
+              "color": "secondary"
+            },
+            {
+              "type": "Button",
+              "iconStart": "search",
+              "size": "sm",
+              "variant": "outline",
+              "pill": true,
+              "uniform": true,
+              "onClickAction": {
+                "type": "chart.setSymbol",
+                "payload": {
+                  "current": "TSLA"
+                }
+              }
+            },
+            {
+              "type": "Spacer"
+            },
+            {
+              "type": "Button",
+              "iconStart": "reload",
+              "variant": "outline",
+              "pill": true,
+              "uniform": true,
+              "onClickAction": {
+                "type": "levels.refresh",
+                "payload": {
+                  "symbol": "TSLA"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "Divider"
+        },
+        {
+          "type": "Transition",
+          "children": {
+            "type": "ListView",
+            "children": [
+              {
+                "type": "ListViewItem",
+                "gap": 3,
+                "onClickAction": {
+                  "type": "chart.highlightLevel",
+                  "payload": {
+                    "symbol": "TSLA",
+                    "level": "sellHigh",
+                    "price": 285.5
+                  }
+                },
+                "children": [
+                  {
+                    "type": "Box",
+                    "size": 4,
+                    "background": "red-500",
+                    "radius": "full"
+                  },
+                  {
+                    "type": "Col",
+                    "flex": "auto",
+                    "children": [
+                      {
+                        "type": "Row",
+                        "children": [
+                          {
+                            "type": "Text",
+                            "value": "Sell High",
+                            "weight": "semibold",
+                            "size": "sm"
+                          },
+                          {
+                            "type": "Button",
+                            "iconStart": "info",
+                            "variant": "ghost",
+                            "size": "sm",
+                            "pill": true,
+                            "uniform": true,
+                            "onClickAction": {
+                              "type": "levels.tooltip",
+                              "payload": {
+                                "text": "Resistance level - Consider taking profits near this price"
+                              }
+                            }
+                          },
+                          {
+                            "type": "Spacer"
+                          },
+                          {
+                            "type": "Text",
+                            "value": "$285.50",
+                            "size": "lg",
+                            "weight": "bold",
+                            "color": "red-600"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "ListViewItem",
+                "gap": 3,
+                "onClickAction": {
+                  "type": "chart.highlightLevel",
+                  "payload": {
+                    "symbol": "TSLA",
+                    "level": "buyLow",
+                    "price": 242.3
+                  }
+                },
+                "children": [
+                  {
+                    "type": "Box",
+                    "size": 4,
+                    "background": "green-500",
+                    "radius": "full"
+                  },
+                  {
+                    "type": "Col",
+                    "flex": "auto",
+                    "children": [
+                      {
+                        "type": "Row",
+                        "children": [
+                          {
+                            "type": "Text",
+                            "value": "Buy Low",
+                            "weight": "semibold",
+                            "size": "sm"
+                          },
+                          {
+                            "type": "Button",
+                            "iconStart": "info",
+                            "variant": "ghost",
+                            "size": "sm",
+                            "pill": true,
+                            "uniform": true,
+                            "onClickAction": {
+                              "type": "levels.tooltip",
+                              "payload": {
+                                "text": "Support level - Potential buying opportunity"
+                              }
+                            }
+                          },
+                          {
+                            "type": "Spacer"
+                          },
+                          {
+                            "type": "Text",
+                            "value": "$242.30",
+                            "size": "lg",
+                            "weight": "bold",
+                            "color": "green-600"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "ListViewItem",
+                "gap": 3,
+                "onClickAction": {
+                  "type": "chart.highlightLevel",
+                  "payload": {
+                    "symbol": "TSLA",
+                    "level": "btd",
+                    "price": 215.75
+                  }
+                },
+                "children": [
+                  {
+                    "type": "Box",
+                    "size": 4,
+                    "background": "blue-500",
+                    "radius": "full"
+                  },
+                  {
+                    "type": "Col",
+                    "flex": "auto",
+                    "children": [
+                      {
+                        "type": "Row",
+                        "children": [
+                          {
+                            "type": "Text",
+                            "value": "BTD",
+                            "weight": "semibold",
+                            "size": "sm"
+                          },
+                          {
+                            "type": "Button",
+                            "iconStart": "info",
+                            "variant": "ghost",
+                            "size": "sm",
+                            "pill": true,
+                            "uniform": true,
+                            "onClickAction": {
+                              "type": "levels.tooltip",
+                              "payload": {
+                                "text": "Buy The Dip - Strong support level for accumulation"
+                              }
+                            }
+                          },
+                          {
+                            "type": "Spacer"
+                          },
+                          {
+                            "type": "Text",
+                            "value": "$215.75",
+                            "size": "lg",
+                            "weight": "bold",
+                            "color": "blue-600"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import json
 import logging
+from services.sentiment_scorer import SentimentScorer
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,45 @@ class MarketDataService:
             
             # Add technical levels
             data["technical_levels"] = self.calculate_technical_levels(data.get("price", 0))
-            
+
+            # Calculate sentiment score
+            try:
+                price_data = {
+                    'changePercent': data.get('change_percent', 0),
+                    'price': data.get('price', 0),
+                }
+
+                volume_data = {
+                    'current_volume': data.get('volume', 0),
+                    'avg_volume': data.get('avg_volume', 0),
+                }
+
+                # Format news for sentiment analysis
+                news_articles = []
+                if "news" in data:
+                    news_articles = [
+                        {
+                            'title': news_item.get('title', ''),
+                            'summary': '',  # Yahoo news doesn't provide summary in this endpoint
+                        }
+                        for news_item in data["news"]
+                    ]
+
+                # Calculate sentiment (technical_indicators=None for now)
+                sentiment_data = SentimentScorer.calculate_sentiment_score(
+                    price_data=price_data,
+                    technical_indicators=None,
+                    news_articles=news_articles if news_articles else None,
+                    volume_data=volume_data if volume_data['current_volume'] > 0 else None
+                )
+
+                data["sentiment"] = sentiment_data
+
+            except Exception as e:
+                logger.error(f"Error calculating sentiment for {symbol}: {e}")
+                # Add default sentiment on error
+                data["sentiment"] = SentimentScorer._default_sentiment()
+
             return data
     
     async def get_stock_quote(self, client: httpx.AsyncClient, symbol: str) -> Dict[str, Any]:

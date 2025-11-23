@@ -1,0 +1,269 @@
+{
+  "type": "Card",
+  "size": "md",
+  "children": [
+    {
+      "type": "Col",
+      "gap": 3,
+      "children": [
+        {
+          "type": "Row",
+          "align": "center",
+          "gap": 3,
+          "children": [
+            {
+              "type": "Title",
+              "value": "Market News Feed",
+              "size": "md"
+            },
+            {
+              "type": "Badge",
+              "label": "TSLA",
+              "color": "secondary",
+              "variant": "soft"
+            },
+            {
+              "type": "Button",
+              "iconStart": "notebook-pencil",
+              "variant": "ghost",
+              "size": "sm",
+              "onClickAction": {
+                "type": "chart.setSymbol"
+              }
+            },
+            {
+              "type": "Spacer"
+            },
+            {
+              "type": "Button",
+              "iconStart": "reload",
+              "variant": "ghost",
+              "onClickAction": {
+                "type": "news.refresh",
+                "payload": {
+                  "symbol": "TSLA"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "Row",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Button",
+              "label": "All Sources",
+              "pill": true,
+              "size": "sm",
+              "color": "info",
+              "variant": "solid",
+              "onClickAction": {
+                "type": "news.setSource",
+                "payload": {
+                  "source": "all"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "CNBC",
+              "pill": true,
+              "size": "sm",
+              "color": "secondary",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "news.setSource",
+                "payload": {
+                  "source": "cnbc"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "Yahoo Finance",
+              "pill": true,
+              "size": "sm",
+              "color": "secondary",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "news.setSource",
+                "payload": {
+                  "source": "yahoo"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "ListView",
+          "limit": 10,
+          "children": [
+            {
+              "type": "ListViewItem",
+              "key": "https://cnbc.com/article/123",
+              "gap": 3,
+              "align": "start",
+              "onClickAction": {
+                "type": "browser.openUrl",
+                "payload": {
+                  "url": "https://cnbc.com/article/123"
+                }
+              },
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 8,
+                  "radius": "full",
+                  "background": "blue-500"
+                },
+                {
+                  "type": "Col",
+                  "gap": 1,
+                  "flex": 1,
+                  "children": [
+                    {
+                      "type": "Text",
+                      "value": "Tesla Announces New Factory in Texas",
+                      "size": "md",
+                      "weight": "semibold",
+                      "maxLines": 2
+                    },
+                    {
+                      "type": "Row",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "Caption",
+                          "value": "CNBC",
+                          "color": "secondary"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "2 hours ago",
+                          "color": "secondary"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Text",
+                      "value": "Tesla CEO Elon Musk announced plans for a new manufacturing facility in Austin, bringing thousands of jobs to the region...",
+                      "size": "sm",
+                      "color": "secondary",
+                      "maxLines": 3
+                    },
+                    {
+                      "type": "Row",
+                      "children": [
+                        {
+                          "type": "Spacer"
+                        },
+                        {
+                          "type": "Button",
+                          "label": "Read More",
+                          "size": "sm",
+                          "variant": "ghost",
+                          "iconEnd": "external-link",
+                          "onClickAction": {
+                            "type": "browser.openUrl",
+                            "payload": {
+                              "url": "https://cnbc.com/article/123"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Divider"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "ListViewItem",
+              "key": "https://finance.yahoo.com/article/456",
+              "gap": 3,
+              "align": "start",
+              "onClickAction": {
+                "type": "browser.openUrl",
+                "payload": {
+                  "url": "https://finance.yahoo.com/article/456"
+                }
+              },
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 8,
+                  "radius": "full",
+                  "background": "orange-400"
+                },
+                {
+                  "type": "Col",
+                  "gap": 1,
+                  "flex": 1,
+                  "children": [
+                    {
+                      "type": "Text",
+                      "value": "Electric Vehicle Sales Surge in Q4",
+                      "size": "md",
+                      "weight": "semibold",
+                      "maxLines": 2
+                    },
+                    {
+                      "type": "Row",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "Caption",
+                          "value": "Yahoo Finance",
+                          "color": "secondary"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "5 hours ago",
+                          "color": "secondary"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Text",
+                      "value": "Industry analysts report record EV sales numbers with Tesla leading the market share at 23% of all electric vehicles sold...",
+                      "size": "sm",
+                      "color": "secondary",
+                      "maxLines": 3
+                    },
+                    {
+                      "type": "Row",
+                      "children": [
+                        {
+                          "type": "Spacer"
+                        },
+                        {
+                          "type": "Button",
+                          "label": "Read More",
+                          "size": "sm",
+                          "variant": "ghost",
+                          "iconEnd": "external-link",
+                          "onClickAction": {
+                            "type": "browser.openUrl",
+                            "payload": {
+                              "url": "https://finance.yahoo.com/article/456"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Divider"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

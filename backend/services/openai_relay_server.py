@@ -33,6 +33,12 @@ class OpenAIRealtimeRelay:
             logger.warning("⚠️ OPENAI_API_KEY not found - OpenAI Realtime features will be disabled")
             self.api_key = "test-key"  # Use dummy key for CI environments
 
+        self.relay_api_key = os.getenv("RELAY_API_KEY")
+        if not self.relay_api_key:
+            logger.warning("⚠️ RELAY_API_KEY not found - The OpenAI proxy will be unsecured.")
+        else:
+            logger.info("🔑 RELAY_API_KEY loaded - The OpenAI proxy is secured.")
+
         # Log API key info (masked for security)
         masked_key = f"{self.api_key[:8]}...{self.api_key[-4:]}" if len(self.api_key) > 12 else "***"
         logger.info(f"🔑 OpenAI API key loaded: {masked_key}")
@@ -621,6 +627,12 @@ All intelligence and tool execution is handled by the separate agent system."""
         import httpx
         from fastapi import HTTPException
         from fastapi.responses import StreamingResponse
+
+        # Authenticate the request to the proxy
+        if self.relay_api_key:
+            auth_header = request.headers.get("Authorization")
+            if not auth_header or auth_header != f"Bearer {self.relay_api_key}":
+                raise HTTPException(status_code=401, detail="Unauthorized")
         
         try:
             # Build the full OpenAI API URL

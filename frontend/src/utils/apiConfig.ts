@@ -153,9 +153,9 @@ const tryLocationApiUrl = (): string | null => {
     return `${normalizedProtocol}//${hostname}:8000`;
   }
 
-  // Production: separate frontend and backend apps
+  // Production: unified frontend and backend app
   if (hostname === 'gvses-market-insights.fly.dev') {
-    return 'https://gvses-market-insights-api.fly.dev';
+    return 'https://gvses-market-insights.fly.dev';
   }
 
   const inferredPort = port ? `:${port}` : '';

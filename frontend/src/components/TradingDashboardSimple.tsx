@@ -21,6 +21,7 @@ import { CommandToast } from './CommandToast';
 import { VoiceCommandHelper } from './VoiceCommandHelper';
 import StructuredResponse from './StructuredResponse';
 import { Tooltip } from './Tooltip';
+import { Toaster } from './ui/toaster';
 import { OnboardingTour } from './OnboardingTour';
 import { EconomicCalendar } from './EconomicCalendar';
 import { TimeRange } from '../types/dashboard';
@@ -34,6 +35,16 @@ import './TradingDashboardSimple.css';
 import './TradingDashboardMobile.css';
 import { useSymbolSearch } from '../hooks/useSymbolSearch';
 import { Search } from 'lucide-react';
+// Widget Testing Imports
+import {
+  EconomicCalendarWidget,
+  MarketNewsFeedWidget,
+  TechnicalLevelsWidget,
+  PatternDetectionWidget,
+  TradingChartDisplayWidget,
+  type WidgetType,
+} from './widgets';
+import { useWidgetActions } from '../hooks/useWidgetActions';
 
 interface StockData {
   symbol: string;
@@ -233,10 +244,15 @@ export const TradingDashboardSimple: React.FC = () => {
   const [stockNews, setStockNews] = useState<any[]>([]);
   const [newsError, setNewsError] = useState<string | null>(null);
   const [technicalLevels, setTechnicalLevels] = useState<any>({});
+  const [isLoadingTechnicalLevels, setIsLoadingTechnicalLevels] = useState(false);
+  const [technicalLevelsError, setTechnicalLevelsError] = useState<string | null>(null);
   const [detectedPatterns, setDetectedPatterns] = useState<any[]>([]);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
+  // Widget Testing State
+  const [activeWidget, setActiveWidget] = useState<WidgetType | null>(null);
+
   // Streaming news state
   const [streamingNews] = useState<any[]>([]);
   const [isStreaming] = useState(false);
@@ -639,7 +655,13 @@ export const TradingDashboardSimple: React.FC = () => {
   
   // Chart control ref
   const chartRef = useRef<any>(null);
-  
+
+  // Widget actions hook
+  const { handleAction } = useWidgetActions({
+    chartRef,
+    onClose: () => setActiveWidget(null),
+  });
+
   // Common callback functions for both providers with provider tracking
   const handleUserTranscript = useCallback((transcript: string) => {
     const message: Message = {
@@ -1659,13 +1681,18 @@ export const TradingDashboardSimple: React.FC = () => {
     }
     
     // Fetch comprehensive data separately
+    setIsLoadingTechnicalLevels(true);
+    setTechnicalLevelsError(null);
     try {
       const comprehensive = await marketDataService.getComprehensiveData(symbol);
       if (comprehensive.technical_levels) {
         setTechnicalLevels(comprehensive.technical_levels);
+        setTechnicalLevelsError(null);
       } else {
         setTechnicalLevels({});
+        setTechnicalLevelsError('No technical levels available');
       }
+      setIsLoadingTechnicalLevels(false);
 
       const patterns = comprehensive.patterns?.detected || [];
       console.log(`[Pattern API] Fetched ${patterns.length} patterns from backend for ${symbol}`);
@@ -1697,6 +1724,8 @@ export const TradingDashboardSimple: React.FC = () => {
       console.error('Error fetching comprehensive data:', error);
       // Technical levels will just remain undefined/empty if this fails
       setTechnicalLevels({});
+      setTechnicalLevelsError('Unable to load technical levels. Please try again.');
+      setIsLoadingTechnicalLevels(false);
       setBackendPatterns([]);
       setDetectedPatterns([]);
       enhancedChartControl.clearDrawings();
@@ -1908,7 +1937,10 @@ export const TradingDashboardSimple: React.FC = () => {
           onClose={() => setToastCommand(null)}
         />
       )}
-      
+
+      {/* UI Toasts for Network/Error Notifications */}
+      <Toaster />
+
       {/* Header with Integrated Ticker Cards */}
       <header className="dashboard-header-with-tickers header-container">
         <div className="header-left">
@@ -2108,30 +2140,38 @@ export const TradingDashboardSimple: React.FC = () => {
                 {/* Fixed Technical Levels section */}
                 <div className="technical-section">
                   <h4>TECHNICAL LEVELS</h4>
-                  <div className="level-row">
-                    <Tooltip content="Resistance level - Consider taking profits near this price">
-                      <span>Sell High</span>
-                    </Tooltip>
-                    <span className="level-val qe">
-                      ${technicalLevels.sell_high_level ? technicalLevels.sell_high_level.toFixed(2) : '---'}
-                    </span>
-                  </div>
-                  <div className="level-row">
-                    <Tooltip content="Support level - Potential buying opportunity near this price">
-                      <span>Buy Low</span>
-                    </Tooltip>
-                    <span className="level-val st">
-                      ${technicalLevels.buy_low_level ? technicalLevels.buy_low_level.toFixed(2) : '---'}
-                    </span>
-                  </div>
-                  <div className="level-row">
-                    <Tooltip content="Buy The Dip - Strong support level for accumulation">
-                      <span>BTD</span>
-                    </Tooltip>
-                    <span className="level-val ltb">
-                      ${technicalLevels.btd_level ? technicalLevels.btd_level.toFixed(2) : '---'}
-                    </span>
-                  </div>
+                  {isLoadingTechnicalLevels ? (
+                    <div className="level-loading">Loading technical levels...</div>
+                  ) : technicalLevelsError ? (
+                    <div className="level-error">{technicalLevelsError}</div>
+                  ) : (
+                    <>
+                      <div className="level-row">
+                        <Tooltip content="Resistance level - Consider taking profits near this price">
+                          <span>Sell High</span>
+                        </Tooltip>
+                        <span className="level-val qe">
+                          ${technicalLevels.sell_high_level ? technicalLevels.sell_high_level.toFixed(2) : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="level-row">
+                        <Tooltip content="Support level - Potential buying opportunity near this price">
+                          <span>Buy Low</span>
+                        </Tooltip>
+                        <span className="level-val st">
+                          ${technicalLevels.buy_low_level ? technicalLevels.buy_low_level.toFixed(2) : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="level-row">
+                        <Tooltip content="Buy The Dip - Strong support level for accumulation">
+                          <span>BTD</span>
+                        </Tooltip>
+                        <span className="level-val ltb">
+                          ${technicalLevels.btd_level ? technicalLevels.btd_level.toFixed(2) : 'N/A'}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="pattern-section">
@@ -2576,6 +2616,7 @@ export const TradingDashboardSimple: React.FC = () => {
                       console.error('Failed to execute ChatKit chart command:', err);
                     });
                 }}
+                onWidgetAction={handleAction}
               />
             </div>
           ) : (
@@ -2718,6 +2759,154 @@ export const TradingDashboardSimple: React.FC = () => {
             </ul>
           </nav>
         )}
+
+      {/* Widget Testing Launcher - Floating Button Menu */}
+      {!isMobile && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          zIndex: 40,
+        }}>
+          <button
+            onClick={() => setActiveWidget('economic-calendar')}
+            style={{
+              padding: '12px 20px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+              transition: 'all 0.2s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
+            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
+          >
+            📅 Calendar
+          </button>
+          <button
+            onClick={() => setActiveWidget('market-news')}
+            style={{
+              padding: '12px 20px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+              transition: 'all 0.2s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
+            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
+          >
+            📰 News
+          </button>
+          <button
+            onClick={() => setActiveWidget('technical-levels')}
+            style={{
+              padding: '12px 20px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+              transition: 'all 0.2s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
+            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
+          >
+            📊 Levels
+          </button>
+          <button
+            onClick={() => setActiveWidget('pattern-detection')}
+            style={{
+              padding: '12px 20px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+              transition: 'all 0.2s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
+            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
+          >
+            🔍 Patterns
+          </button>
+          <button
+            onClick={() => setActiveWidget('trading-chart')}
+            style={{
+              padding: '12px 20px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+              transition: 'all 0.2s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
+            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
+          >
+            📈 Chart
+          </button>
+        </div>
+      )}
+
+      {/* Widget Modal Renders */}
+      {activeWidget === 'economic-calendar' && (
+        <EconomicCalendarWidget
+          onClose={() => setActiveWidget(null)}
+          onAction={handleAction}
+        />
+      )}
+      {activeWidget === 'market-news' && (
+        <MarketNewsFeedWidget
+          symbol={selectedSymbol}
+          onClose={() => setActiveWidget(null)}
+          onAction={handleAction}
+        />
+      )}
+      {activeWidget === 'technical-levels' && (
+        <TechnicalLevelsWidget
+          symbol={selectedSymbol}
+          onClose={() => setActiveWidget(null)}
+          onAction={handleAction}
+        />
+      )}
+      {activeWidget === 'pattern-detection' && (
+        <PatternDetectionWidget
+          symbol={selectedSymbol}
+          onClose={() => setActiveWidget(null)}
+          onAction={handleAction}
+        />
+      )}
+      {activeWidget === 'trading-chart' && (
+        <TradingChartDisplayWidget
+          symbol={selectedSymbol}
+          currentPrice={stocksData.find(s => s.symbol === selectedSymbol)?.price}
+          priceChange={stocksData.find(s => s.symbol === selectedSymbol)?.change}
+          percentChange={stocksData.find(s => s.symbol === selectedSymbol)?.changePercent}
+          onClose={() => setActiveWidget(null)}
+          onAction={handleAction}
+        />
+      )}
       </div>
     );
   };

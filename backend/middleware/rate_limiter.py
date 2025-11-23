@@ -375,4 +375,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             response.headers[f"{RateLimitConfig.HEADER_PREFIX}-Reset"] = str(reset_time)
             response.headers[f"{RateLimitConfig.HEADER_PREFIX}-Window"] = f"{limit.window_seconds}s"
 
+            # Debug logging to confirm headers are set (P1 fix)
+            logger.debug(
+                f"Rate limit headers set for {request.url.path}: "
+                f"Limit={limit.requests}, Remaining={remaining}, Reset={reset_time}"
+            )
+
         return response

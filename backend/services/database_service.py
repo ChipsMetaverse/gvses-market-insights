@@ -9,7 +9,7 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 import asyncio
-from supabase import create_client, Client
+from supabase.aio import create_client, AsyncClient
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,7 +26,7 @@ class DatabaseService:
         if not self.supabase_url or not self.supabase_key:
             raise ValueError("Supabase URL and key must be set in environment variables")
         
-        self.client: Client = create_client(self.supabase_url, self.supabase_key)
+        self.client: AsyncClient = create_client(self.supabase_url, self.supabase_key)
         
     # ============ Chat History Methods ============
     
@@ -38,7 +38,7 @@ class DatabaseService:
                 "metadata": metadata or {}
             }
             
-            response = self.client.table("conversations").insert(data).execute()
+            response = await self.client.table("conversations").insert(data).execute()
             return response.data[0]["id"]
         except Exception as e:
             print(f"Error creating conversation: {e}")
@@ -47,7 +47,7 @@ class DatabaseService:
     async def end_conversation(self, conversation_id: str) -> bool:
         """Mark a conversation as ended"""
         try:
-            self.client.table("conversations").update({
+            await self.client.table("conversations").update({
                 "ended_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", conversation_id).execute()
             return True
@@ -75,7 +75,7 @@ class DatabaseService:
                 "metadata": metadata or {}
             }
             
-            response = self.client.table("messages").insert(data).execute()
+            response = await self.client.table("messages").insert(data).execute()
             return response.data[0]["id"]
         except Exception as e:
             print(f"Error saving message: {e}")
@@ -96,11 +96,11 @@ class DatabaseService:
                 query = query.eq("conversation_id", conversation_id)
             elif user_id:
                 # Get messages from user's conversations
-                conv_response = self.client.table("conversations").select("id").eq("user_id", user_id).execute()
+                conv_response = await self.client.table("conversations").select("id").eq("user_id", user_id).execute()
                 conv_ids = [c["id"] for c in conv_response.data]
                 query = query.in_("conversation_id", conv_ids)
             
-            response = query.order("timestamp", desc=True).limit(limit).offset(offset).execute()
+            response = await query.order("timestamp", desc=True).limit(limit).offset(offset).execute()
             return response.data
         except Exception as e:
             print(f"Error retrieving conversation history: {e}")
@@ -120,7 +120,7 @@ class DatabaseService:
             if user_id:
                 query = query.eq("user_id", user_id)
             
-            response = query.gte("started_at", cutoff_date).order("started_at", desc=True).limit(limit).execute()
+            response = await query.gte("started_at", cutoff_date).order("started_at", desc=True).limit(limit).execute()
             return response.data
         except Exception as e:
             print(f"Error retrieving recent conversations: {e}")
@@ -152,7 +152,7 @@ class DatabaseService:
                 })
             
             # Upsert to handle duplicates
-            response = self.client.table("market_candles").upsert(data).execute()
+            response = await self.client.table("market_candles").upsert(data).execute()
             return len(response.data)
         except Exception as e:
             print(f"Error saving market candles: {e}")
@@ -175,7 +175,7 @@ class DatabaseService:
             if end_time:
                 query = query.lte("timestamp", end_time.isoformat())
             
-            response = query.order("timestamp", desc=False).limit(limit).execute()
+            response = await query.order("timestamp", desc=False).limit(limit).execute()
             return response.data
         except Exception as e:
             print(f"Error retrieving market candles: {e}")
@@ -207,7 +207,7 @@ class DatabaseService:
                     }
                 })
             
-            response = self.client.table("market_news").insert(data).execute()
+            response = await self.client.table("market_news").insert(data).execute()
             return len(response.data)
         except Exception as e:
             print(f"Error saving market news: {e}")
@@ -227,7 +227,7 @@ class DatabaseService:
             if symbol:
                 query = query.eq("symbol", symbol)
             
-            response = query.gte("published_at", cutoff_date).order("published_at", desc=True).limit(limit).execute()
+            response = await query.gte("published_at", cutoff_date).order("published_at", desc=True).limit(limit).execute()
             return response.data
         except Exception as e:
             print(f"Error retrieving market news: {e}")
@@ -253,7 +253,7 @@ class DatabaseService:
                 "data": data
             }
             
-            response = self.client.table("user_drawings").insert(drawing_data).execute()
+            response = await self.client.table("user_drawings").insert(drawing_data).execute()
             return response.data[0]["id"]
         except Exception as e:
             print(f"Error saving user drawing: {e}")
@@ -274,7 +274,7 @@ class DatabaseService:
             if symbol:
                 query = query.eq("symbol", symbol)
             
-            response = query.order("created_at", desc=True).limit(limit).execute()
+            response = await query.order("created_at", desc=True).limit(limit).execute()
             return response.data
         except Exception as e:
             print(f"Error retrieving user drawings: {e}")
@@ -289,17 +289,17 @@ class DatabaseService:
         """Save or update user's watchlist"""
         try:
             # Try to update existing watchlist
-            existing = self.client.table("user_watchlists").select("id").eq("user_id", user_id).eq("name", name).execute()
+            existing = await self.client.table("user_watchlists").select("id").eq("user_id", user_id).eq("name", name).execute()
             
             if existing.data:
                 # Update existing
-                self.client.table("user_watchlists").update({
+                await self.client.table("user_watchlists").update({
                     "symbols": symbols,
                     "updated_at": datetime.now(timezone.utc).isoformat()
                 }).eq("id", existing.data[0]["id"]).execute()
             else:
                 # Create new
-                self.client.table("user_watchlists").insert({
+                await self.client.table("user_watchlists").insert({
                     "user_id": user_id,
                     "name": name,
                     "symbols": symbols
@@ -317,7 +317,7 @@ class DatabaseService:
     ) -> List[str]:
         """Get user's watchlist symbols"""
         try:
-            response = self.client.table("user_watchlists").select("symbols").eq("user_id", user_id).eq("name", name).eq("is_active", True).execute()
+            response = await self.client.table("user_watchlists").select("symbols").eq("user_id", user_id).eq("name", name).eq("is_active", True).execute()
             
             if response.data:
                 return response.data[0]["symbols"]
@@ -352,7 +352,7 @@ class DatabaseService:
                 "error_message": error_message
             }
             
-            self.client.table("query_analytics").insert(data).execute()
+            await self.client.table("query_analytics").insert(data).execute()
             return True
         except Exception as e:
             print(f"Error logging query: {e}")
@@ -382,7 +382,7 @@ class DatabaseService:
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
-            self.client.table("request_logs").insert(data).execute()
+            await self.client.table("request_logs").insert(data).execute()
             return True
         except Exception as e:
             print(f"Error logging request event: {e}")
@@ -401,7 +401,7 @@ class DatabaseService:
             if user_id:
                 query = query.eq("user_id", user_id)
             
-            response = query.gte("timestamp", cutoff_date).execute()
+            response = await query.gte("timestamp", cutoff_date).execute()
             
             if not response.data:
                 return {}
@@ -452,17 +452,17 @@ class DatabaseService:
             
             # Delete messages older than 1 year
             year_ago = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat()
-            response = self.client.table("messages").delete().lt("timestamp", year_ago).execute()
+            response = await self.client.table("messages").delete().lt("timestamp", year_ago).execute()
             deleted_counts["old_messages"] = len(response.data) if response.data else 0
             
             # Delete high-frequency candles older than 3 months
             three_months_ago = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
-            response = self.client.table("market_candles").delete().in_("timeframe", ["1m", "5m", "15m"]).lt("timestamp", three_months_ago).execute()
+            response = await self.client.table("market_candles").delete().in_("timeframe", ["1m", "5m", "15m"]).lt("timestamp", three_months_ago).execute()
             deleted_counts["old_candles"] = len(response.data) if response.data else 0
             
             # Delete news older than 6 months
             six_months_ago = (datetime.now(timezone.utc) - timedelta(days=180)).isoformat()
-            response = self.client.table("market_news").delete().lt("published_at", six_months_ago).execute()
+            response = await self.client.table("market_news").delete().lt("published_at", six_months_ago).execute()
             deleted_counts["old_news"] = len(response.data) if response.data else 0
             
             return deleted_counts

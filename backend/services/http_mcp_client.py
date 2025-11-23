@@ -127,10 +127,29 @@ class HTTPMCPClient:
                 
                 self._session_id = session_id
                 logger.info(f"MCP session initialized successfully: {session_id}")
-                
-                result = response.json()
+
+                # Safely parse JSON response with fallback for empty bodies
+                try:
+                    result = response.json()
+                except json.JSONDecodeError as json_err:
+                    logger.debug(f"Empty or invalid JSON in init response: {json_err}, using default")
+                    # Return a valid MCP initialize response
+                    result = {
+                        "jsonrpc": "2.0",
+                        "result": {
+                            "protocolVersion": "2024-11-05",
+                            "sessionId": session_id,
+                            "capabilities": {}
+                        },
+                        "id": 1
+                    }
+
                 return result
-                
+
+            except json.JSONDecodeError as e:
+                # This catches the outer try block if response parsing fails before session ID
+                logger.error(f"Failed to initialize MCP session: {e}")
+                raise
             except Exception as e:
                 logger.error(f"Failed to initialize MCP session: {e}")
                 raise
@@ -323,17 +342,56 @@ class HTTPMCPClient:
             
             # Check HTTP status
             response.raise_for_status()
-            
-            # Parse JSON response
-            result = response.json()
-            
+
+            # Parse response - handle both JSON and SSE formats
+            content_type = response.headers.get("content-type", "")
+            response_text = response.text
+
+            # Check if response is SSE format (text/event-stream or contains "event:")
+            if "text/event-stream" in content_type or response_text.startswith("event:"):
+                # Parse SSE format: extract JSON from "data:" line
+                logger.debug("Parsing SSE response format")
+                for line in response_text.split('\n'):
+                    if line.startswith('data: '):
+                        json_str = line[6:]  # Remove "data: " prefix
+                        try:
+                            result = json.loads(json_str)
+                            break
+                        except json.JSONDecodeError:
+                            continue
+                else:
+                    # No valid JSON found in SSE
+                    logger.error(f"No valid JSON data found in SSE response: {response_text[:200]}")
+                    return {
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32700,
+                            "message": "Parse error: Invalid SSE format"
+                        },
+                        "id": request.get("id", 1)
+                    }
+            else:
+                # Regular JSON response
+                try:
+                    result = response.json()
+                except json.JSONDecodeError as json_err:
+                    logger.debug(f"Empty or invalid JSON in response: {json_err}")
+                    return {
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32700,
+                            "message": "Parse error: Empty or invalid JSON response"
+                        },
+                        "id": request.get("id", 1)
+                    }
+
             # Check for JSON-RPC errors
             if "error" in result:
                 error = result["error"]
                 error_msg = f"MCP server error: {error.get('message', 'Unknown error')}"
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
-            
+
             return result
             
         except httpx.HTTPStatusError as e:

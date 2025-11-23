@@ -222,12 +222,9 @@ focused_voice_verification.py
 quick_localhost_test.py
 setup_supabase_tables.py
 test-console-errors.js
-backend/analyze.md
-backend/chart_control_api.py
 backend/fly.toml
 backend/sse-server.js
 backend/websocket-relay-unified-updated.ts
-frontend/tests/*.spec.ts
 market-mcp-server/AGENT_BUILDER_CONFIGURATION.md
 market-mcp-server/configure_agent_builder.py
 market-mcp-server/sse-server-old.js

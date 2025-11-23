@@ -248,7 +248,7 @@ class MarketResponseFormatter:
     @staticmethod
     def format_stock_snapshot_with_headlines(symbol: str,
                                              price_data: Dict[str, Any],
-                                             news: List[Dict[str, Any]] | None = None) -> str:
+                                             news: Optional[List[Dict[str, Any]]] = None) -> str:
         """
         Format a rich, structured stock snapshot with tables and proper markdown.
         Matches the ideal format with large price display and organized sections.
@@ -395,9 +395,9 @@ class MarketResponseFormatter:
     def format_stock_snapshot_ideal(symbol: str,
                                     company_name: str,
                                     price_data: Dict[str, Any],
-                                    news: List[Dict[str, Any]] | None = None,
-                                    technical_levels: Dict[str, Any] | None = None,
-                                    after_hours: Dict[str, Any] | None = None) -> str:
+                                    news: Optional[List[Dict[str, Any]]] = None,
+                                    technical_levels: Optional[Dict[str, Any]] = None,
+                                    after_hours: Optional[Dict[str, Any]] = None) -> str:
         """
         Format response to match ideal format from screenshots.
         Chart visualization is handled by frontend TradingView component.
@@ -716,9 +716,9 @@ class MarketResponseFormatter:
     @staticmethod
     def format_stock_snapshot_prototype(symbol: str,
                                         price_data: Dict[str, Any],
-                                        news: List[Dict[str, Any]] | None = None,
-                                        technical_levels: Dict[str, Any] | None = None,
-                                        status_messages: List[str] | None = None) -> str:
+                                        news: Optional[List[Dict[str, Any]]] = None,
+                                        technical_levels: Optional[Dict[str, Any]] = None,
+                                        status_messages: Optional[List[str]] = None) -> str:
         """
         Compact snapshot that mirrors the prototype exactly:
         - HERE’S YOUR REAL‑TIME {SYMBOL} ({SYMBOL}) SNAPSHOT:

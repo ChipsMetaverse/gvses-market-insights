@@ -94,7 +94,7 @@ class MarketMCPServer {
             type: 'object',
             properties: {
               symbol: { type: 'string', description: 'Stock ticker symbol' },
-              period: { type: 'string', enum: ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', 'max'], description: 'Time period' },
+              period: { type: 'string', enum: ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y'], description: 'Time period' },
               interval: { type: 'string', enum: ['1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo'], description: 'Data interval' }
             },
             required: ['symbol']
@@ -1829,33 +1829,61 @@ class MarketMCPServer {
   
   findSupportResistanceLevels(prices) {
     const closes = prices.map(p => p.close);
+    const highs = prices.map(p => p.high);
+    const lows = prices.map(p => p.low);
     const sorted = [...closes].sort((a, b) => a - b);
-    
+
     // Find levels where price has bounced multiple times
     const levels = [];
-    const tolerance = 0.02; // 2% tolerance
-    
+    const tolerance = 0.03; // 3% tolerance (increased from 2%)
+    const minTouches = 2; // Reduced from 3 to 2
+
     for (let i = 0; i < sorted.length; i++) {
       const level = sorted[i];
-      const touches = closes.filter(p => 
+      const touches = closes.filter(p =>
         Math.abs(p - level) / level < tolerance
       ).length;
-      
-      if (touches >= 3) {
+
+      if (touches >= minTouches) {
         levels.push({ price: level, touches });
       }
     }
-    
+
     // Sort by number of touches
     levels.sort((a, b) => b.touches - a.touches);
-    
+
     const currentPrice = closes[closes.length - 1];
-    const support = levels.filter(l => l.price < currentPrice).slice(0, 3);
-    const resistance = levels.filter(l => l.price > currentPrice).slice(0, 3);
-    
+    let support = levels.filter(l => l.price < currentPrice).slice(0, 3);
+    let resistance = levels.filter(l => l.price > currentPrice).slice(0, 3);
+
+    // Fallback: If no levels found, use pivot points and recent highs/lows
+    if (support.length === 0 || resistance.length === 0) {
+      const recentPeriod = Math.min(20, prices.length);
+      const recentPrices = prices.slice(-recentPeriod);
+      const recentHighs = recentPrices.map(p => p.high);
+      const recentLows = recentPrices.map(p => p.low);
+
+      // Use recent significant levels
+      if (support.length === 0) {
+        const lowLevels = [...new Set(recentLows)]
+          .filter(l => l < currentPrice)
+          .sort((a, b) => b - a)
+          .slice(0, 3);
+        support = lowLevels.map(price => ({ price, touches: 1 }));
+      }
+
+      if (resistance.length === 0) {
+        const highLevels = [...new Set(recentHighs)]
+          .filter(h => h > currentPrice)
+          .sort((a, b) => a - b)
+          .slice(0, 3);
+        resistance = highLevels.map(price => ({ price, touches: 1 }));
+      }
+    }
+
     return {
-      support: support.map(s => s.price),
-      resistance: resistance.map(r => r.price)
+      support: support.map(s => Math.round(s.price * 100) / 100),
+      resistance: resistance.map(r => Math.round(r.price * 100) / 100)
     };
   }
   
@@ -2338,22 +2366,109 @@ class MarketMCPServer {
   }
   
   async getChartPatterns(args) {
-    // This would require sophisticated pattern recognition
-    // Simplified implementation
-    return {
-      symbol: args.symbol,
-      timeframe: args.timeframe,
-      patterns: [
-        {
-          pattern: 'Ascending Triangle',
-          reliability: 'High',
-          signal: 'Bullish',
-          description: 'Price making higher lows with resistance at same level'
-        }
-      ],
-      message: 'Advanced pattern recognition would require specialized algorithms',
-      timestamp: new Date().toISOString()
-    };
+    try {
+      // Get historical data for pattern detection
+      const history = await yahooFinance.historical(args.symbol, {
+        period1: this.getPeriodDate(args.timeframe === '1w' ? '3mo' : args.timeframe === '1mo' ? '1y' : '1mo'),
+        period2: new Date(),
+        interval: args.timeframe === '1d' ? '1d' : args.timeframe === '1w' ? '1wk' : '1d'
+      });
+
+      if (!history || history.length < 20) {
+        // Not enough data for pattern detection
+        return {
+          symbol: args.symbol,
+          timeframe: args.timeframe,
+          patterns: [],
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      const prices = history.map(h => ({
+        time: h.date,
+        open: h.open,
+        high: h.high,
+        low: h.low,
+        close: h.close,
+        volume: h.volume
+      }));
+
+      // Detect basic patterns
+      const detectedPatterns = this.detectBasicPatterns(prices);
+
+      return {
+        symbol: args.symbol,
+        timeframe: args.timeframe,
+        patterns: detectedPatterns,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      throw new Error(`Failed to detect patterns for ${args.symbol}: ${error.message}`);
+    }
+  }
+
+  detectBasicPatterns(prices) {
+    const patterns = [];
+    const closes = prices.map(p => p.close);
+
+    // Only detect patterns if we have enough data
+    if (closes.length < 20) return [];
+
+    // Detect trend: compare first 1/3 vs last 1/3
+    const firstThird = closes.slice(0, Math.floor(closes.length / 3));
+    const lastThird = closes.slice(-Math.floor(closes.length / 3));
+    const firstAvg = firstThird.reduce((a, b) => a + b, 0) / firstThird.length;
+    const lastAvg = lastThird.reduce((a, b) => a + b, 0) / lastThird.length;
+    const trendChange = ((lastAvg - firstAvg) / firstAvg) * 100;
+
+    // Detect uptrend
+    if (trendChange > 5) {
+      patterns.push({
+        name: 'Uptrend',
+        signal: 'BULLISH',
+        category: 'Trend',
+        confidence: Math.min(Math.round(Math.abs(trendChange)), 100),
+        description: `Price trending up ${trendChange.toFixed(1)}% over period`,
+        timeframe: 'current',
+        startTime: prices[0].time,
+        endTime: prices[prices.length - 1].time
+      });
+    }
+
+    // Detect downtrend
+    if (trendChange < -5) {
+      patterns.push({
+        name: 'Downtrend',
+        signal: 'BEARISH',
+        category: 'Trend',
+        confidence: Math.min(Math.round(Math.abs(trendChange)), 100),
+        description: `Price trending down ${Math.abs(trendChange).toFixed(1)}% over period`,
+        timeframe: 'current',
+        startTime: prices[0].time,
+        endTime: prices[prices.length - 1].time
+      });
+    }
+
+    // Detect consolidation (low volatility)
+    const recentPrices = closes.slice(-20);
+    const maxPrice = Math.max(...recentPrices);
+    const minPrice = Math.min(...recentPrices);
+    const range = ((maxPrice - minPrice) / minPrice) * 100;
+
+    if (range < 5 && Math.abs(trendChange) < 3) {
+      patterns.push({
+        name: 'Consolidation',
+        signal: 'NEUTRAL',
+        category: 'Range',
+        confidence: 70,
+        description: `Price consolidating in ${range.toFixed(1)}% range`,
+        timeframe: 'current',
+        startTime: prices[prices.length - 20].time,
+        endTime: prices[prices.length - 1].time
+      });
+    }
+
+    return patterns;
   }
 
   // Chart Control Methods
@@ -2766,12 +2881,14 @@ class MarketMCPServer {
             
             // Handle tool calls directly
             if (req.body.method === 'tools/list') {
-              // Return list of available tools
+              // Return list of available tools - ADD get_support_resistance and get_chart_patterns
               const tools = [
                 { name: 'get_stock_quote', description: 'Get real-time stock quote', inputSchema: { type: 'object', properties: { symbol: { type: 'string' } }, required: ['symbol'] } },
                 { name: 'get_stock_history', description: 'Get historical stock data', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, period: { type: 'string' }, interval: { type: 'string' } }, required: ['symbol'] } },
                 { name: 'get_market_news', description: 'Get market news', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, limit: { type: 'number' } }, required: ['symbol'] } },
-                { name: 'get_technical_indicators', description: 'Calculate technical indicators', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, indicators: { type: 'array' } }, required: ['symbol', 'indicators'] } }
+                { name: 'get_technical_indicators', description: 'Calculate technical indicators', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, indicators: { type: 'array' } }, required: ['symbol', 'indicators'] } },
+                { name: 'get_support_resistance', description: 'Calculate support and resistance levels', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, period: { type: 'string', enum: ['1mo', '3mo', '6mo', '1y'] } }, required: ['symbol'] } },
+                { name: 'get_chart_patterns', description: 'Detect chart patterns (uptrend, downtrend, consolidation)', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, timeframe: { type: 'string', enum: ['1d', '1w', '1mo'] } }, required: ['symbol'] } }
               ];
               return res.json({ jsonrpc: '2.0', result: { tools }, id: req.body.id });
             } else if (req.body.method === 'tools/call') {
@@ -2810,6 +2927,12 @@ class MarketMCPServer {
                     break;
                   case 'get_technical_indicators':
                     result = await this.getTechnicalIndicators(args);
+                    break;
+                  case 'get_support_resistance':
+                    result = await this.getSupportResistance(args);
+                    break;
+                  case 'get_chart_patterns':
+                    result = await this.getChartPatterns(args);
                     break;
                   case 'stream_market_news':
                     // Non-streaming mode

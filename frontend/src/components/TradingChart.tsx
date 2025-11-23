@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createChart, ColorType, Time, IChartApi, ISeriesApi, CandlestickSeries } from 'lightweight-charts'
 import { marketDataService } from '../services/marketDataService'
 import { chartControlService } from '../services/chartControlService'
@@ -7,7 +7,9 @@ import { useIndicatorState } from '../hooks/useIndicatorState'
 import { useIndicatorContext } from '../contexts/IndicatorContext'
 import { useChartSeries } from '../hooks/useChartSeries'
 import { ChartToolbar } from './ChartToolbar'
-import { DrawingPrimitive } from '../services/DrawingPrimitive'
+import { DrawingStore } from '../drawings/DrawingStore'
+import { createDrawingOverlay } from '../drawings/DrawingOverlay'
+import { createToolbox } from '../drawings/ToolboxManager'
 import './TradingChart.css'
 
 interface TradingChartProps {
@@ -23,17 +25,12 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
-  const drawingPrimitiveRef = useRef<DrawingPrimitive | null>(null)
   const oscillatorChartRef = useRef<IChartApi | null>(null)
   const oscillatorContainerRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [levelPositions, setLevelPositions] = useState<{ sell_high?: number; buy_low?: number; btd?: number }>({})
   const [isChartReady, setIsChartReady] = useState(false)
-  
-  // Drawing mode state
-  const [drawingMode, setDrawingMode] = useState<string | null>(null)
-  const [drawingStartPoint, setDrawingStartPoint] = useState<{ time: any; price: number } | null>(null)
 
   // Indicator state and series management
   const { state: indicatorState, actions: indicatorActions } = useIndicatorState()
@@ -49,6 +46,11 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
   })
 
   const [patternHighlight, setPatternHighlight] = useState<{ title: string; description?: string } | null>(null)
+
+  // Drawing toolbox state (singleton store, lives outside React lifecycle)
+  const store = useMemo(() => new DrawingStore(), [])
+  const toolboxRef = useRef<ReturnType<typeof createToolbox> | null>(null)
+  const overlayRef = useRef<ReturnType<typeof createDrawingOverlay> | null>(null)
 
   const showOscillatorPane =
     (overlayVisibility.rsi && indicatorState.indicators.rsi.enabled) ||
@@ -103,7 +105,7 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
     const timer = setTimeout(() => setPatternHighlight(null), 6000)
     return () => clearTimeout(timer)
   }, [patternHighlight])
-  
+
   // Lifecycle management refs
   const isMountedRef = useRef(true)
   const isChartDisposedRef = useRef(false)
@@ -188,7 +190,37 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
         low: candle.low,
         close: candle.close
       })).sort((a, b) => (a.time as number) - (b.time as number))
-      
+
+      // Add white space padding for linear scaling (from TradingView tutorial)
+      // Calculate time interval between candles
+      if (chartData.length > 1) {
+        const timeInterval = (chartData[1].time as number) - (chartData[0].time as number)
+        const whiteSpaceCount = 100
+
+        // Create leading white spaces
+        const leadingSpaces = Array(whiteSpaceCount).fill(null).map((_, i) => ({
+          time: ((chartData[0].time as number) - (timeInterval * (whiteSpaceCount - i))) as Time,
+          open: chartData[0].open,
+          high: chartData[0].open,
+          low: chartData[0].open,
+          close: chartData[0].open
+        }))
+
+        // Create trailing white spaces
+        const lastIndex = chartData.length - 1
+        const trailingSpaces = Array(whiteSpaceCount).fill(null).map((_, i) => ({
+          time: ((chartData[lastIndex].time as number) + (timeInterval * (i + 1))) as Time,
+          open: chartData[lastIndex].close,
+          high: chartData[lastIndex].close,
+          low: chartData[lastIndex].close,
+          close: chartData[lastIndex].close
+        }))
+
+        // Combine: leading spaces + actual data + trailing spaces
+        const paddedData = [...leadingSpaces, ...chartData, ...trailingSpaces]
+        return paddedData
+      }
+
       return chartData
     } catch (error: any) {
       if (error.name === 'AbortError' || !isMountedRef.current) {
@@ -262,11 +294,11 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
     }
     
     const chartData = await fetchChartData(symbolToUpdate)
-    
+
     if (chartData && chartData.length > 0 && !isChartDisposedRef.current && candlestickSeriesRef.current) {
       try {
         candlestickSeriesRef.current.setData(chartData)
-        
+
         if (chartRef.current) {
           // Apply smart timeframe-based zoom instead of fitContent()
           applyTimeframeZoom(chartData)
@@ -377,31 +409,55 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
         })
       }
       
+      // Helper function to deduplicate and cluster price levels
+      const deduplicateAndLimitLevels = (levels: number[], maxCount: number = 5): number[] => {
+        if (!levels?.length) return []
+
+        // Sort levels
+        const sorted = [...levels].sort((a, b) => a - b)
+
+        // Deduplicate and cluster levels within 0.1% of each other
+        const deduplicated: number[] = []
+        let lastLevel: number | null = null
+
+        for (const level of sorted) {
+          if (lastLevel === null || Math.abs(level - lastLevel) / lastLevel > 0.001) {
+            deduplicated.push(level)
+            lastLevel = level
+          }
+        }
+
+        // Limit to max count
+        return deduplicated.slice(0, maxCount)
+      }
+
       // Support levels - orange dotted lines
       if (swingLevels?.support_levels?.length) {
-        swingLevels.support_levels.forEach((support: number) => {
+        const deduplicatedSupport = deduplicateAndLimitLevels(swingLevels.support_levels, 5)
+        deduplicatedSupport.forEach((support: number, index: number) => {
           const line = candlestickSeriesRef.current.createPriceLine({
             price: support,
             color: '#fb923c',  // Orange for support
             lineWidth: 1,
             lineStyle: 3,  // Dotted
             axisLabelVisible: true,
-            title: 'S',
+            title: `S${index + 1}`,
           })
           priceLineRefsRef.current.push(line)
         })
       }
-      
-      // Resistance levels - cyan dotted lines  
+
+      // Resistance levels - cyan dotted lines
       if (swingLevels?.resistance_levels?.length) {
-        swingLevels.resistance_levels.forEach((resistance: number) => {
+        const deduplicatedResistance = deduplicateAndLimitLevels(swingLevels.resistance_levels, 5)
+        deduplicatedResistance.forEach((resistance: number, index: number) => {
           const line = candlestickSeriesRef.current.createPriceLine({
             price: resistance,
             color: '#06b6d4',  // Cyan for resistance
             lineWidth: 1,
             lineStyle: 3,  // Dotted
             axisLabelVisible: true,
-            title: 'R',
+            title: `R${index + 1}`,
           })
           priceLineRefsRef.current.push(line)
         })
@@ -450,7 +506,7 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
         horzLines: { color: '#f0f0f0' },
       },
       crosshair: {
-        mode: 1,
+        mode: 0, // Normal mode - free movement without snapping to data points
       },
       rightPriceScale: {
         borderColor: '#e0e0e0',
@@ -471,14 +527,10 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
       wickUpColor: '#22c55e',
     })
     
-    // Store references but don't attach primitive yet
+    // Store references
     chartRef.current = chart
     candlestickSeriesRef.current = candlestickSeries
-    
-    // Initialize drawing primitive but don't attach yet
-    const drawingPrimitive = new DrawingPrimitive()
-    drawingPrimitiveRef.current = drawingPrimitive
-    
+
     // Mark chart as ready for event subscriptions
     setIsChartReady(true)
     
@@ -487,16 +539,6 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
     
     // Load initial data
     updateChartData(symbol).then(() => {
-      // NOW attach the drawing primitive after data is loaded
-      console.log('[TradingChart] Attaching DrawingPrimitive after data load')
-      candlestickSeries.attachPrimitive(drawingPrimitive)
-      
-      // Connect drawing primitive to enhanced chart control
-      enhancedChartControl.setDrawingPrimitive(drawingPrimitive)
-      
-      // Force a chart update to ensure primitive is rendered
-      chart.applyOptions({})
-      
       updateTechnicalLevels()
       setTimeout(() => updateLabelPositionsRef.current(), 200)
 
@@ -528,7 +570,46 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
 
     // Connect enhanced chart control to indicator system
     enhancedChartControl.initialize(chart, candlestickSeries, indicatorDispatch)
-    
+
+    // Attach drawing store to enhanced chart control for programmatic API
+    enhancedChartControl.attach(chart, candlestickSeries as any, store)
+
+    // Initialize drawing overlay with callbacks
+    overlayRef.current = createDrawingOverlay({
+      chart,
+      series: candlestickSeries,
+      container: chartContainerRef.current,
+      store,
+      onUpdate: (d) => {
+        console.log('Drawing updated:', d)
+        // TODO: PATCH /api/drawings/:id
+      },
+      onDelete: (id) => {
+        console.log('Drawing deleted:', id)
+        // TODO: DELETE /api/drawings/:id
+      },
+    })
+
+    // Initialize toolbox with callbacks
+    toolboxRef.current = createToolbox({
+      chart,
+      series: candlestickSeries,
+      container: chartContainerRef.current,
+      store,
+      onCreate: (d) => {
+        console.log('Drawing created:', d)
+        // TODO: POST /api/drawings
+      },
+      onUpdate: (d) => {
+        console.log('Drawing updated (toolbox):', d)
+        // TODO: PATCH /api/drawings/:id
+      },
+      onDelete: (id) => {
+        console.log('Drawing deleted (toolbox):', id)
+        // TODO: DELETE /api/drawings/:id
+      },
+    })
+
     // Expose to window for agent access
     ;(window as any).enhancedChartControl = enhancedChartControl
     ;(window as any).enhancedChartControlReady = true
@@ -566,6 +647,16 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
       }
 
       clearAllOverlays()
+
+      // Clean up drawing toolbox and overlay
+      if (toolboxRef.current) {
+        toolboxRef.current.destroy()
+        toolboxRef.current = null
+      }
+      if (overlayRef.current) {
+        overlayRef.current.destroy()
+        overlayRef.current = null
+      }
 
       // Dispose the chart
       try {
@@ -826,95 +917,9 @@ export function TradingChart({ symbol, days = 100, displayDays, interval = "1d",
     }
   }, [indicatorState.data, indicatorState.indicators, overlayVisibility, oscillatorSeries]);
   
-  const handleIndicatorToggle = (indicator: string) => {
-    // Toggle indicator visibility based on the indicator id
-    if (indicator === 'ma') {
-      setOverlayVisibilityForIndicator('movingAverages', !overlayVisibility.movingAverages)
-    } else if (indicator === 'bollinger') {
-      setOverlayVisibilityForIndicator('bollinger', !overlayVisibility.bollinger)
-    } else if (indicator === 'rsi') {
-      setOverlayVisibilityForIndicator('rsi', !overlayVisibility.rsi)
-    } else if (indicator === 'macd') {
-      setOverlayVisibilityForIndicator('macd', !overlayVisibility.macd)
-    }
-  }
-
-  const handleDrawingToolSelect = (tool: string) => {
-    console.log('Drawing tool selected:', tool)
-    setDrawingMode(tool)
-    setDrawingStartPoint(null)
-    
-    // Unsubscribe previous click handler if any
-    if (chartRef.current) {
-      chartRef.current.unsubscribeClick(() => {})
-    }
-    
-    // Setup click handler for the selected tool
-    if (tool && chartRef.current) {
-      chartRef.current.subscribeClick((params: any) => {
-        if (!params.time || params.seriesPrice === undefined) return
-        
-        const clickPoint = { 
-          time: params.time, 
-          price: params.seriesPrice(candlestickSeriesRef.current) || params.price 
-        }
-        
-        switch (tool) {
-          case 'trendline':
-            if (!drawingStartPoint) {
-              setDrawingStartPoint(clickPoint)
-            } else {
-              // Complete the trendline
-              if (drawingPrimitiveRef.current) {
-                drawingPrimitiveRef.current.addTrendline(
-                  drawingStartPoint.price,
-                  drawingStartPoint.time,
-                  clickPoint.price,
-                  clickPoint.time
-                )
-              }
-              setDrawingStartPoint(null)
-              setDrawingMode(null)
-            }
-            break
-            
-          case 'horizontal':
-            // Add horizontal line immediately
-            if (drawingPrimitiveRef.current) {
-              drawingPrimitiveRef.current.addHorizontalLine(clickPoint.price, 'Horizontal')
-            }
-            break
-            
-          case 'fibonacci':
-            if (!drawingStartPoint) {
-              setDrawingStartPoint(clickPoint)
-            } else {
-              // Complete the fibonacci
-              if (drawingPrimitiveRef.current) {
-                const highPrice = Math.max(drawingStartPoint.price, clickPoint.price)
-                const lowPrice = Math.min(drawingStartPoint.price, clickPoint.price)
-                drawingPrimitiveRef.current.addFibonacci(
-                  highPrice,
-                  lowPrice,
-                  drawingStartPoint.time,
-                  clickPoint.time
-                )
-              }
-              setDrawingStartPoint(null)
-              setDrawingMode(null)
-            }
-            break
-        }
-      })
-    }
-  }
-
   return (
     <div className="trading-chart-container">
-      <ChartToolbar
-        onIndicatorToggle={handleIndicatorToggle}
-        onDrawingToolSelect={handleDrawingToolSelect}
-      />
+      <ChartToolbar setTool={(tool) => toolboxRef.current?.setTool(tool)} />
 
       {isLoading && (
         <div style={{

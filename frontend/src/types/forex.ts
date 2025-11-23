@@ -12,7 +12,9 @@ export interface ForexCalendarEvent {
   title: string;
   currency: string;
   impact: ForexImpact;
-  timestamp: string;
+  datetime: string;
+  datetime_utc: string;
+  datetime_local: string;
   previous?: string | null;
   forecast?: string | null;
   actual?: string | null;

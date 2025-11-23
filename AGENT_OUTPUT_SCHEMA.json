@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "G'sves Agent Output with ChatKit Widgets",
+  "type": "object",
+  "properties": {
+    "response_text": {
+      "type": "string",
+      "description": "Natural language response to display to the user"
+    },
+    "query_intent": {
+      "type": "string",
+      "enum": ["news", "economic_events", "patterns", "technical_levels", "chart", "comprehensive", "unknown"],
+      "description": "Classified intent of the user's query"
+    },
+    "symbol": {
+      "type": "string",
+      "description": "Stock ticker symbol mentioned in query (e.g., TSLA, AAPL)",
+      "pattern": "^[A-Z]{1,5}$"
+    },
+    "widgets": {
+      "type": "array",
+      "description": "Array of ChatKit widgets to display based on query intent",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["type", "children"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "Card"
+              },
+              "children": {
+                "type": "array",
+                "description": "Widget components inside the card"
+              },
+              "size": {
+                "type": "string",
+                "enum": ["sm", "md", "lg", "full"],
+                "default": "md"
+              },
+              "status": {
+                "type": "object",
+                "properties": {
+                  "text": {"type": "string"},
+                  "icon": {"type": "string"}
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["type", "children"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ListView"
+              },
+              "children": {
+                "type": "array",
+                "description": "List items"
+              },
+              "limit": {
+                "oneOf": [
+                  {"type": "integer"},
+                  {"type": "string", "const": "auto"}
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "required": ["response_text", "query_intent"]
+}

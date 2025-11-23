@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Main entrypoint for the forex_mcp MCP server.
 

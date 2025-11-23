@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { TradingDashboardChatOnly } from './components/TradingDashboardChatOnly';
 import { TradingDashboardSimple } from './components/TradingDashboardSimple';
 import { ProviderTest } from './components/ProviderTest';
 import { IndicatorProvider } from './contexts/IndicatorContext';
@@ -18,7 +19,7 @@ function App() {
           element={
             <ProtectedRoute>
               <IndicatorProvider>
-                <TradingDashboardSimple />
+                <TradingDashboardChatOnly />
               </IndicatorProvider>
             </ProtectedRoute>
           }
@@ -27,11 +28,19 @@ function App() {
           path="/demo"
           element={
             <IndicatorProvider>
-              <TradingDashboardSimple />
+              <TradingDashboardChatOnly />
             </IndicatorProvider>
           }
         />
         <Route path="/provider-test" element={<ProviderTest />} />
+        <Route
+          path="/test-chart"
+          element={
+            <IndicatorProvider>
+              <TradingDashboardSimple />
+            </IndicatorProvider>
+          }
+        />
         <Route path="/" element={<Navigate to="/signin" replace />} />
       </Routes>
     </AuthProvider>

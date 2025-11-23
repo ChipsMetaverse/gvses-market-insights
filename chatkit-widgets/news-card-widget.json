@@ -1,0 +1,40 @@
+{
+  "type": "Card",
+  "size": "lg",
+  "status": {
+    "text": "Live News",
+    "icon": "newspaper"
+  },
+  "children": [
+    {
+      "type": "Title",
+      "value": "{{symbol}} Market News",
+      "size": "lg"
+    },
+    {
+      "type": "Divider",
+      "spacing": 12
+    },
+    {
+      "type": "ListView",
+      "limit": 10,
+      "children": [
+        {
+          "type": "ListViewItem",
+          "children": [
+            {
+              "type": "Text",
+              "value": "{{article_title}}",
+              "weight": "semibold"
+            },
+            {
+              "type": "Caption",
+              "value": "{{article_source}} • {{article_time}}",
+              "size": "sm"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

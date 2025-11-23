@@ -386,6 +386,44 @@ class MarketDataService {
   clearCache(): void {
     this.cache.clear();
   }
+
+  // Technical Levels - Support/Resistance
+  async getTechnicalLevels(symbol: string): Promise<TechnicalLevels> {
+    const cacheKey = `levels-${symbol}`;
+    const cached = this.getCached<TechnicalLevels>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const apiUrl = resolveApiUrl();
+      const response = await axios.get(`${apiUrl}/api/technical-levels`, {
+        params: { symbol }
+      });
+      this.setCache(cacheKey, response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching technical levels for ${symbol}:`, error);
+      throw error;
+    }
+  }
+
+  // Pattern Detection
+  async getPatternDetection(symbol: string): Promise<{ patterns: any[] }> {
+    const cacheKey = `patterns-${symbol}`;
+    const cached = this.getCached<any>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const apiUrl = resolveApiUrl();
+      const response = await axios.get(`${apiUrl}/api/pattern-detection`, {
+        params: { symbol }
+      });
+      this.setCache(cacheKey, response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching pattern detection for ${symbol}:`, error);
+      throw error;
+    }
+  }
 }
 
 // New dashboard API functions

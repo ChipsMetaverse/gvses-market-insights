@@ -4,7 +4,7 @@ Agent 3: Real-Time Infrastructure Engineer
 """
 
 from fastapi import WebSocket, WebSocketDisconnect
-from typing import Dict, Set, List, Any
+from typing import Dict, Set, List, Any, Union
 import asyncio
 import json
 import logging
@@ -72,7 +72,7 @@ class ChartCommandStreamer:
     async def broadcast_command(
         self, 
         session_id: str, 
-        command: str | Dict[str, Any],
+        command: Union[str, Dict[str, Any]],
         command_type: str = "chart_command"
     ):
         """
@@ -128,7 +128,7 @@ class ChartCommandStreamer:
     async def broadcast_commands_batch(
         self, 
         session_id: str, 
-        commands: List[str | Dict[str, Any]]
+        commands: List[Union[str, Dict[str, Any]]]
     ):
         """Broadcast multiple commands in a single batch for efficiency."""
         if session_id not in self.active_connections:
@@ -188,7 +188,7 @@ chart_streamer = ChartCommandStreamer()
 # Helper function for easy access from other modules
 async def stream_chart_command(
     session_id: str,
-    command: str | Dict[str, Any],
+    command: Union[str, Dict[str, Any]],
     command_type: str = "chart_command"
 ):
     """
@@ -207,7 +207,7 @@ async def stream_chart_command(
 
 async def stream_chart_commands_batch(
     session_id: str,
-    commands: List[str | Dict[str, Any]]
+    commands: List[Union[str, Dict[str, Any]]]
 ):
     """Stream multiple commands in a batch."""
     await chart_streamer.broadcast_commands_batch(session_id, commands)

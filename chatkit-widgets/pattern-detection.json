@@ -1,0 +1,477 @@
+{
+  "type": "Card",
+  "size": "md",
+  "padding": 4,
+  "children": [
+    {
+      "type": "Row",
+      "align": "center",
+      "justify": "between",
+      "children": [
+        {
+          "type": "Row",
+          "align": "center",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Title",
+              "value": "Pattern Detection",
+              "size": "md"
+            },
+            {
+              "type": "Badge",
+              "label": "TSLA",
+              "color": "secondary",
+              "variant": "soft"
+            }
+          ]
+        },
+        {
+          "type": "Button",
+          "variant": "outline",
+          "onClickAction": {
+            "type": "patterns.refresh",
+            "payload": {
+              "symbol": "TSLA"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "Divider"
+    },
+    {
+      "type": "Row",
+      "align": "center",
+      "gap": 3,
+      "children": [
+        {
+          "type": "Checkbox",
+          "name": "ui.showAll",
+          "label": "Show All Patterns",
+          "defaultChecked": true,
+          "onChangeAction": {
+            "type": "patterns.toggleShowAll"
+          }
+        },
+        {
+          "type": "Spacer"
+        },
+        {
+          "type": "Row",
+          "gap": 1,
+          "children": [
+            {
+              "type": "Button",
+              "label": "Reversal",
+              "pill": true,
+              "color": "danger",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "patterns.filterCategory",
+                "payload": {
+                  "category": "reversal"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "Continuation",
+              "pill": true,
+              "color": "info",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "patterns.filterCategory",
+                "payload": {
+                  "category": "continuation"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "Neutral",
+              "pill": true,
+              "color": "secondary",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "patterns.filterCategory",
+                "payload": {
+                  "category": "neutral"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "All",
+              "pill": true,
+              "variant": "solid",
+              "onClickAction": {
+                "type": "patterns.filterCategory",
+                "payload": {
+                  "category": "all"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Divider"
+    },
+    {
+      "type": "ListView",
+      "limit": 8,
+      "children": [
+        {
+          "type": "ListViewItem",
+          "key": "pattern_1",
+          "align": "stretch",
+          "gap": 2,
+          "background": "surface-secondary",
+          "onClickAction": {
+            "type": "patterns.toggleVisibility",
+            "payload": {
+              "id": "pattern_1"
+            }
+          },
+          "children": [
+            {
+              "type": "Col",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "Row",
+                  "align": "stretch",
+                  "gap": 3,
+                  "children": [
+                    {
+                      "type": "Box",
+                      "width": 3,
+                      "background": "red-500",
+                      "radius": "full"
+                    },
+                    {
+                      "type": "Col",
+                      "flex": "auto",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "Row",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "Text",
+                              "value": "Head and Shoulders",
+                              "size": "md",
+                              "weight": "semibold",
+                              "maxLines": 1
+                            },
+                            {
+                              "type": "Spacer"
+                            },
+                            {
+                              "type": "Badge",
+                              "label": "BEARISH",
+                              "size": "sm",
+                              "variant": "solid",
+                              "color": "danger"
+                            },
+                            {
+                              "type": "Button",
+                              "variant": "ghost",
+                              "size": "sm",
+                              "uniform": true,
+                              "iconStart": "check-circle-filled",
+                              "color": "success",
+                              "onClickAction": {
+                                "type": "patterns.toggleVisibility",
+                                "payload": {
+                                  "id": "pattern_1"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "Row",
+                          "children": [
+                            {
+                              "type": "Caption",
+                              "value": "Reversal",
+                              "color": "secondary"
+                            },
+                            {
+                              "type": "Spacer"
+                            },
+                            {
+                              "type": "Text",
+                              "value": "87%",
+                              "size": "sm",
+                              "weight": "semibold"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "Box",
+                          "height": 6,
+                          "background": "alpha-10",
+                          "radius": "full",
+                          "children": [
+                            {
+                              "type": "Box",
+                              "height": 6,
+                              "width": "87%",
+                              "background": "green-500",
+                              "radius": "full"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "Divider",
+                  "flush": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ListViewItem",
+          "key": "pattern_2",
+          "align": "stretch",
+          "gap": 2,
+          "onClickAction": {
+            "type": "patterns.toggleVisibility",
+            "payload": {
+              "id": "pattern_2"
+            }
+          },
+          "children": [
+            {
+              "type": "Col",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "Row",
+                  "align": "stretch",
+                  "gap": 3,
+                  "children": [
+                    {
+                      "type": "Box",
+                      "width": 3,
+                      "background": "blue-500",
+                      "radius": "full"
+                    },
+                    {
+                      "type": "Col",
+                      "flex": "auto",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "Row",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "Text",
+                              "value": "Bull Flag",
+                              "size": "md",
+                              "weight": "semibold",
+                              "maxLines": 1
+                            },
+                            {
+                              "type": "Spacer"
+                            },
+                            {
+                              "type": "Badge",
+                              "label": "BULLISH",
+                              "size": "sm",
+                              "variant": "solid",
+                              "color": "success"
+                            },
+                            {
+                              "type": "Button",
+                              "variant": "ghost",
+                              "size": "sm",
+                              "uniform": true,
+                              "iconStart": "empty-circle",
+                              "color": "secondary",
+                              "onClickAction": {
+                                "type": "patterns.toggleVisibility",
+                                "payload": {
+                                  "id": "pattern_2"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "Row",
+                          "children": [
+                            {
+                              "type": "Caption",
+                              "value": "Continuation",
+                              "color": "secondary"
+                            },
+                            {
+                              "type": "Spacer"
+                            },
+                            {
+                              "type": "Text",
+                              "value": "72%",
+                              "size": "sm",
+                              "weight": "semibold"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "Box",
+                          "height": 6,
+                          "background": "alpha-10",
+                          "radius": "full",
+                          "children": [
+                            {
+                              "type": "Box",
+                              "height": 6,
+                              "width": "72%",
+                              "background": "yellow-500",
+                              "radius": "full"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "Divider",
+                  "flush": "true"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ListViewItem",
+          "key": "pattern_3",
+          "align": "stretch",
+          "gap": 2,
+          "background": "surface-secondary",
+          "onClickAction": {
+            "type": "patterns.toggleVisibility",
+            "payload": {
+              "id": "pattern_3"
+            }
+          },
+          "children": [
+            {
+              "type": "Col",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "Row",
+                  "align": "stretch",
+                  "gap": 3,
+                  "children": [
+                    {
+                      "type": "Box",
+                      "width": 3,
+                      "background": "gray-400",
+                      "radius": "full"
+                    },
+                    {
+                      "type": "Col",
+                      "flex": "auto",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "Row",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "Text",
+                              "value": "Symmetrical Triangle",
+                              "size": "md",
+                              "weight": "semibold",
+                              "maxLines": 1
+                            },
+                            {
+                              "type": "Spacer"
+                            },
+                            {
+                              "type": "Badge",
+                              "label": "NEUTRAL",
+                              "size": "sm",
+                              "variant": "solid",
+                              "color": "secondary"
+                            },
+                            {
+                              "type": "Button",
+                              "variant": "ghost",
+                              "size": "sm",
+                              "uniform": true,
+                              "iconStart": "check-circle-filled",
+                              "color": "success",
+                              "onClickAction": {
+                                "type": "patterns.toggleVisibility",
+                                "payload": {
+                                  "id": "pattern_3"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "Row",
+                          "children": [
+                            {
+                              "type": "Caption",
+                              "value": "Neutral",
+                              "color": "secondary"
+                            },
+                            {
+                              "type": "Spacer"
+                            },
+                            {
+                              "type": "Text",
+                              "value": "65%",
+                              "size": "sm",
+                              "weight": "semibold"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "Box",
+                          "height": 6,
+                          "background": "alpha-10",
+                          "radius": "full",
+                          "children": [
+                            {
+                              "type": "Box",
+                              "height": 6,
+                              "width": "65%",
+                              "background": "yellow-500",
+                              "radius": "full"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "Divider",
+                  "flush": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -8,10 +8,16 @@ import {
   normalizeChartCommandPayload,
   type ChartCommandPayload,
 } from '../utils/chartCommandUtils';
+import { TechnicalLevelsInline } from './widgets/TechnicalLevelsInline';
+import { PatternDetectionInline } from './widgets/PatternDetectionInline';
+import { parseAgentResponse, type WidgetDefinition } from '../utils/widgetParser';
+import { ChatKitWidgetRenderer } from './ChatKitWidgetRenderer';
+import type { WidgetAction, WidgetActionHandler } from '../hooks/useWidgetActions';
 
 interface RealtimeChatKitProps {
   onMessage?: (message: Message) => void;
   onChartCommand?: (command: ChartCommandPayload) => void;
+  onWidgetAction?: WidgetActionHandler;
   symbol?: string;
   timeframe?: string;
   snapshotId?: string;
@@ -25,9 +31,10 @@ interface Message {
   provider?: string;
 }
 
-export function RealtimeChatKit({ 
+export function RealtimeChatKit({
   onMessage,
   onChartCommand,
+  onWidgetAction,
   symbol,
   timeframe,
   snapshotId
@@ -36,7 +43,14 @@ export function RealtimeChatKit({
   const [isLoading, setIsLoading] = useState(true);
   const [chatKitControl, setChatKitControl] = useState<any>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  
+
+  // MCP widget state
+  const [technicalLevelsData, setTechnicalLevelsData] = useState<any>(null);
+  const [patternDetectionData, setPatternDetectionData] = useState<any>(null);
+
+  // ChatKit widget state (from Agent Builder responses)
+  const [chatKitWidgets, setChatKitWidgets] = useState<WidgetDefinition[] | null>(null);
+
   // Initialize data persistence
   const {
     conversationId,
@@ -151,6 +165,17 @@ export function RealtimeChatKit({
           const jsonResponse = JSON.parse(message.content);
           isJsonResponse = true;
 
+          // Parse for ChatKit widgets first
+          const parsedResponse = parseAgentResponse(message.content);
+          if (parsedResponse.hasWidgets && parsedResponse.parsedResponse?.widgets) {
+            console.log('[ChatKit] ✅ Detected ChatKit widgets:', parsedResponse.parsedResponse.widgets);
+            setChatKitWidgets(parsedResponse.parsedResponse.widgets);
+            // Use widget response text if available
+            if (parsedResponse.displayText) {
+              displayContent = parsedResponse.displayText;
+            }
+          }
+
           // Extract human-readable text from JSON
           if (jsonResponse.text) {
             displayContent = jsonResponse.text;
@@ -158,6 +183,9 @@ export function RealtimeChatKit({
           } else if (jsonResponse.message) {
             displayContent = jsonResponse.message;
             console.log('[ChatKit] ✅ Extracted message from JSON:', displayContent);
+          } else if (jsonResponse.response_text) {
+            displayContent = jsonResponse.response_text;
+            console.log('[ChatKit] ✅ Extracted response_text from JSON:', displayContent);
           } else {
             // If no text/message field, keep original (might be chart commands only)
             console.log('[ChatKit] ⚠️ JSON has no text field, using original content');
@@ -184,12 +212,32 @@ export function RealtimeChatKit({
       if (message.role === 'assistant' && message.content) {
         console.log('[ChatKit] Processing agent response:', message.content);
 
-        // PRIORITY 1: Check if response is JSON with chart_commands
+        // PRIORITY 1: Check if response is JSON with chart_commands or MCP tool results
         if (isJsonResponse) {
           try {
             const jsonResponse = JSON.parse(message.content);
-            const payload = normalizeChartCommandPayload(jsonResponse, message.content);
 
+            // Check for MCP tool results (technical levels or patterns)
+            if (jsonResponse.technical_levels || jsonResponse.sell_high_level) {
+              console.log('[ChatKit] Found technical levels data:', jsonResponse);
+              setTechnicalLevelsData({
+                sell_high_level: jsonResponse.sell_high_level,
+                buy_low_level: jsonResponse.buy_low_level,
+                btd_level: jsonResponse.btd_level,
+                symbol: jsonResponse.symbol || symbol
+              });
+            }
+
+            if (jsonResponse.patterns && Array.isArray(jsonResponse.patterns)) {
+              console.log('[ChatKit] Found pattern detection data:', jsonResponse);
+              setPatternDetectionData({
+                patterns: jsonResponse.patterns,
+                symbol: jsonResponse.symbol || symbol
+              });
+            }
+
+            // Check for chart commands
+            const payload = normalizeChartCommandPayload(jsonResponse, message.content);
             if (payload.legacy.length > 0 || payload.structured.length > 0) {
               console.log('[ChatKit] Found JSON with chart_commands:', payload);
               onChartCommand?.(payload);
@@ -292,6 +340,39 @@ export function RealtimeChatKit({
 
     updateChartContext();
   }, [sessionId, symbol, timeframe, snapshotId]);
+
+  // Widget action handler - routes widget actions to appropriate callbacks
+  const handleWidgetAction = useCallback((action: WidgetAction) => {
+    console.log('[ChatKit] Widget action received:', action);
+
+    // If parent provided a widget action handler, use it
+    if (onWidgetAction) {
+      onWidgetAction(action);
+      return;
+    }
+
+    // Default handling for chart-related actions
+    if (action.type.startsWith('chart.')) {
+      // Convert widget action to chart command format
+      const chartCommand = {
+        action: action.type,
+        ...action.payload
+      };
+      const payload = normalizeChartCommandPayload({ legacy: [JSON.stringify(chartCommand)] }, '');
+      onChartCommand?.(payload);
+    }
+
+    // Browser actions (open URL)
+    if (action.type === 'browser.openUrl' && action.payload?.url) {
+      window.open(action.payload.url, '_blank', 'noopener,noreferrer');
+    }
+
+    // Refresh actions - could trigger data refetch
+    if (action.type.includes('.refresh')) {
+      console.log('[ChatKit] Refresh action - data refetch would go here');
+      // Future: Call widgetDataService to refetch data
+    }
+  }, [onWidgetAction, onChartCommand]);
 
   // Voice connection handlers
   const handleVoiceConnect = useCallback(async () => {
@@ -413,6 +494,21 @@ export function RealtimeChatKit({
       {(agentVoice.error || error) && (
         <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
           Error: {agentVoice.error || error}
+        </div>
+      )}
+
+      {/* MCP Tool Widgets - Display when data is available */}
+      {(technicalLevelsData || patternDetectionData) && (
+        <div className="mb-2 space-y-2 max-h-96 overflow-y-auto">
+          {technicalLevelsData && <TechnicalLevelsInline data={technicalLevelsData} />}
+          {patternDetectionData && <PatternDetectionInline data={patternDetectionData} />}
+        </div>
+      )}
+
+      {/* ChatKit Visual Widgets - Display when agent returns widgets */}
+      {chatKitWidgets && chatKitWidgets.length > 0 && (
+        <div className="mb-2 max-h-96 overflow-y-auto">
+          <ChatKitWidgetRenderer widgets={chatKitWidgets} onAction={handleWidgetAction} />
         </div>
       )}
 

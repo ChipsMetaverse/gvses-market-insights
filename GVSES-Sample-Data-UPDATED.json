@@ -1,0 +1,128 @@
+{
+  "company": "Apple Inc.",
+  "symbol": "AAPL",
+  "timestamp": "Nov 16, 2025 • 2:30 PM ET",
+  "price": {
+    "current": "272.41",
+    "changeLabel": "-0.65 (-0.24%)",
+    "changeColor": "danger",
+    "afterHours": {
+      "price": "272.82",
+      "changeLabel": "+0.41 (+0.15%)",
+      "changeColor": "success"
+    }
+  },
+  "timeframes": ["1D", "5D", "1M", "3M", "6M", "YTD", "1Y", "5Y", "max"],
+  "selectedTimeframe": "1D",
+  "chartImage": "https://upload.wikimedia.org/wikipedia/commons/7/75/Candlesticks.png",
+  "stats": {
+    "open": "271.06",
+    "volume": "47.4M",
+    "dayLow": "269.60",
+    "dayHigh": "275.93",
+    "yearLow": "169.21",
+    "yearHigh": "277.32",
+    "marketCap": "3.01T",
+    "eps": "6.59",
+    "peRatio": "30.28"
+  },
+  "technical": {
+    "position": "Bullish",
+    "color": "success",
+    "levels": {
+      "qe": "310.00",
+      "st": "285.00",
+      "now": "272.41",
+      "ltb": "250.00"
+    }
+  },
+  "patterns": [
+    {
+      "id": "p1",
+      "name": "Cup & Handle",
+      "confidence": "High",
+      "direction": "Up",
+      "color": "green-500"
+    },
+    {
+      "id": "p2",
+      "name": "Ascending Triangle",
+      "confidence": "Medium",
+      "direction": "Up",
+      "color": "yellow-500"
+    },
+    {
+      "id": "p3",
+      "name": "Bearish Divergence",
+      "confidence": "Low",
+      "direction": "Down",
+      "color": "red-500"
+    }
+  ],
+  "newsFilters": [
+    { "label": "All", "value": "all" },
+    { "label": "CNBC", "value": "cnbc" },
+    { "label": "Yahoo", "value": "yahoo" }
+  ],
+  "selectedSource": "all",
+  "news": [
+    {
+      "id": "n1",
+      "source": "CNBC",
+      "color": "blue-500",
+      "headline": "Apple shares rise on upbeat holiday outlook",
+      "timeAgo": "2h ago",
+      "url": "https://www.cnbc.com/"
+    },
+    {
+      "id": "n2",
+      "source": "Yahoo",
+      "color": "orange-500",
+      "headline": "Analyst upgrades AAPL, cites services momentum",
+      "timeAgo": "4h ago",
+      "url": "https://finance.yahoo.com/"
+    },
+    {
+      "id": "n3",
+      "source": "CNBC",
+      "color": "blue-500",
+      "headline": "Tech leads markets higher as yields ease",
+      "timeAgo": "6h ago",
+      "url": "https://www.cnbc.com/"
+    },
+    {
+      "id": "n4",
+      "source": "Yahoo",
+      "color": "orange-500",
+      "headline": "What options flow says about AAPL this week",
+      "timeAgo": "8h ago",
+      "url": "https://finance.yahoo.com/"
+    },
+    {
+      "id": "n5",
+      "source": "CNBC",
+      "color": "blue-500",
+      "headline": "How Apple's AI push could impact margins in 2026",
+      "timeAgo": "1d ago",
+      "url": "https://www.cnbc.com/"
+    }
+  ],
+  "events": [
+    {
+      "id": "e1",
+      "name": "Earnings Call (Q4 FY2025)",
+      "date": "Nov 28, 2025",
+      "countdown": "in 12 days",
+      "impact": "high",
+      "color": "red-500"
+    },
+    {
+      "id": "e2",
+      "name": "Dividend Ex-Date",
+      "date": "Dec 10, 2025",
+      "countdown": "in 24 days",
+      "impact": "medium",
+      "color": "yellow-500"
+    }
+  ]
+}

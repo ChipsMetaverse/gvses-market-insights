@@ -1,0 +1,406 @@
+{
+  "type": "Card",
+  "size": "lg",
+  "padding": 4,
+  "children": [
+    {
+      "type": "Col",
+      "gap": 3,
+      "children": [
+        {
+          "type": "Row",
+          "align": "center",
+          "gap": 3,
+          "children": [
+            {
+              "type": "Badge",
+              "label": "TSLA",
+              "size": "lg",
+              "color": "discovery"
+            },
+            {
+              "type": "Title",
+              "value": "$242.84",
+              "size": "xl",
+              "weight": "bold",
+              "color": "success"
+            },
+            {
+              "type": "Text",
+              "value": "+12.5 (+4.23%)",
+              "size": "md",
+              "weight": "medium",
+              "color": "success"
+            },
+            {
+              "type": "Spacer"
+            },
+            {
+              "type": "Button",
+              "iconStart": "external-link",
+              "variant": "ghost",
+              "onClickAction": {
+                "type": "chart.fullscreen"
+              },
+              "ariaLabel": "Fullscreen",
+              "uniform": true
+            },
+            {
+              "type": "Button",
+              "iconStart": "chevron-right",
+              "variant": "ghost",
+              "onClickAction": {
+                "type": "chart.close"
+              },
+              "ariaLabel": "Close",
+              "uniform": true
+            }
+          ]
+        },
+        {
+          "type": "Row",
+          "align": "center",
+          "gap": 3,
+          "children": [
+            {
+              "type": "Row",
+              "gap": 1,
+              "children": [
+                {
+                  "type": "Button",
+                  "label": "1D",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "solid",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setTimeframe",
+                    "payload": {
+                      "value": "1D"
+                    }
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "5D",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "outline",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setTimeframe",
+                    "payload": {
+                      "value": "5D"
+                    }
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "1M",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "outline",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setTimeframe",
+                    "payload": {
+                      "value": "1M"
+                    }
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "3M",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "outline",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setTimeframe",
+                    "payload": {
+                      "value": "3M"
+                    }
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "6M",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "outline",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setTimeframe",
+                    "payload": {
+                      "value": "6M"
+                    }
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "1Y",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "outline",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setTimeframe",
+                    "payload": {
+                      "value": "1Y"
+                    }
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "5Y",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "outline",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setTimeframe",
+                    "payload": {
+                      "value": "5Y"
+                    }
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "All",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "outline",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setTimeframe",
+                    "payload": {
+                      "value": "All"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "Spacer"
+            },
+            {
+              "type": "Row",
+              "gap": 1,
+              "children": [
+                {
+                  "type": "Button",
+                  "iconStart": "write-alt2",
+                  "variant": "ghost",
+                  "color": "secondary",
+                  "onClickAction": {
+                    "type": "chart.activateDrawingTool",
+                    "payload": {
+                      "value": "trendline"
+                    }
+                  },
+                  "ariaLabel": "Trendline"
+                },
+                {
+                  "type": "Button",
+                  "iconStart": "write-alt",
+                  "variant": "ghost",
+                  "color": "secondary",
+                  "onClickAction": {
+                    "type": "chart.activateDrawingTool",
+                    "payload": {
+                      "value": "ray"
+                    }
+                  },
+                  "ariaLabel": "Ray"
+                },
+                {
+                  "type": "Button",
+                  "iconStart": "square-text",
+                  "variant": "ghost",
+                  "color": "secondary",
+                  "onClickAction": {
+                    "type": "chart.activateDrawingTool",
+                    "payload": {
+                      "value": "horizontal"
+                    }
+                  },
+                  "ariaLabel": "Horizontal line"
+                },
+                {
+                  "type": "Button",
+                  "label": "Clear All",
+                  "variant": "ghost",
+                  "onClickAction": {
+                    "type": "chart.clearDrawings"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "Spacer"
+            },
+            {
+              "type": "Row",
+              "gap": 1,
+              "children": [
+                {
+                  "type": "Button",
+                  "label": "Candle",
+                  "iconStart": "square-code",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "solid",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setType",
+                    "payload": {
+                      "value": "candlestick"
+                    }
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "Line",
+                  "iconStart": "chart",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "outline",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setType",
+                    "payload": {
+                      "value": "line"
+                    }
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "Area",
+                  "iconStart": "square-image",
+                  "size": "sm",
+                  "pill": true,
+                  "variant": "outline",
+                  "color": "info",
+                  "onClickAction": {
+                    "type": "chart.setType",
+                    "payload": {
+                      "value": "area"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Box",
+          "minHeight": 400,
+          "background": "surface",
+          "radius": "lg",
+          "border": {
+            "size": 1,
+            "color": "subtle"
+          },
+          "align": "center",
+          "justify": "center",
+          "children": [
+            {
+              "type": "Col",
+              "align": "center",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "Icon",
+                  "name": "chart",
+                  "size": "2xl",
+                  "color": "secondary"
+                },
+                {
+                  "type": "Caption",
+                  "value": "Chart will be embedded here",
+                  "color": "tertiary"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Row",
+          "gap": 1,
+          "children": [
+            {
+              "type": "Button",
+              "label": "Volume",
+              "size": "sm",
+              "pill": true,
+              "variant": "solid",
+              "color": "info",
+              "onClickAction": {
+                "type": "chart.toggleIndicator",
+                "payload": {
+                  "name": "volume"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "SMA",
+              "size": "sm",
+              "pill": true,
+              "variant": "outline",
+              "color": "info",
+              "onClickAction": {
+                "type": "chart.toggleIndicator",
+                "payload": {
+                  "name": "sma"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "EMA",
+              "size": "sm",
+              "pill": true,
+              "variant": "outline",
+              "color": "info",
+              "onClickAction": {
+                "type": "chart.toggleIndicator",
+                "payload": {
+                  "name": "ema"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "RSI",
+              "size": "sm",
+              "pill": true,
+              "variant": "outline",
+              "color": "info",
+              "onClickAction": {
+                "type": "chart.toggleIndicator",
+                "payload": {
+                  "name": "rsi"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "label": "MACD",
+              "size": "sm",
+              "pill": true,
+              "variant": "outline",
+              "color": "info",
+              "onClickAction": {
+                "type": "chart.toggleIndicator",
+                "payload": {
+                  "name": "macd"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

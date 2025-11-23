@@ -67,7 +67,7 @@ class MCPWebSocketTransport:
         try:
             # Import and get the HTTP MCP client for better performance
             from .http_mcp_client import get_http_mcp_client as get_direct_mcp_client
-            self.mcp_client = get_direct_mcp_client()
+            self.mcp_client = await get_direct_mcp_client()
             
             # Direct client doesn't need initialization - ready to use
             self._initialized = True
@@ -232,34 +232,84 @@ class MCPWebSocketTransport:
         try:
             if not self.mcp_client:
                 raise RuntimeError("MCP client not initialized")
-            
+
             # Get tools from the market MCP server
             tools_result = await self.mcp_client.list_tools()
-            
-            # Convert MCPClient response to JSON-RPC format
+
+            # Start with market data tools
+            tools_list = []
             if tools_result and "tools" in tools_result:
-                tools_response = {"result": tools_result}
-            else:
-                tools_response = None
-            
-            if tools_response and "result" in tools_response:
-                # Forward the successful response
-                response = {
-                    "jsonrpc": "2.0",
-                    "result": tools_response["result"],
-                    "id": msg_id
+                tools_list = tools_result["tools"]
+
+            # Add chart control tools
+            chart_control_tools = [
+                {
+                    "name": "change_chart_symbol",
+                    "description": "Change the displayed symbol on the trading chart",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {
+                                "type": "string",
+                                "description": "Stock ticker symbol (e.g., AAPL, TSLA, MSFT)"
+                            }
+                        },
+                        "required": ["symbol"]
+                    }
+                },
+                {
+                    "name": "set_chart_timeframe",
+                    "description": "Set the timeframe for chart data display",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "timeframe": {
+                                "type": "string",
+                                "enum": ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"],
+                                "description": "Chart timeframe"
+                            }
+                        },
+                        "required": ["timeframe"]
+                    }
+                },
+                {
+                    "name": "toggle_chart_indicator",
+                    "description": "Toggle technical indicators on/off on the chart",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "indicator": {
+                                "type": "string",
+                                "enum": ["sma", "ema", "bollinger", "rsi", "macd", "volume"],
+                                "description": "Technical indicator to toggle"
+                            },
+                            "enabled": {
+                                "type": "boolean",
+                                "description": "Whether to show or hide the indicator"
+                            },
+                            "period": {
+                                "type": "number",
+                                "description": "Period for the indicator (optional, default varies by indicator)"
+                            }
+                        },
+                        "required": ["indicator", "enabled"]
+                    }
                 }
-            else:
-                # Return empty tools list if MCP server unavailable
-                response = {
-                    "jsonrpc": "2.0",
-                    "result": {"tools": []},
-                    "id": msg_id
-                }
-            
+            ]
+
+            # Combine market data tools and chart control tools
+            tools_list.extend(chart_control_tools)
+
+            # Return combined tools list
+            response = {
+                "jsonrpc": "2.0",
+                "result": {"tools": tools_list},
+                "id": msg_id
+            }
+
             await session.send_message(response)
-            logger.debug(f"Listed tools for session {session.session_id}")
-            
+            logger.debug(f"Listed {len(tools_list)} tools for session {session.session_id} (including chart control)")
+
         except Exception as e:
             logger.error(f"Error listing tools: {e}")
             error_response = {
@@ -278,44 +328,53 @@ class MCPWebSocketTransport:
         try:
             if not self.mcp_client:
                 raise RuntimeError("MCP client not initialized")
-            
+
             tool_name = params.get("name")
             tool_arguments = params.get("arguments", {})
-            
+
             if not tool_name:
                 raise ValueError("Tool name is required")
-            
-            # Call the tool via MCP client
-            tool_result = await self.mcp_client.call_tool(tool_name, tool_arguments)
-            
-            # Convert MCPClient response to JSON-RPC format
-            if tool_result:
-                tool_response = {"result": {"content": [{"type": "text", "text": str(tool_result)}]}}
-            else:
-                tool_response = None
-            
-            if tool_response and "result" in tool_response:
-                # Forward the successful response
+
+            # Handle chart control tools locally
+            if tool_name in ["change_chart_symbol", "set_chart_timeframe", "toggle_chart_indicator"]:
+                tool_result = await self._handle_chart_control_tool(tool_name, tool_arguments)
                 response = {
                     "jsonrpc": "2.0",
-                    "result": tool_response["result"],
+                    "result": {"content": [{"type": "text", "text": tool_result}]},
                     "id": msg_id
                 }
             else:
-                # Return error if tool call failed
-                response = {
-                    "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32603,
-                        "message": "Tool execution failed",
-                        "data": tool_response
-                    },
-                    "id": msg_id
-                }
-            
+                # Call market data tools via MCP client
+                tool_result = await self.mcp_client.call_tool(tool_name, tool_arguments)
+
+                # Convert MCPClient response to JSON-RPC format
+                if tool_result:
+                    tool_response = {"result": {"content": [{"type": "text", "text": str(tool_result)}]}}
+                else:
+                    tool_response = None
+
+                if tool_response and "result" in tool_response:
+                    # Forward the successful response
+                    response = {
+                        "jsonrpc": "2.0",
+                        "result": tool_response["result"],
+                        "id": msg_id
+                    }
+                else:
+                    # Return error if tool call failed
+                    response = {
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32603,
+                            "message": "Tool execution failed",
+                            "data": tool_response
+                        },
+                        "id": msg_id
+                    }
+
             await session.send_message(response)
             logger.debug(f"Called tool '{tool_name}' for session {session.session_id}")
-            
+
         except Exception as e:
             logger.error(f"Error calling tool: {e}")
             error_response = {
@@ -328,6 +387,57 @@ class MCPWebSocketTransport:
                 "id": msg_id
             }
             await session.send_message(error_response)
+
+    async def _handle_chart_control_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+        """
+        Handle chart control tool execution.
+        Note: Chart commands are primarily handled through the streaming SSE architecture in agent_orchestrator.py
+        This method provides basic tool validation and response for MCP clients.
+        """
+        try:
+            if tool_name == "change_chart_symbol":
+                symbol = arguments.get("symbol")
+                if not symbol:
+                    return "Error: Symbol parameter is required"
+
+                logger.info(f"Chart control tool called: change_chart_symbol({symbol})")
+                return f"Chart symbol changed to {symbol.upper()}"
+
+            elif tool_name == "set_chart_timeframe":
+                timeframe = arguments.get("timeframe")
+                if not timeframe:
+                    return "Error: Timeframe parameter is required"
+
+                valid_timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"]
+                if timeframe not in valid_timeframes:
+                    return f"Error: Invalid timeframe. Must be one of: {', '.join(valid_timeframes)}"
+
+                logger.info(f"Chart control tool called: set_chart_timeframe({timeframe})")
+                return f"Chart timeframe set to {timeframe}"
+
+            elif tool_name == "toggle_chart_indicator":
+                indicator = arguments.get("indicator")
+                enabled = arguments.get("enabled")
+                period = arguments.get("period")
+
+                if not indicator or enabled is None:
+                    return "Error: Indicator and enabled parameters are required"
+
+                valid_indicators = ["sma", "ema", "bollinger", "rsi", "macd", "volume"]
+                if indicator not in valid_indicators:
+                    return f"Error: Invalid indicator. Must be one of: {', '.join(valid_indicators)}"
+
+                action = "enabled" if enabled else "disabled"
+                period_str = f" with period {period}" if period else ""
+                logger.info(f"Chart control tool called: toggle_chart_indicator({indicator}, {enabled}, {period})")
+                return f"{indicator.upper()} indicator {action}{period_str}"
+
+            else:
+                return f"Error: Unknown chart control tool: {tool_name}"
+
+        except Exception as e:
+            logger.error(f"Error handling chart control tool {tool_name}: {e}")
+            return f"Error executing chart control: {str(e)}"
     
     async def handle_request(self, rpc_request: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -363,9 +473,72 @@ class MCPWebSocketTransport:
                 # List available tools
                 if self.mcp_client:
                     tools_response = await self.mcp_client.list_tools()
+
+                    # Start with market data tools
+                    tools_list = tools_response.get("result", {}).get("tools", [])
+
+                    # Add chart control tools
+                    chart_control_tools = [
+                        {
+                            "name": "change_chart_symbol",
+                            "description": "Change the displayed symbol on the trading chart",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "symbol": {
+                                        "type": "string",
+                                        "description": "Stock ticker symbol (e.g., AAPL, TSLA, MSFT)"
+                                    }
+                                },
+                                "required": ["symbol"]
+                            }
+                        },
+                        {
+                            "name": "set_chart_timeframe",
+                            "description": "Set the timeframe for chart data display",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "timeframe": {
+                                        "type": "string",
+                                        "enum": ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"],
+                                        "description": "Chart timeframe"
+                                    }
+                                },
+                                "required": ["timeframe"]
+                            }
+                        },
+                        {
+                            "name": "toggle_chart_indicator",
+                            "description": "Toggle technical indicators on/off on the chart",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "indicator": {
+                                        "type": "string",
+                                        "enum": ["sma", "ema", "bollinger", "rsi", "macd", "volume"],
+                                        "description": "Technical indicator to toggle"
+                                    },
+                                    "enabled": {
+                                        "type": "boolean",
+                                        "description": "Whether to show or hide the indicator"
+                                    },
+                                    "period": {
+                                        "type": "number",
+                                        "description": "Period for the indicator (optional, default varies by indicator)"
+                                    }
+                                },
+                                "required": ["indicator", "enabled"]
+                            }
+                        }
+                    ]
+
+                    # Combine market data tools and chart control tools
+                    tools_list.extend(chart_control_tools)
+
                     return {
                         "jsonrpc": "2.0",
-                        "result": tools_response.get("result", {"tools": []}),
+                        "result": {"tools": tools_list},
                         "id": msg_id
                     }
                 else:
@@ -379,7 +552,7 @@ class MCPWebSocketTransport:
                 # Call a tool
                 tool_name = params.get("name")
                 tool_arguments = params.get("arguments", {})
-                
+
                 if not tool_name:
                     return {
                         "jsonrpc": "2.0",
@@ -389,8 +562,18 @@ class MCPWebSocketTransport:
                         },
                         "id": msg_id
                     }
-                
-                if self.mcp_client:
+
+                # Handle chart control tools locally
+                if tool_name in ["change_chart_symbol", "set_chart_timeframe", "toggle_chart_indicator"]:
+                    tool_result = await self._handle_chart_control_tool(tool_name, tool_arguments)
+                    return {
+                        "jsonrpc": "2.0",
+                        "result": {
+                            "content": [{"type": "text", "text": tool_result}]
+                        },
+                        "id": msg_id
+                    }
+                elif self.mcp_client:
                     tool_result = await self.mcp_client.call_tool(tool_name, tool_arguments)
                     return {
                         "jsonrpc": "2.0",

@@ -1,0 +1,532 @@
+{
+  "news_query_example": {
+    "query": "What's the latest news on TSLA?",
+    "agent_response": {
+      "response_text": "Here are the latest market news articles for Tesla (TSLA):",
+      "query_intent": "news",
+      "symbol": "TSLA",
+      "widgets": [
+        {
+          "type": "Card",
+          "size": "lg",
+          "status": {
+            "text": "Live News",
+            "icon": "newspaper"
+          },
+          "children": [
+            {
+              "type": "Title",
+              "value": "Tesla (TSLA) Market News",
+              "size": "lg"
+            },
+            {
+              "type": "Divider",
+              "spacing": 12
+            },
+            {
+              "type": "ListView",
+              "limit": 10,
+              "children": [
+                {
+                  "type": "ListViewItem",
+                  "children": [
+                    {
+                      "type": "Text",
+                      "value": "Tesla Q4 Earnings Beat Expectations",
+                      "weight": "semibold"
+                    },
+                    {
+                      "type": "Caption",
+                      "value": "CNBC • 2 hours ago",
+                      "size": "sm"
+                    }
+                  ],
+                  "onClickAction": {
+                    "type": "open_article",
+                    "payload": {"url": "https://cnbc.com/tesla-earnings"},
+                    "handler": "client"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "economic_events_example": {
+    "query": "When is the next NFP release?",
+    "agent_response": {
+      "response_text": "Here's the economic calendar with upcoming high-impact events:",
+      "query_intent": "economic_events",
+      "symbol": "SPY",
+      "widgets": [
+        {
+          "type": "Card",
+          "size": "lg",
+          "status": {
+            "text": "ForexFactory",
+            "icon": "calendar"
+          },
+          "children": [
+            {
+              "type": "Title",
+              "value": "Economic Calendar",
+              "size": "lg"
+            },
+            {
+              "type": "Divider"
+            },
+            {
+              "type": "ListView",
+              "limit": 15,
+              "children": [
+                {
+                  "type": "ListViewItem",
+                  "children": [
+                    {
+                      "type": "Row",
+                      "gap": 8,
+                      "align": "center",
+                      "children": [
+                        {
+                          "type": "Badge",
+                          "label": "HIGH",
+                          "color": "danger",
+                          "size": "sm"
+                        },
+                        {
+                          "type": "Text",
+                          "value": "Non-Farm Payrolls (NFP)",
+                          "weight": "semibold"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Caption",
+                      "value": "Friday, Jan 10 • 8:30 AM EST",
+                      "size": "sm"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "pattern_analysis_example": {
+    "query": "Show me head and shoulders patterns on NVDA",
+    "agent_response": {
+      "response_text": "Here's the pattern detection analysis for NVIDIA (NVDA) along with the current chart:",
+      "query_intent": "patterns",
+      "symbol": "NVDA",
+      "widgets": [
+        {
+          "type": "Card",
+          "size": "full",
+          "status": {
+            "text": "Real-Time Analysis",
+            "icon": "chart-pattern"
+          },
+          "children": [
+            {
+              "type": "Title",
+              "value": "NVIDIA (NVDA) - Pattern Detection",
+              "size": "lg"
+            },
+            {
+              "type": "Divider"
+            },
+            {
+              "type": "Box",
+              "direction": "column",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "Row",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "Badge",
+                      "label": "Bullish",
+                      "color": "success"
+                    },
+                    {
+                      "type": "Text",
+                      "value": "Cup and Handle Pattern",
+                      "weight": "semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "Caption",
+                  "value": "Timeframe: Daily • Confidence: High • Detected: 2 days ago"
+                },
+                {
+                  "type": "Text",
+                  "value": "A cup and handle pattern suggests continuation of the uptrend with a potential breakout target of $580."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Card",
+          "size": "full",
+          "children": [
+            {
+              "type": "Title",
+              "value": "NVDA Price Chart",
+              "size": "md"
+            },
+            {
+              "type": "Image",
+              "src": "https://chart.tradingview.com/NVDA",
+              "alt": "NVDA Trading Chart",
+              "aspectRatio": "16/9",
+              "fit": "contain"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "technical_levels_example": {
+    "query": "What are the support levels for SPY?",
+    "agent_response": {
+      "response_text": "Here are the key technical support and resistance levels for SPY:",
+      "query_intent": "technical_levels",
+      "symbol": "SPY",
+      "widgets": [
+        {
+          "type": "Card",
+          "size": "lg",
+          "status": {
+            "text": "Live Levels",
+            "icon": "chart-line"
+          },
+          "children": [
+            {
+              "type": "Title",
+              "value": "SPY Technical Levels",
+              "size": "lg"
+            },
+            {
+              "type": "Divider"
+            },
+            {
+              "type": "Box",
+              "direction": "column",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "Box",
+                  "direction": "column",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "Row",
+                      "justify": "between",
+                      "children": [
+                        {
+                          "type": "Badge",
+                          "label": "BUY THE DIP",
+                          "color": "success",
+                          "size": "sm"
+                        },
+                        {
+                          "type": "Text",
+                          "value": "$465.20",
+                          "weight": "bold",
+                          "color": "success"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Caption",
+                      "value": "200-day MA • 61.8% Fibonacci • Historical support",
+                      "size": "sm"
+                    }
+                  ]
+                },
+                {
+                  "type": "Box",
+                  "direction": "column",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "Row",
+                      "justify": "between",
+                      "children": [
+                        {
+                          "type": "Badge",
+                          "label": "BUY LOW",
+                          "color": "info",
+                          "size": "sm"
+                        },
+                        {
+                          "type": "Text",
+                          "value": "$478.90",
+                          "weight": "bold",
+                          "color": "info"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Caption",
+                      "value": "50-day MA • Consolidation zone • 50% retracement",
+                      "size": "sm"
+                    }
+                  ]
+                },
+                {
+                  "type": "Box",
+                  "direction": "column",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "Row",
+                      "justify": "between",
+                      "children": [
+                        {
+                          "type": "Badge",
+                          "label": "SELL HIGH",
+                          "color": "danger",
+                          "size": "sm"
+                        },
+                        {
+                          "type": "Text",
+                          "value": "$495.50",
+                          "weight": "bold",
+                          "color": "danger"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Caption",
+                      "value": "Recent highs • Resistance • Elevated RSI",
+                      "size": "sm"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Card",
+          "size": "full",
+          "children": [
+            {
+              "type": "Title",
+              "value": "SPY Price Chart with Levels",
+              "size": "md"
+            },
+            {
+              "type": "Image",
+              "src": "https://chart.tradingview.com/SPY",
+              "alt": "SPY Trading Chart",
+              "aspectRatio": "16/9",
+              "fit": "contain"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "chart_only_example": {
+    "query": "Show me AAPL chart",
+    "agent_response": {
+      "response_text": "Here's the current Apple (AAPL) chart:",
+      "query_intent": "chart",
+      "symbol": "AAPL",
+      "widgets": [
+        {
+          "type": "Card",
+          "size": "full",
+          "status": {
+            "text": "Real-Time",
+            "icon": "chart-candlestick"
+          },
+          "children": [
+            {
+              "type": "Title",
+              "value": "Apple Inc. (AAPL)",
+              "size": "lg"
+            },
+            {
+              "type": "Image",
+              "src": "https://chart.tradingview.com/AAPL",
+              "alt": "AAPL Trading Chart",
+              "aspectRatio": "16/9",
+              "fit": "contain",
+              "frame": true
+            },
+            {
+              "type": "Row",
+              "gap": 12,
+              "justify": "between",
+              "children": [
+                {
+                  "type": "Button",
+                  "label": "1D",
+                  "size": "sm",
+                  "variant": "outline",
+                  "onClickAction": {
+                    "type": "update_timeframe",
+                    "payload": {"timeframe": "1D"},
+                    "loadingBehavior": "self"
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "1W",
+                  "size": "sm",
+                  "variant": "outline",
+                  "onClickAction": {
+                    "type": "update_timeframe",
+                    "payload": {"timeframe": "1W"},
+                    "loadingBehavior": "self"
+                  }
+                },
+                {
+                  "type": "Button",
+                  "label": "1M",
+                  "size": "sm",
+                  "variant": "outline",
+                  "onClickAction": {
+                    "type": "update_timeframe",
+                    "payload": {"timeframe": "1M"},
+                    "loadingBehavior": "self"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "comprehensive_analysis_example": {
+    "query": "Give me everything on MSFT",
+    "agent_response": {
+      "response_text": "Here's a comprehensive analysis of Microsoft (MSFT) including chart, technical levels, pattern detection, news, and economic calendar:",
+      "query_intent": "comprehensive",
+      "symbol": "MSFT",
+      "widgets": [
+        {
+          "type": "Card",
+          "size": "full",
+          "children": [
+            {
+              "type": "Title",
+              "value": "Microsoft Corporation (MSFT) - Complete Analysis",
+              "size": "xl"
+            }
+          ]
+        },
+        {
+          "type": "Card",
+          "size": "full",
+          "children": [
+            {
+              "type": "Title",
+              "value": "Price Chart",
+              "size": "lg"
+            },
+            {
+              "type": "Image",
+              "src": "https://chart.tradingview.com/MSFT",
+              "aspectRatio": "16/9"
+            }
+          ]
+        },
+        {
+          "type": "Card",
+          "size": "lg",
+          "status": {"text": "Technical Analysis", "icon": "chart-line"},
+          "children": [
+            {
+              "type": "Title",
+              "value": "Key Levels",
+              "size": "md"
+            },
+            {
+              "type": "Text",
+              "value": "BTD: $380.50 • Buy Low: $395.20 • Sell High: $415.80"
+            }
+          ]
+        },
+        {
+          "type": "Card",
+          "size": "lg",
+          "status": {"text": "Pattern Detection", "icon": "chart-pattern"},
+          "children": [
+            {
+              "type": "Title",
+              "value": "Detected Patterns",
+              "size": "md"
+            },
+            {
+              "type": "Text",
+              "value": "Ascending Triangle • Bullish Continuation"
+            }
+          ]
+        },
+        {
+          "type": "Card",
+          "size": "lg",
+          "status": {"text": "Latest News", "icon": "newspaper"},
+          "children": [
+            {
+              "type": "Title",
+              "value": "Market News",
+              "size": "md"
+            },
+            {
+              "type": "ListView",
+              "limit": 5,
+              "children": [
+                {
+                  "type": "ListViewItem",
+                  "children": [
+                    {"type": "Text", "value": "Microsoft Cloud Revenue Soars", "weight": "semibold"},
+                    {"type": "Caption", "value": "CNBC • 1 hour ago"}
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Card",
+          "size": "lg",
+          "status": {"text": "Economic Events", "icon": "calendar"},
+          "children": [
+            {
+              "type": "Title",
+              "value": "Economic Calendar",
+              "size": "md"
+            },
+            {
+              "type": "ListView",
+              "limit": 5,
+              "children": [
+                {
+                  "type": "ListViewItem",
+                  "children": [
+                    {"type": "Badge", "label": "HIGH", "color": "danger"},
+                    {"type": "Text", "value": "CPI Data Release"},
+                    {"type": "Caption", "value": "Tomorrow • 8:30 AM EST"}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

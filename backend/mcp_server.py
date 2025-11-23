@@ -37,7 +37,6 @@ from services.http_mcp_client import get_http_mcp_client as get_direct_mcp_clien
 from services.forex_mcp_client import get_forex_mcp_client
 from services.market_service_factory import MarketServiceFactory
 from services.openai_relay_server import openai_relay_server
-from chart_control_api import router as chart_control_router
 from services.agents_sdk_service import agents_sdk_service, AgentQuery, AgentResponse
 from services.database_service import get_database_service
 from websocket_server import chart_streamer  # Real-time chart command streaming
@@ -73,6 +72,8 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Voice Assistant MCP Server")
 
 # Initialize CommandBus for chart command polling
+# TODO: Refactor CommandBus to use a distributed solution (e.g., Redis) for scalability and reliability in production.
+# Currently, it's an in-memory, single-instance solution.
 app.state.command_bus = CommandBus()
 logger.info("CommandBus initialized for chart command polling")
 
@@ -103,7 +104,6 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "https://gvses-market-insights.fly.dev",
-        "*"  # Allow all origins in development
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -1044,76 +1044,82 @@ async def get_technical_indicators(
             {"symbol": symbol_upper, "indicators": indicator_list, "days": days}
         )
 
-        parsed_data: Dict[str, Any] = {}
-        if isinstance(mcp_result, dict) and "content" in mcp_result:
-            parsed_data = mcp_result["content"]
-        elif isinstance(mcp_result, list) and mcp_result:
-            first_item = mcp_result[0]
-            if isinstance(first_item, dict) and "text" in first_item:
-                import json
-                try:
-                    parsed_data = json.loads(first_item["text"])
-                except json.JSONDecodeError as json_err:
-                    logger.error(f"Failed to parse MCP JSON: {json_err}")
+        def process_mcp_data(mcp_result, current_price, indicator_list, symbol_upper, days):
+            parsed_data: Dict[str, Any] = {}
+            if isinstance(mcp_result, dict) and "content" in mcp_result:
+                parsed_data = mcp_result["content"]
+            elif isinstance(mcp_result, list) and mcp_result:
+                first_item = mcp_result[0]
+                if isinstance(first_item, dict) and "text" in first_item:
+                    import json
+                    try:
+                        parsed_data = json.loads(first_item["text"])
+                    except json.JSONDecodeError as json_err:
+                        logger.error(f"Failed to parse MCP JSON: {json_err}")
 
-        if not parsed_data:
-            raise HTTPException(status_code=404, detail=f"No technical data available for {symbol_upper}")
-        
-        mcp_data = parsed_data
-        
-        # Format response according to IndicatorApiResponse interface
-        response = {
-            "symbol": symbol.upper(),
-            "timestamp": int(asyncio.get_event_loop().time()),
-            "current_price": current_price,
-            "indicators": {},
-            "data_source": "mcp_technical_analysis", 
-            "calculation_period": days
-        }
-        
-        # Process MCP data - expected format: {"symbol": "AAPL", "indicators": {"rsi": null, ...}, ...}
-        if isinstance(mcp_data, dict) and "indicators" in mcp_data:
-            mcp_indicators = mcp_data["indicators"]
+            if not parsed_data:
+                raise HTTPException(status_code=404, detail=f"No technical data available for {symbol_upper}")
             
-            # Update current price from MCP if available
-            if "currentPrice" in mcp_data:
-                response["current_price"] = mcp_data["currentPrice"]
+            mcp_data = parsed_data
             
-            # RSI
-            if "rsi" in indicator_list:
-                if mcp_indicators.get("rsi") is not None:
-                    response["indicators"]["rsi"] = {
-                        "values": [],  # MCP doesn't provide historical values in this format
-                        "current": float(mcp_indicators["rsi"]),
-                        "overbought": 70,
-                        "oversold": 30,
-                        "signal": "overbought" if mcp_indicators["rsi"] > 70 else "oversold" if mcp_indicators["rsi"] < 30 else "neutral"
-                    }
-                else:
-                    logger.warning(f"RSI requested but null for {symbol}")
+            # Format response according to IndicatorApiResponse interface
+            response = {
+                "symbol": symbol_upper,
+                "timestamp": int(time.time()), # Use time.time() for thread safety
+                "current_price": current_price,
+                "indicators": {},
+                "data_source": "mcp_technical_analysis", 
+                "calculation_period": days
+            }
             
-            # MACD  
-            if "macd" in indicator_list and mcp_indicators.get("macd"):
-                response["indicators"]["macd"] = mcp_indicators["macd"]
+            # Process MCP data - expected format: {"symbol": "AAPL", "indicators": {"rsi": null, ...}, ...}
+            if isinstance(mcp_data, dict) and "indicators" in mcp_data:
+                mcp_indicators = mcp_data["indicators"]
                 
-            # Bollinger Bands
-            if "bollinger" in indicator_list and mcp_indicators.get("bollinger"):
-                response["indicators"]["bollinger"] = mcp_indicators["bollinger"]
+                # Update current price from MCP if available
+                if "currentPrice" in mcp_data:
+                    response["current_price"] = mcp_data["currentPrice"]
                 
-            # Moving averages
-            if "moving_averages" in indicator_list:
-                current_time = int(time.time())
-                ma_data = {}
-                if mcp_indicators.get("sma20"):
-                    ma_data["ma20"] = [{"time": current_time, "value": float(mcp_indicators["sma20"])}]
-                if mcp_indicators.get("sma50"):
-                    ma_data["ma50"] = [{"time": current_time, "value": float(mcp_indicators["sma50"])}]
-                if mcp_indicators.get("sma200"):
-                    ma_data["ma200"] = [{"time": current_time, "value": float(mcp_indicators["sma200"])}]
-                if ma_data:
-                    response["indicators"]["moving_averages"] = ma_data
-        else:
-            logger.warning(f"Unexpected MCP data structure for {symbol}: {mcp_data}")
+                # RSI
+                if "rsi" in indicator_list:
+                    if mcp_indicators.get("rsi") is not None:
+                        response["indicators"]["rsi"] = {
+                            "values": [],  # MCP doesn't provide historical values in this format
+                            "current": float(mcp_indicators["rsi"]),
+                            "overbought": 70,
+                            "oversold": 30,
+                            "signal": "overbought" if mcp_indicators["rsi"] > 70 else "oversold" if mcp_indicators["rsi"] < 30 else "neutral"
+                        }
+                    else:
+                        logger.warning(f"RSI requested but null for {symbol_upper}")
+                
+                # MACD  
+                if "macd" in indicator_list and mcp_indicators.get("macd"):
+                    response["indicators"]["macd"] = mcp_indicators["macd"]
+                    
+                # Bollinger Bands
+                if "bollinger" in indicator_list and mcp_indicators.get("bollinger"):
+                    response["indicators"]["bollinger"] = mcp_indicators["bollinger"]
+                    
+                # Moving averages
+                if "moving_averages" in indicator_list:
+                    current_time = int(time.time())
+                    ma_data = {}
+                    if mcp_indicators.get("sma20"):
+                        ma_data["ma20"] = [{"time": current_time, "value": float(mcp_indicators["sma20"])}]
+                    if mcp_indicators.get("sma50"):
+                        ma_data["ma50"] = [{"time": current_time, "value": float(mcp_indicators["sma50"])}]
+                    if mcp_indicators.get("sma200"):
+                        ma_data["ma200"] = [{"time": current_time, "value": float(mcp_indicators["sma200"])}]
+                    if ma_data:
+                        response["indicators"]["moving_averages"] = ma_data
+            else:
+                logger.warning(f"Unexpected MCP data structure for {symbol_upper}: {mcp_data}")
+            
+            return response
+        
+        response = await asyncio.to_thread(process_mcp_data, mcp_result, current_price, indicator_list, symbol_upper, days)
+        
         
         duration_ms = (time.perf_counter() - start_time) * 1000
         completed = telemetry.with_duration(duration_ms)
@@ -1623,9 +1629,6 @@ async def compare_data_sources(request: Request, symbol: str):
 # Dashboard router
 app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 
-# Chart Control API router
-app.include_router(chart_control_router, tags=["chart-control"])
-
 # Chart Command Polling router
 app.include_router(chart_commands_router)
 
@@ -1650,9 +1653,9 @@ async def ask_ai(request: Request, message_request: AIMessageRequest):
     start_time = time.perf_counter()
     try:
         # Import anthropic client here to avoid import issues
-        import anthropic
+        from anthropic import AsyncAnthropic
         
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         
         # Create conversation with context about the application
         system_prompt = """You are GVSES, an AI trading assistant integrated into a professional market analysis platform. 
@@ -1661,7 +1664,7 @@ async def ask_ai(request: Request, message_request: AIMessageRequest):
         Always provide data-driven analysis when discussing specific stocks or market conditions."""
         
         # Get AI response
-        response = client.messages.create(
+        response = await client.messages.create(
             model=os.getenv("MODEL", "claude-3-sonnet-20240229"),
             max_tokens=1000,
             system=system_prompt,
@@ -1781,10 +1784,6 @@ async def create_openai_realtime_session():
             "id": session_id,  # Fallback field name
             "status": "created",
             "ws_url": f"{ws_url}/realtime-relay/{session_id}",
-            "api_key": os.getenv('OPENAI_API_KEY', ''),
-            "client_secret": {
-                "value": os.getenv('OPENAI_API_KEY', '')
-            },
             "created_at": datetime.now().isoformat(),
             "expires_in": 3600  # 1 hour
         }

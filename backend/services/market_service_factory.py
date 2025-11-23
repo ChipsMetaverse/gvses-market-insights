@@ -14,6 +14,7 @@ from datetime import datetime, timezone, timedelta
 
 from services.database_service import get_database_service
 from pattern_detection import PatternDetector
+from services.sentiment_scorer import SentimentScorer
 
 logger = logging.getLogger(__name__)
 
@@ -1056,7 +1057,46 @@ class HybridMarketService:
                 results["news"] = news_data.get("articles", [])
             except Exception as e:
                 logger.warning(f"Failed to add MCP news to comprehensive data: {e}")
-        
+
+        # Calculate sentiment score
+        try:
+            price_data = {
+                'changePercent': results.get('change_percent', results.get('changePercent', 0)),
+                'price': results.get('price', results.get('current_price', 0)),
+            }
+
+            volume_data = {
+                'current_volume': results.get('volume', 0),
+                'avg_volume': results.get('avg_volume', results.get('average_volume', 0)),
+            }
+
+            # Format news for sentiment analysis
+            news_articles = []
+            if "news" in results and isinstance(results["news"], list):
+                news_articles = [
+                    {
+                        'title': news_item.get('title', news_item.get('headline', '')),
+                        'summary': news_item.get('summary', news_item.get('description', '')),
+                    }
+                    for news_item in results["news"]
+                ]
+
+            # Calculate sentiment (technical_indicators=None for now)
+            sentiment_data = SentimentScorer.calculate_sentiment_score(
+                price_data=price_data,
+                technical_indicators=None,
+                news_articles=news_articles if news_articles else None,
+                volume_data=volume_data if volume_data['current_volume'] > 0 else None
+            )
+
+            results["sentiment"] = sentiment_data
+            logger.info(f"Sentiment calculated for {symbol}: {sentiment_data['score']} ({sentiment_data['label']})")
+
+        except Exception as e:
+            logger.error(f"Error calculating sentiment for {symbol}: {e}")
+            # Add default sentiment on error
+            results["sentiment"] = SentimentScorer._default_sentiment()
+
         return results
     
     async def get_market_overview(self) -> dict:

@@ -32,7 +32,7 @@ interface GroupedEvents {
 
 export const EconomicCalendar: React.FC = () => {
   const [timePeriod, setTimePeriod] = useState<ForexTimePeriod>('today');
-  const [impact, setImpact] = useState<ImpactFilter>('all');
+  const [impact, setImpact] = useState<ImpactFilter>('high');
   const [calendar, setCalendar] = useState<ForexCalendarResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +73,7 @@ export const EconomicCalendar: React.FC = () => {
 
     const groups = new Map<string, ForexCalendarEvent[]>();
     calendar.events.forEach((event) => {
-      const dateKey = new Date(event.timestamp).toLocaleDateString(undefined, {
+      const dateKey = new Date(event.datetime_utc).toLocaleDateString(undefined, {
         weekday: 'short',
         month: 'short',
         day: 'numeric',
@@ -195,7 +195,7 @@ export const EconomicCalendar: React.FC = () => {
                 </header>
                 <ol className="timeline-day__list">
                   {group.events.map((event) => {
-                    const eventTime = new Date(event.timestamp);
+                    const eventTime = new Date(event.datetime_utc);
                     const timeLabel = eventTime.toLocaleTimeString(undefined, {
                       hour: '2-digit',
                       minute: '2-digit',

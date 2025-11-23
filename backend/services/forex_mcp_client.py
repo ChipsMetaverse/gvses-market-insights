@@ -74,6 +74,12 @@ class ForexMCPClient:
     def _extract_json_string(result: Any) -> Optional[str]:
         """Extract the JSON payload string from various MCP response formats."""
 
+        # Debug logging to see actual response structure
+        logger.info(f"🔍 Forex MCP response type: {type(result).__name__}")
+        if hasattr(result, '__dict__'):
+            logger.info(f"🔍 Response attributes: {list(vars(result).keys())}")
+        logger.info(f"🔍 Response preview: {str(result)[:300]}")
+
         if result is None:
             return None
 
@@ -93,7 +99,27 @@ class ForexMCPClient:
                 if isinstance(content, list):
                     fragments = [item.get("text") for item in content if isinstance(item, dict) and item.get("text")]
                     if fragments:
-                        return "".join(fragments)
+                        # Each fragment may be a separate JSON object
+                        # Try parsing as array of objects first
+                        if len(fragments) == 1:
+                            return fragments[0]
+                        else:
+                            # Multiple fragments - each is likely a JSON object
+                            # Parse each and wrap in array
+                            parsed_objects = []
+                            for frag in fragments:
+                                try:
+                                    obj = json.loads(frag)
+                                    parsed_objects.append(obj)
+                                except json.JSONDecodeError:
+                                    # If fragment isn't valid JSON, include it as-is
+                                    pass
+                            if parsed_objects:
+                                # Return as JSON array
+                                return json.dumps({"events": parsed_objects})
+                            else:
+                                # Fallback to joining
+                                return "".join(fragments)
 
                 # Explicit text field
                 if isinstance(inner.get("text"), str):

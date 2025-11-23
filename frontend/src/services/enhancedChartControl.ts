@@ -17,6 +17,9 @@ import {
 import { chartControlService, type StructuredChartCommand } from './chartControlService';
 import { DrawingPrimitive } from './DrawingPrimitive';
 import { PREFER_STRUCTURED_CHART_COMMANDS } from '../utils/featureFlags';
+import { DrawingStore } from '../drawings/DrawingStore';
+import type { AnyDrawing, Trendline, Ray, Horizontal, Tp } from '../drawings/types';
+import { uid } from '../drawings/types';
 
 type ParsedDrawingCommand =
   | { action: 'pattern_level'; patternId: string; levelType: string; price: number }
@@ -38,7 +41,11 @@ type ParsedDrawingCommand =
   | { action: 'fibonacci'; high: number; low: number }
   | { action: 'entry'; price: number }
   | { action: 'target'; price: number }
-  | { action: 'stoploss'; price: number };
+  | { action: 'stoploss'; price: number }
+  | { action: 'add_trendline'; startTime: Time; startPrice: number; endTime: Time; endPrice: number; color?: string; width?: number; style?: 'solid' | 'dashed' | 'dotted' }
+  | { action: 'add_ray'; startTime: Time; startPrice: number; endTime: Time; endPrice: number; color?: string; width?: number; style?: 'solid' | 'dashed' | 'dotted'; direction?: 'right' | 'left' | 'both' }
+  | { action: 'add_horizontal'; price: number; color?: string; width?: number; style?: 'solid' | 'dashed' | 'dotted'; draggable?: boolean; rotation?: number }
+  | { action: 'remove_drawing'; id: string };
 
 type MarkerCapableCandlestickSeries = ISeriesApi<'Candlestick'> & {
   setMarkers(markers: SeriesMarker<Time>[]): void;
@@ -52,7 +59,8 @@ class EnhancedChartControl {
   private annotationsMap: Map<string, ISeriesApi<SeriesType>> = new Map();
   private drawingPrimitive: DrawingPrimitive | null = null;
   private patternMarkers: SeriesMarker<Time>[] = [];
-  
+  private storeRef: DrawingStore | null = null; // NEW: Reference to drawing store
+
   private overlayControls: {
     setOverlayVisibility?: (indicator: string, enabled: boolean) => void;
     clearOverlays?: () => void;
@@ -72,7 +80,118 @@ class EnhancedChartControl {
     this.baseService.setChartRef(chart);
     console.log('Enhanced chart control initialized');
   }
-  
+
+  /**
+   * Attach the DrawingStore for programmatic drawing support
+   */
+  attach(chart: IChartApi, mainSeries: MarkerCapableCandlestickSeries, store: DrawingStore) {
+    this.chartRef = chart;
+    this.mainSeriesRef = mainSeries;
+    this.storeRef = store;
+    console.log('Drawing store attached to enhanced chart control');
+  }
+
+  /**
+   * Programmatic drawing API: Add trendline
+   */
+  addTrendline(a: Tp, b: Tp, options?: { color?: string; width?: number; style?: 'solid' | 'dashed' | 'dotted' }): string {
+    if (!this.storeRef) {
+      console.warn('DrawingStore not attached. Call attach() first.');
+      return '';
+    }
+
+    const drawing: Trendline = {
+      id: uid('tl'),
+      kind: 'trendline',
+      a,
+      b,
+      color: options?.color || '#22c55e',
+      width: options?.width || 2,
+      style: options?.style || 'solid',
+    };
+
+    this.storeRef.upsert(drawing);
+    return drawing.id;
+  }
+
+  /**
+   * Programmatic drawing API: Add ray
+   */
+  addRay(a: Tp, b: Tp, options?: { color?: string; width?: number; style?: 'solid' | 'dashed' | 'dotted'; direction?: 'right' | 'left' | 'both' }): string {
+    if (!this.storeRef) {
+      console.warn('DrawingStore not attached. Call attach() first.');
+      return '';
+    }
+
+    const drawing: Ray = {
+      id: uid('ray'),
+      kind: 'ray',
+      a,
+      b,
+      color: options?.color || '#1e90ff',
+      width: options?.width || 2,
+      style: options?.style || 'dashed',
+      direction: options?.direction || 'right',
+    };
+
+    this.storeRef.upsert(drawing);
+    return drawing.id;
+  }
+
+  /**
+   * Programmatic drawing API: Add horizontal line
+   */
+  addHorizontal(price: number, options?: { color?: string; width?: number; style?: 'solid' | 'dashed' | 'dotted'; draggable?: boolean; rotation?: number }): string {
+    if (!this.storeRef) {
+      console.warn('DrawingStore not attached. Call attach() first.');
+      return '';
+    }
+
+    const drawing: Horizontal = {
+      id: uid('h'),
+      kind: 'horizontal',
+      price,
+      color: options?.color || '#888',
+      width: options?.width || 2,
+      style: options?.style || 'dashed',
+      draggable: options?.draggable !== false,
+      rotation: options?.rotation ?? 0,
+    };
+
+    this.storeRef.upsert(drawing);
+    return drawing.id;
+  }
+
+  /**
+   * Programmatic drawing API: Remove specific drawing by ID
+   */
+  removeDrawing(id: string): void {
+    if (!this.storeRef) {
+      console.warn('DrawingStore not attached. Call attach() first.');
+      return;
+    }
+
+    this.storeRef.remove(id);
+  }
+
+  /**
+   * Alias for removeDrawing (Phase-2 API compatibility)
+   */
+  remove(id: string): void {
+    this.removeDrawing(id);
+  }
+
+  /**
+   * Clear all drawings from store (Phase-2 API compatibility)
+   */
+  clear(): void {
+    if (!this.storeRef) {
+      console.warn('DrawingStore not attached. Call attach() first.');
+      return;
+    }
+    this.storeRef.clear();
+  }
+
   /**
    * Get drawings count (for testing)
    */
@@ -126,6 +245,11 @@ class EnhancedChartControl {
       this.patternMarkers = [];
       // Note: TradingView Lightweight Charts v5 doesn't support setMarkers() method
       // Markers are managed through the patternMarkers array
+    }
+
+    // Clear the drawing store (manual drawings)
+    if (this.storeRef) {
+      this.storeRef.clear();
     }
 
     this.overlayControls.clearOverlays?.();
@@ -414,9 +538,32 @@ class EnhancedChartControl {
   drawSupportResistanceLevels(levels: { support: number[], resistance: number[] }): void {
     if (!this.chartRef || !this.mainSeriesRef) return;
     const series = this.mainSeriesRef;
-    
-    // Draw support levels
-    levels.support?.forEach((level, index) => {
+
+    // Helper function to deduplicate and cluster price levels
+    const deduplicateAndLimitLevels = (inputLevels: number[] | undefined, maxCount: number = 5): number[] => {
+      if (!inputLevels?.length) return [];
+
+      // Sort levels
+      const sorted = [...inputLevels].sort((a, b) => a - b);
+
+      // Deduplicate and cluster levels within 0.1% of each other
+      const deduplicated: number[] = [];
+      let lastLevel: number | null = null;
+
+      for (const level of sorted) {
+        if (lastLevel === null || Math.abs(level - lastLevel) / lastLevel > 0.001) {
+          deduplicated.push(level);
+          lastLevel = level;
+        }
+      }
+
+      // Limit to max count
+      return deduplicated.slice(0, maxCount);
+    };
+
+    // Draw support levels with deduplication
+    const deduplicatedSupport = deduplicateAndLimitLevels(levels.support, 5);
+    deduplicatedSupport.forEach((level, index) => {
       const priceLine = series.createPriceLine({
         price: level,
         color: '#22c55e',
@@ -427,9 +574,10 @@ class EnhancedChartControl {
       });
       this.drawingsMap.set(`support_${index}`, priceLine);
     });
-    
-    // Draw resistance levels
-    levels.resistance?.forEach((level, index) => {
+
+    // Draw resistance levels with deduplication
+    const deduplicatedResistance = deduplicateAndLimitLevels(levels.resistance, 5);
+    deduplicatedResistance.forEach((level, index) => {
       const priceLine = series.createPriceLine({
         price: level,
         color: '#ef4444',
@@ -1022,12 +1170,66 @@ class EnhancedChartControl {
           }
           return `Stop loss at ${drawing.price}`;
           
+        case 'add_trendline': {
+          if (!this.storeRef) {
+            console.warn('DrawingStore not attached. Cannot add trendline.');
+            return null;
+          }
+          const { startTime, startPrice, endTime, endPrice, color, width, style } = drawing as any;
+          const id = this.addTrendline(
+            { time: startTime as Time, price: startPrice },
+            { time: endTime as Time, price: endPrice },
+            { color, width, style }
+          );
+          return id ? `Trendline ${id} added` : null;
+        }
+
+        case 'add_ray': {
+          if (!this.storeRef) {
+            console.warn('DrawingStore not attached. Cannot add ray.');
+            return null;
+          }
+          const { startTime, startPrice, endTime, endPrice, color, width, style, direction } = drawing as any;
+          const id = this.addRay(
+            { time: startTime as Time, price: startPrice },
+            { time: endTime as Time, price: endPrice },
+            { color, width, style, direction }
+          );
+          return id ? `Ray ${id} added` : null;
+        }
+
+        case 'add_horizontal': {
+          if (!this.storeRef) {
+            console.warn('DrawingStore not attached. Cannot add horizontal.');
+            return null;
+          }
+          const { price, color, width, style, draggable, rotation } = drawing as any;
+          const id = this.addHorizontal(price, { color, width, style, draggable, rotation });
+          return id ? `Horizontal line ${id} added at ${price}${rotation ? ` with ${Math.round(rotation)}° rotation` : ''}` : null;
+        }
+
+        case 'remove_drawing': {
+          if (!this.storeRef) {
+            console.warn('DrawingStore not attached. Cannot remove drawing.');
+            return null;
+          }
+          const { id } = drawing as any;
+          if (id) {
+            this.removeDrawing(id);
+            return `Drawing ${id} removed`;
+          }
+          return null;
+        }
+
         case 'clear_all':
           if (this.drawingPrimitive) {
             this.drawingPrimitive.clearAllDrawings();
           }
+          if (this.storeRef) {
+            this.storeRef.clear();
+          }
           return 'All drawings cleared';
-          
+
         default:
           return null;
       }

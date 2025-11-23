@@ -165,8 +165,17 @@ ENDPOINT_LIMITS: Dict[str, Dict[UserTier, RateLimit]] = {
     "/api/conversation": WRITE_LIMITS,
     "/api/conversations": MARKET_DATA_LIMITS,  # Read is less expensive
 
-    # Chart control
-    "/api/chart-control": WRITE_LIMITS,
+    # Chart control - Write operations (POST endpoints)
+    "/api/chart/change-symbol": WRITE_LIMITS,
+    "/api/chart/set-timeframe": WRITE_LIMITS,
+    "/api/chart/toggle-indicator": WRITE_LIMITS,
+    "/api/chart/capture-snapshot": WRITE_LIMITS,
+    "/api/chart/set-style": WRITE_LIMITS,
+    "/api/chart/reset": WRITE_LIMITS,
+
+    # Chart control - Read operations (polling endpoints need high limits)
+    "/api/chart/commands": HEALTH_LIMITS,  # Frontend polls every 1s
+    "/api/chart/state": MARKET_DATA_LIMITS,
 }
 
 

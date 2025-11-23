@@ -1,0 +1,23 @@
+Create a comprehensive stock analysis widget called "GVSES Comprehensive Analysis" that displays all market data in a single card:
+
+HEADER: Display company name and symbol as title (e.g., "Apple Inc. (AAPL)"), timestamp on the right, with a refresh button.
+
+PRICE SECTION: Show current price in extra-large bold text, price change with color-coded indicator (green for positive, red for negative), and a refresh button.
+
+CHART SECTION: Display a chart image with timeframe selector buttons (1D, 1W, 1M, 3M, 1Y). The selected timeframe button should be highlighted with solid variant, others outlined. Chart image should have 16:9 aspect ratio with rounded corners.
+
+QUICK STATS: Show three columns for Open price, Volume, and Day Range (low-high).
+
+TECHNICAL POSITION: Display a badge showing technical position (Bullish/Bearish/Neutral) with color-coding. Below, show four key levels in aligned rows:
+- QE (Target) level
+- ST (Resistance) level
+- Now (Current price) - HIGHLIGHTED in primary color and bold
+- LTB (Support) level
+
+PATTERN DETECTION: List top 3 chart patterns with circular confidence indicators (green=high, yellow=medium, red=low) and pattern details (name, confidence level, direction).
+
+MARKET NEWS: Show top 5 news articles with source filter buttons (All Sources, CNBC, Yahoo). Each article displays a colored circle (blue for CNBC, orange for Yahoo), headline, source name, and time ago. Articles are clickable to open URLs.
+
+UPCOMING EVENTS: List top 2 upcoming corporate events with impact indicators (red=high, yellow=medium, blue=low) showing event name, date, and countdown.
+
+Use large card size with "GVSES Analysis" status and chart-line icon. Include dividers between all major sections. Make all buttons pill-shaped for modern styling.

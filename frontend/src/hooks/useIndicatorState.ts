@@ -9,6 +9,7 @@ import { IndicatorDataFormatter, IndicatorApiResponse } from '../utils/indicator
 import axios from 'axios';
 import { useDebounce } from './useDebounce';
 import { getApiUrl } from '../utils/apiConfig';
+import { retryWithBackoff } from '../utils/retryWithBackoff';
 
 const API_URL = getApiUrl();
 
@@ -108,16 +109,23 @@ export function useIndicatorState(options: UseIndicatorStateOptions = {}) {
     setDataState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      const response = await axios.get<IndicatorApiResponse>(
-        `${API_URL}/api/technical-indicators`,
+      const response = await retryWithBackoff(
+        async () => axios.get<IndicatorApiResponse>(
+          `${API_URL}/api/technical-indicators`,
+          {
+            params: {
+              symbol: state.symbol,
+              indicators: requestedIndicators.join(','),
+              // Map timeframe to days for API
+              days: timeframeToDays(state.timeframe)
+            },
+            signal
+          }
+        ),
         {
-          params: {
-            symbol: state.symbol,
-            indicators: requestedIndicators.join(','),
-            // Map timeframe to days for API
-            days: timeframeToDays(state.timeframe)
-          },
-          signal
+          maxRetries: 3,
+          baseDelay: 1000,
+          maxDelay: 10000
         }
       );
       

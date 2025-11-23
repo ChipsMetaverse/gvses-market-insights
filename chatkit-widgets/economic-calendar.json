@@ -1,0 +1,599 @@
+{
+  "type": "Card",
+  "size": "md",
+  "children": [
+    {
+      "type": "Col",
+      "gap": 3,
+      "children": [
+        {
+          "type": "Row",
+          "align": "center",
+          "children": [
+            {
+              "type": "Col",
+              "flex": "auto",
+              "gap": 0.5,
+              "children": [
+                {
+                  "type": "Title",
+                  "value": "Economic Calendar",
+                  "size": "md"
+                },
+                {
+                  "type": "Caption",
+                  "value": "ForexFactory events • Filter by time & impact",
+                  "color": "secondary"
+                }
+              ]
+            },
+            {
+              "type": "Button",
+              "label": "Refresh",
+              "iconStart": "reload",
+              "color": "info",
+              "onClickAction": {
+                "type": "calendar.refresh",
+                "payload": {
+                  "period": "today",
+                  "impact": "all"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "Row",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Button",
+              "key": "today",
+              "label": "Today",
+              "color": "info",
+              "variant": "solid",
+              "onClickAction": {
+                "type": "calendar.setPeriod",
+                "payload": {
+                  "value": "today"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "key": "tomorrow",
+              "label": "Tomorrow",
+              "color": "info",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "calendar.setPeriod",
+                "payload": {
+                  "value": "tomorrow"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "key": "this_week",
+              "label": "This Week",
+              "color": "info",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "calendar.setPeriod",
+                "payload": {
+                  "value": "this_week"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "key": "next_week",
+              "label": "Next Week",
+              "color": "info",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "calendar.setPeriod",
+                "payload": {
+                  "value": "next_week"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "Row",
+          "gap": 2,
+          "children": [
+            {
+              "type": "Button",
+              "key": "all",
+              "label": "All 🌐",
+              "color": "info",
+              "variant": "solid",
+              "onClickAction": {
+                "type": "calendar.setImpact",
+                "payload": {
+                  "value": "all"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "key": "high",
+              "label": "High 🔴",
+              "color": "info",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "calendar.setImpact",
+                "payload": {
+                  "value": "high"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "key": "medium",
+              "label": "Medium 🟡",
+              "color": "info",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "calendar.setImpact",
+                "payload": {
+                  "value": "medium"
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "key": "low",
+              "label": "Low 🟢",
+              "color": "info",
+              "variant": "outline",
+              "onClickAction": {
+                "type": "calendar.setImpact",
+                "payload": {
+                  "value": "low"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "Divider"
+        },
+        {
+          "type": "ListView",
+          "limit": 8,
+          "children": [
+            {
+              "type": "ListViewItem",
+              "key": "evt-1",
+              "gap": 3,
+              "onClickAction": {
+                "type": "event.open",
+                "payload": {
+                  "id": "evt-1"
+                }
+              },
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 10,
+                  "radius": "full",
+                  "background": "red-500"
+                },
+                {
+                  "type": "Col",
+                  "gap": 1,
+                  "flex": "auto",
+                  "children": [
+                    {
+                      "type": "Row",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "Text",
+                          "value": "8:30 AM",
+                          "size": "sm",
+                          "color": "emphasis"
+                        },
+                        {
+                          "type": "Badge",
+                          "label": "USD",
+                          "color": "info"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Text",
+                      "value": "Non-Farm Employment Change",
+                      "size": "sm",
+                      "weight": "semibold",
+                      "maxLines": 2
+                    },
+                    {
+                      "type": "Row",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "Caption",
+                          "value": "Actual: 180K"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Forecast: 175K"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Prev: 150K"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "ListViewItem",
+              "key": "evt-2",
+              "gap": 3,
+              "onClickAction": {
+                "type": "event.open",
+                "payload": {
+                  "id": "evt-2"
+                }
+              },
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 10,
+                  "radius": "full",
+                  "background": "red-500"
+                },
+                {
+                  "type": "Col",
+                  "gap": 1,
+                  "flex": "auto",
+                  "children": [
+                    {
+                      "type": "Row",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "Text",
+                          "value": "8:30 AM",
+                          "size": "sm",
+                          "color": "emphasis"
+                        },
+                        {
+                          "type": "Badge",
+                          "label": "USD",
+                          "color": "info"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Text",
+                      "value": "CPI m/m",
+                      "size": "sm",
+                      "weight": "semibold",
+                      "maxLines": 2
+                    },
+                    {
+                      "type": "Row",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "Caption",
+                          "value": "Actual: 0.2%"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Forecast: 0.3%"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Prev: 0.4%"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "ListViewItem",
+              "key": "evt-3",
+              "gap": 3,
+              "onClickAction": {
+                "type": "event.open",
+                "payload": {
+                  "id": "evt-3"
+                }
+              },
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 10,
+                  "radius": "full",
+                  "background": "yellow-400"
+                },
+                {
+                  "type": "Col",
+                  "gap": 1,
+                  "flex": "auto",
+                  "children": [
+                    {
+                      "type": "Row",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "Text",
+                          "value": "4:00 AM",
+                          "size": "sm",
+                          "color": "emphasis"
+                        },
+                        {
+                          "type": "Badge",
+                          "label": "EUR",
+                          "color": "info"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Text",
+                      "value": "German ZEW Economic Sentiment",
+                      "size": "sm",
+                      "weight": "semibold",
+                      "maxLines": 2
+                    },
+                    {
+                      "type": "Row",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "Caption",
+                          "value": "Actual: -5.2"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Forecast: -6.0"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Prev: -1.0"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "ListViewItem",
+              "key": "evt-4",
+              "gap": 3,
+              "onClickAction": {
+                "type": "event.open",
+                "payload": {
+                  "id": "evt-4"
+                }
+              },
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 10,
+                  "radius": "full",
+                  "background": "red-500"
+                },
+                {
+                  "type": "Col",
+                  "gap": 1,
+                  "flex": "auto",
+                  "children": [
+                    {
+                      "type": "Row",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "Text",
+                          "value": "7:00 PM",
+                          "size": "sm",
+                          "color": "emphasis"
+                        },
+                        {
+                          "type": "Badge",
+                          "label": "NZD",
+                          "color": "info"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Text",
+                      "value": "Official Cash Rate",
+                      "size": "sm",
+                      "weight": "semibold",
+                      "maxLines": 2
+                    },
+                    {
+                      "type": "Row",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "Caption",
+                          "value": "Actual: 5.50%"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Forecast: 5.50%"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Prev: 5.50%"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "ListViewItem",
+              "key": "evt-5",
+              "gap": 3,
+              "onClickAction": {
+                "type": "event.open",
+                "payload": {
+                  "id": "evt-5"
+                }
+              },
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 10,
+                  "radius": "full",
+                  "background": "yellow-400"
+                },
+                {
+                  "type": "Col",
+                  "gap": 1,
+                  "flex": "auto",
+                  "children": [
+                    {
+                      "type": "Row",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "Text",
+                          "value": "6:00 AM",
+                          "size": "sm",
+                          "color": "emphasis"
+                        },
+                        {
+                          "type": "Badge",
+                          "label": "GBP",
+                          "color": "info"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Text",
+                      "value": "Manufacturing Production m/m",
+                      "size": "sm",
+                      "weight": "semibold",
+                      "maxLines": 2
+                    },
+                    {
+                      "type": "Row",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "Caption",
+                          "value": "Actual: 0.3%"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Forecast: 0.2%"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Prev: -0.1%"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "ListViewItem",
+              "key": "evt-6",
+              "gap": 3,
+              "onClickAction": {
+                "type": "event.open",
+                "payload": {
+                  "id": "evt-6"
+                }
+              },
+              "children": [
+                {
+                  "type": "Box",
+                  "size": 10,
+                  "radius": "full",
+                  "background": "green-500"
+                },
+                {
+                  "type": "Col",
+                  "gap": 1,
+                  "flex": "auto",
+                  "children": [
+                    {
+                      "type": "Row",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "Text",
+                          "value": "1:00 AM",
+                          "size": "sm",
+                          "color": "emphasis"
+                        },
+                        {
+                          "type": "Badge",
+                          "label": "AUD",
+                          "color": "info"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "Text",
+                      "value": "RBA Gov Speaks",
+                      "size": "sm",
+                      "weight": "semibold",
+                      "maxLines": 2
+                    },
+                    {
+                      "type": "Row",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "Caption",
+                          "value": "Actual: —"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Forecast: —"
+                        },
+                        {
+                          "type": "Caption",
+                          "value": "Prev: —"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Row",
+          "children": [
+            {
+              "type": "Caption",
+              "value": "Last updated Nov 15, 2025 09:10 ET",
+              "color": "secondary"
+            },
+            {
+              "type": "Spacer"
+            },
+            {
+              "type": "Caption",
+              "value": "Impact: 🔴 High • 🟡 Med • 🟢 Low",
+              "color": "tertiary"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

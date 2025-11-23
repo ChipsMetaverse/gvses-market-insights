@@ -9,7 +9,7 @@ from services.forex_mcp_client import ForexMCPClient
 class _AsyncStub:
     def __init__(self, payload: Dict[str, Any]):
         self.payload = payload
-        self.last_arguments: Dict[str, Any] | None = None
+        self.last_arguments: Optional[Dict[str, Any]] = None
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]):
         self.last_arguments = {**arguments}
