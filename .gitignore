@@ -231,3 +231,4 @@ market-mcp-server/sse-server-old.js
 market-mcp-server/take_screenshot.py
 market-mcp-server/agent_builder_screenshot*.png
 agenthistory.md
+tv-trendlines/
