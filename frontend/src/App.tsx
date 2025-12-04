@@ -19,7 +19,7 @@ function App() {
           element={
             <ProtectedRoute>
               <IndicatorProvider>
-                <TradingDashboardChatOnly />
+                <TradingDashboardSimple />
               </IndicatorProvider>
             </ProtectedRoute>
           }
@@ -28,7 +28,7 @@ function App() {
           path="/demo"
           element={
             <IndicatorProvider>
-              <TradingDashboardChatOnly />
+              <TradingDashboardSimple />
             </IndicatorProvider>
           }
         />
