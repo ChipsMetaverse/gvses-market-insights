@@ -1,5 +1,4 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { TradingDashboardChatOnly } from './components/TradingDashboardChatOnly';
 import { TradingDashboardSimple } from './components/TradingDashboardSimple';
 import { ProviderTest } from './components/ProviderTest';
 import { IndicatorProvider } from './contexts/IndicatorContext';
