@@ -14,12 +14,14 @@ When working on this project, proactively use the following MCP servers:
 5. **PLAYWRIGHT** - Generate tests for all new code
 6. **GITHUB** - Create PRs with semantic commits
 7. **MEMORY** - Store and recall all solutions
+8. **SENTRY** - Monitor errors, analyze issues, and use Seer for automated fixes
 
 ### Workflow Triggers
 - **Bug mentioned** → Create Linear issue → Research → Fix → Test → PR
 - **Feature requested** → Linear issue → Docs → Implement → Scan → Test → PR
 - **Question asked** → Check Memory → Research → Store answer
 - **Code written** → Semgrep scan → Generate tests → Update Linear
+- **Production error** → Check Sentry → Use Seer to analyze → Implement fix
 
 ### Always Active Rules
 - ✅ Run Semgrep after ANY code change
@@ -27,6 +29,7 @@ When working on this project, proactively use the following MCP servers:
 - ✅ Store solutions in Memory
 - ✅ Update Linear issue status as work progresses
 - ✅ Generate Playwright tests for UI components
+- ✅ Use Sentry MCP to investigate production errors
 
 ## Project Overview
 
@@ -78,6 +81,20 @@ React + TypeScript + Vite application with professional trading interface:
 - **market-mcp-server** (`market-mcp-server/`): Node.js, 35+ Yahoo Finance and CNBC tools
 - **alpaca-mcp-server** (`alpaca-mcp-server/`): Python, Alpaca Markets API integration
 - **forex-mcp-server** (`forex-mcp-server/`): Python + FastMCP + Playwright, ForexFactory economic calendar scraping
+- **sentry-mcp-server**: Remote hosted, OAuth-enabled error monitoring with Seer AI agent for automated debugging
+
+### Error Monitoring (Nov 11, 2025)
+- **Sentry Integration**: Comprehensive error tracking and performance monitoring
+  - **Frontend**: `@sentry/react` with browser tracing and session replay
+  - **Backend**: `sentry-sdk` with FastAPI integration and logging
+  - **Configuration**: `frontend/src/config/sentry.ts` and `backend/config/sentry.py`
+  - **Seer AI Agent**: Automated root cause analysis and fix recommendations via Sentry MCP
+  - **Documentation**: See `SENTRY_INTEGRATION.md` for complete setup guide
+- **Usage**: Set `VITE_SENTRY_DSN` and `SENTRY_DSN` environment variables to enable
+- **MCP Commands**:
+  - "Check Sentry for errors in TradingChart.tsx"
+  - "Use Sentry's Seer to analyze issue FRONTEND-123"
+  - "Tell me about recent errors in gvses-backend"
 
 ## Development Commands
 
@@ -426,6 +443,18 @@ const { searchResults, isSearching, searchError, hasSearched } = useSymbolSearch
 - **Chart Navigation**: Voice-controlled symbol switching
 
 ## Recent Updates
+
+### BTD (200-Day SMA) Display on All Timeframes (Dec 14, 2025)
+- **Timeframe-Agnostic BTD**: BTD (200-day SMA) now displays on ALL timeframes, including intraday (1m, 5m, 15m, 30m, 1H, 2H, 4H)
+- **Daily Data Integration**: Backend fetches 365 days of daily candles for BTD calculation on all timeframes
+- **Consistent Reference Level**: BTD displays at same value across all timeframes (e.g., $368.34 for TSLA)
+- **Implementation**:
+  - `backend/mcp_server.py` (lines 1649-1717): Extended daily data fetch to 365 days for all timeframes
+  - `backend/pattern_detection.py`: Updated to accept `daily_candles_for_btd` parameter
+  - Uses daily candles specifically for BTD calculation while using chart candles for BL/SH
+- **Why This Matters**: The 200-day SMA is a critical support/resistance level that traders reference regardless of current timeframe
+- **Verified Timeframes**: 1m, 5m, 15m, 1H, 1Y all display BTD correctly at consistent value
+- **Files Modified**: `mcp_server.py`, `pattern_detection.py`, `key_levels.py` (calculation logic)
 
 ### Forex Factory MCP Integration (Nov 10, 2025)
 - **Economic Calendar Data**: New forex-mcp-server provides NFP, CPI, Fed meetings, GDP, unemployment data

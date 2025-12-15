@@ -11,6 +11,9 @@ import logging
 from pathlib import Path
 import json
 import os
+from pivot_detector_mtf import MTFPivotDetector, PivotPoint
+from trendline_builder import TrendlineBuilder, Trendline
+from key_levels import KeyLevelsGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -377,20 +380,46 @@ class PatternDetector:
     Emphasizes reliability and clear confidence scoring
     """
     
-    def __init__(self, candles: List[Dict], cache_seconds: int = 60, use_knowledge_base: bool = True):
+    def __init__(self, candles: List[Dict], cache_seconds: int = 60, use_knowledge_base: bool = True, timeframe: str = "1d"):
         """
         Initialize with OHLCV candle data
-        
+
         Args:
             candles: List of dicts with keys: time, open, high, low, close, volume
             cache_seconds: How long to cache results
+            use_knowledge_base: Whether to use pattern knowledge base
+            timeframe: Chart timeframe (1m, 5m, 15m, 30m, 1H, 2H, 4H, 1d, 1wk, 1mo)
         """
-        self.candles = candles[-200:] if len(candles) > 200 else candles  # Process last 200 for better pattern detection
+        # Phase 1 Fix: Normalize candles to ensure 'time' key exists with Unix timestamp
+        # Use all candles for accurate 200 SMA calculation (no 200-candle limit)
+        normalized_candles = []
+        for c in candles:
+            # Convert timestamp string to Unix epoch if needed
+            if 'time' not in c and 'timestamp' in c:
+                timestamp_val = c['timestamp']
+                if isinstance(timestamp_val, str):
+                    # Parse ISO 8601 string to Unix timestamp
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(timestamp_val.replace('Z', '+00:00'))
+                    unix_time = int(dt.timestamp())
+                else:
+                    unix_time = int(timestamp_val)
+
+                # Create new candle dict with 'time' key
+                normalized = c.copy()
+                normalized['time'] = unix_time
+                normalized_candles.append(normalized)
+            else:
+                normalized_candles.append(c)
+
+        self.candles = normalized_candles
         self.cache_seconds = cache_seconds
         self._last_detection_time = None
         self._cached_results = None
         self.use_knowledge_base = use_knowledge_base
         self._knowledge_library = PatternLibrary() if use_knowledge_base else None
+        self.timeframe = timeframe  # Store timeframe for trendline extension
+        logger.info(f"🔧 PatternDetector initialized with timeframe: {timeframe}, candles: {len(self.candles)}")
 
         if self.candles:
             self.opens = np.array([float(c.get('open', 0)) for c in self.candles])
@@ -557,10 +586,18 @@ class PatternDetector:
         
         return pattern
         
-    def detect_all_patterns(self) -> Dict[str, Any]:
+    def detect_all_patterns(
+        self,
+        daily_pdh_pdl: Optional[Dict[str, float]] = None,
+        daily_candles_for_btd: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
         """
         Detect all patterns and return structured results
         Uses caching to prevent redundant calculations
+
+        Args:
+            daily_pdh_pdl: Optional dict with 'pdh' and 'pdl' from previous trading day
+            daily_candles_for_btd: Optional list of daily candles for BTD (200-day SMA) calculation
         """
         # Check cache
         if self._cached_results and self._last_detection_time:
@@ -586,7 +623,7 @@ class PatternDetector:
         detected_patterns.extend(breakout_patterns)
 
         # Detect trend/pattern structure
-        detected_patterns.extend(self._detect_double_tops_bottoms())
+        # Note: _detect_double_tops_bottoms removed - using linear regression trendlines instead
         detected_patterns.extend(self._detect_head_shoulders())
         detected_patterns.extend(self._detect_triangles())
         detected_patterns.extend(self._detect_flags())
@@ -596,10 +633,11 @@ class PatternDetector:
         detected_patterns.extend(self._detect_breakaway_gaps())
 
         # Newly enabled detections (expanded coverage)
-        detected_patterns.extend(self._detect_spinning_top_and_marubozu())
-        detected_patterns.extend(self._detect_special_doji())
-        detected_patterns.extend(self._detect_hanging_inverted())
-        detected_patterns.extend(self._detect_three_inside_outside())
+        # Note: Following methods removed during trendline simplification:
+        # - _detect_spinning_top_and_marubozu
+        # - _detect_special_doji
+        # - _detect_hanging_inverted
+        # - _detect_three_inside_outside
         detected_patterns.extend(self._detect_abandoned_baby())
         detected_patterns.extend(self._detect_rectangles_channels())
         detected_patterns.extend(self._detect_triple_tops_bottoms_extra())
@@ -632,12 +670,25 @@ class PatternDetector:
         if high_confidence_patterns:
             logger.info(f"   Patterns: {[p.pattern_type for p in high_confidence_patterns]}")
         
+        # Convert patterns to dictionaries
+        pattern_dicts = [self._pattern_to_dict(p) for p in high_confidence_patterns]
+
+        # Calculate trendlines from patterns and levels
+        trendlines = self.calculate_pattern_trendlines(
+            patterns=pattern_dicts,
+            support_levels=support_levels[:2],
+            resistance_levels=resistance_levels[:2],
+            daily_pdh_pdl=daily_pdh_pdl,
+            daily_candles_for_btd=daily_candles_for_btd
+        )
+
         results = {
-            "detected": [self._pattern_to_dict(p) for p in high_confidence_patterns],
+            "detected": pattern_dicts,
             "active_levels": {
                 "support": support_levels[:2],  # Top 2 support levels
                 "resistance": resistance_levels[:2]  # Top 2 resistance levels
             },
+            "trendlines": trendlines,  # Auto-generated trendlines for chart rendering
             "summary": {
                 "total_patterns": len(high_confidence_patterns),
                 "bullish_count": sum(1 for p in high_confidence_patterns if p.signal == "bullish"),
@@ -645,257 +696,265 @@ class PatternDetector:
                 "neutral_count": sum(1 for p in high_confidence_patterns if p.signal == "neutral"),
                 "candlestick_count": sum(1 for p in high_confidence_patterns if PATTERN_CATEGORY_MAP.get(p.pattern_type) == "candlestick"),
                 "chart_pattern_count": sum(1 for p in high_confidence_patterns if PATTERN_CATEGORY_MAP.get(p.pattern_type) == "chart_pattern"),
-                "price_action_count": sum(1 for p in high_confidence_patterns if PATTERN_CATEGORY_MAP.get(p.pattern_type) == "price_action")
+                "price_action_count": sum(1 for p in high_confidence_patterns if PATTERN_CATEGORY_MAP.get(p.pattern_type) == "price_action"),
+                "trendlines_count": len(trendlines)
             }
         }
-        
+
         # Add agent explanation
         results["agent_explanation"] = format_patterns_for_agent(results)
         
         # Update cache
         self._cached_results = results
         self._last_detection_time = datetime.now()
-        
+
         return results
 
+    def calculate_pattern_trendlines(
+        self,
+        patterns: List[Dict[str, Any]],
+        support_levels: List[float],
+        resistance_levels: List[float],
+        daily_pdh_pdl: Optional[Dict[str, float]] = None,
+        daily_candles_for_btd: Optional[List[Dict[str, Any]]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Calculate main trendlines and key trading levels.
+        Returns:
+        - 2 main trendlines (upper/lower) using linear regression
+        - 5 key levels: BL (Buy Low), SH (Sell High), BTD (Buy The Dip), PDH, PDL
+
+        All lines are deleteable from the frontend.
+
+        Args:
+            patterns: List of detected patterns
+            support_levels: Support price levels
+            resistance_levels: Resistance price levels
+            daily_pdh_pdl: Optional dict with 'pdh' and 'pdl' from previous trading day
+            daily_candles_for_btd: Optional list of daily candles for BTD (200-day SMA) calculation
+        """
+        trendlines: List[Dict[str, Any]] = []
+
+        if not self.candles or len(self.candles) < 10:
+            return trendlines
+
+        # Get time range
+        start_time = self.candles[0]['time']
+        end_time = self.candles[-1]['time']
+
+        # Extract highs and lows for trend calculation
+        highs = np.array([float(c['high']) for c in self.candles])
+        lows = np.array([float(c['low']) for c in self.candles])
+        closes = np.array([float(c['close']) for c in self.candles])
+
+        # ========================================
+        # PHASE 1: Multi-Timeframe Pivot Detection
+        # ========================================
+
+        # Timeframe-aware pivot detection parameters
+        # Intraday needs more sensitive detection (fewer bars required on each side)
+        # to capture pivots in noisy data
+        if self.timeframe in ["1m", "5m", "15m", "30m"]:
+            # Very sensitive for short timeframes
+            left_bars = 1
+            right_bars = 1
+        elif self.timeframe in ["1H", "2H", "4H"]:
+            # Moderate sensitivity for hourly timeframes
+            left_bars = 2
+            right_bars = 2
+        else:
+            # Standard sensitivity for daily and higher
+            left_bars = 2
+            right_bars = 2
+
+        pivot_detector = MTFPivotDetector(left_bars=left_bars, right_bars=right_bars)
+        logger.info(f"🔍 Pivot detector: left_bars={left_bars}, right_bars={right_bars}, timeframe={self.timeframe}")
+        timestamps = np.array([c['time'] for c in self.candles])
+
+        # Resample to 4H for higher timeframe pivots
+        htf_high, htf_low, htf_timestamps = pivot_detector.resample_to_higher_timeframe(
+            self.candles,
+            htf_interval_seconds=14400  # 4 hours
+        )
+
+        logger.info(f"📊 Resampled {len(self.candles)} bars to {len(htf_high)} 4H bars")
+
+        # Phase 1 Fix: Increased MTF threshold from 5 to 20
+        # This ensures intervals like 15m (11 HTF bars) use Single TF path
+        # which has more data to work with (111 LTF bars vs 11 HTF bars)
+        if len(htf_high) >= 20:  # Need enough HTF data for reliable MTF pivots
+            # True MTF: HTF pivots mapped to LTF
+            pivot_highs, pivot_lows = pivot_detector.find_htf_pivots_confirmed_ltf(
+                htf_high, htf_low, htf_timestamps,
+                highs, lows, timestamps
+            )
+            logger.info(f"🎯 MTF Pivot Detector (4H→LTF): {len(pivot_highs)} highs, {len(pivot_lows)} lows")
+        else:
+            # Single TF with adaptive filters (better for shorter timeframes)
+            # For very short timeframes (1m-5m), disable aggressive filters
+            # to capture more pivots in noisy intraday data
+            if self.timeframe in ["1m", "5m"]:
+                # Minimal filtering for very short timeframes
+                pivot_highs, pivot_lows = pivot_detector.detect_pivots_with_filters(
+                    highs, lows, timestamps,
+                    apply_spacing=False,        # No spacing filter - keep all pivots
+                    apply_percent_filter=False,  # No percent filter - keep small moves
+                    apply_trend_filter=False,    # No trend filter - keep all structures
+                    trend_direction="auto"
+                )
+                logger.info(f"🎯 Single TF Pivot Detector (minimal filters): {len(pivot_highs)} highs, {len(pivot_lows)} lows")
+            else:
+                # Standard filtering for longer timeframes
+                pivot_highs, pivot_lows = pivot_detector.detect_pivots_with_filters(
+                    highs, lows, timestamps,
+                    apply_spacing=True,
+                    apply_percent_filter=True,
+                    apply_trend_filter=True,
+                    trend_direction="auto"
+                )
+                logger.info(f"🎯 Single TF Pivot Detector: {len(pivot_highs)} highs, {len(pivot_lows)} lows")
+
+        # ========================================
+        # PHASE 2: Touch-Point Maximization Trendlines
+        # ========================================
+
+        # Timeframe-aware parameters for pattern detection
+        # Intraday timeframes need more lenient parameters due to price noise
+        if self.timeframe in ["1m", "5m", "15m", "30m", "1H", "2H", "4H"]:
+            # Intraday: More lenient tolerance, fewer touches required
+            tolerance_percent = 0.008  # 0.8% tolerance for noisy intraday data
+            min_touches = 2  # 2 touches minimum (instead of 3)
+        else:
+            # Daily and higher: Stricter parameters for cleaner data
+            tolerance_percent = 0.005  # 0.5% tolerance
+            min_touches = 3  # 3 touches minimum
+
+        trendline_builder = TrendlineBuilder(touch_tolerance_percent=tolerance_percent)
+
+        logger.info(f"🔍 Trendline parameters: tolerance={tolerance_percent}, min_touches={min_touches}, timeframe={self.timeframe}")
+        logger.info(f"🔍 Pivots: {len(pivot_lows)} lows, {len(pivot_highs)} highs")
+
+        # Build support trendline
+        support_line = trendline_builder.build_support_line(
+            pivot_lows,
+            lows,
+            min_touches=min_touches
+        )
+        logger.info(f"🔍 Support line result: {support_line is not None}")
+
+        # Build resistance trendline
+        resistance_line = trendline_builder.build_resistance_line(
+            pivot_highs,
+            highs,
+            min_touches=min_touches
+        )
+        logger.info(f"🔍 Resistance line result: {resistance_line is not None}")
+
+        # Add trendlines to output (pass timeframe for proper extension)
+        if support_line:
+            trendlines.append(trendline_builder.trendline_to_dict(support_line, self.candles, timeframe=self.timeframe))
+            logger.info(f"✅ Support line: {support_line.touches} touches")
+
+        if resistance_line:
+            trendlines.append(trendline_builder.trendline_to_dict(resistance_line, self.candles, timeframe=self.timeframe))
+            logger.info(f"✅ Resistance line: {resistance_line.touches} touches")
+
+        # ========================================
+        # PHASE 3: Pivot-Based Key Levels
+        # ========================================
+        key_levels_gen = KeyLevelsGenerator(lookback_bars=50)
+
+        # Use passed PDH/PDL if available (from previous trading day)
+        # If None, don't generate PDH/PDL (they're only useful for intraday charts)
+        if daily_pdh_pdl:
+            logger.info(f"Using passed PDH/PDL: {daily_pdh_pdl}")
+            daily_data = daily_pdh_pdl
+        else:
+            logger.info("No PDH/PDL provided - skipping PDH/PDL levels (not applicable for daily/weekly charts)")
+            daily_data = None
+
+        # Use daily candles for BTD if provided, otherwise use chart candles
+        # BTD (200-day SMA) should always be calculated from daily data for accuracy
+        candles_for_btd = daily_candles_for_btd if daily_candles_for_btd else self.candles
+        logger.info(f"Using {len(candles_for_btd)} candles for BTD calculation ({'daily' if daily_candles_for_btd else 'chart'} data)")
+
+        # Generate all key levels (will skip PDH/PDL if daily_data is None)
+        key_levels = key_levels_gen.generate_all_levels(
+            pivot_highs,
+            pivot_lows,
+            candles_for_btd,  # Use daily candles for BTD calculation
+            daily_data
+        )
+
+        # Add key levels to trendlines output (pass timeframe for proper extension)
+        key_level_lines = key_levels_gen.levels_to_api_format(key_levels, self.candles, timeframe=self.timeframe)
+        trendlines.extend(key_level_lines)
+
+        logger.info(f"📏 Generated {len(key_level_lines)} key levels: {list(key_levels.keys())}")
+
+        # ========================================
+        # Summary and Return
+        # ========================================
+        total_main_lines = (1 if support_line else 0) + (1 if resistance_line else 0)
+        logger.info(
+            f"📏 MTF Pipeline Complete: {total_main_lines} main trendlines + "
+            f"{len(key_level_lines)} key levels = {len(trendlines)} total"
+        )
+        return trendlines
+
+    def _find_swing_points(self, data: np.ndarray, is_high: bool, window: int = 5) -> List[int]:
+        """
+        Find swing highs or swing lows in price data.
+        A swing high has higher values than surrounding window.
+        A swing low has lower values than surrounding window.
+        """
+        swings = []
+        for i in range(window, len(data) - window):
+            if is_high:
+                # Swing high: higher than all surrounding points
+                if all(data[i] >= data[i-window:i]) and all(data[i] >= data[i+1:i+window+1]):
+                    swings.append(i)
+            else:
+                # Swing low: lower than all surrounding points
+                if all(data[i] <= data[i-window:i]) and all(data[i] <= data[i+1:i+window+1]):
+                    swings.append(i)
+        return swings
+
+    def _calculate_trendline(
+        self,
+        swing_indices: List[int],
+        prices: np.ndarray
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Calculate best-fit trendline using linear regression on swing points.
+        Returns dict with start_idx, end_idx, start_price, end_price.
+        """
+        if len(swing_indices) < 2:
+            return None
+
+        # Use linear regression to find best fit line through swing points
+        x = np.array(swing_indices)
+        y = prices[swing_indices]
+
+        # Calculate slope and intercept
+        slope, intercept = np.polyfit(x, y, 1)
+
+        # Calculate trendline prices at start and end
+        start_idx = swing_indices[0]
+        end_idx = swing_indices[-1]
+        start_price = float(slope * start_idx + intercept)
+        end_price = float(slope * end_idx + intercept)
+
+        return {
+            'start_idx': start_idx,
+            'end_idx': end_idx,
+            'start_price': start_price,
+            'end_price': end_price,
+            'slope': float(slope)
+        }
 
 
-    # ------------------------------------------------------------------
-    # Additional candlestick detections
-    # ------------------------------------------------------------------
-
-    def _detect_spinning_top_and_marubozu(self) -> List[Pattern]:
-        patterns: List[Pattern] = []
-        for i, c in enumerate(self.candles):
-            o, h, l, cl = float(c['open']), float(c['high']), float(c['low']), float(c['close'])
-            rng = max(h - l, 1e-9)
-            body = abs(cl - o)
-            upper = h - max(cl, o)
-            lower = min(cl, o) - l
-            # Spinning top: small body, relatively symmetric shadows
-            if body <= 0.25 * rng and upper >= 0.25 * rng and lower >= 0.25 * rng:
-                patterns.append(Pattern(
-                    pattern_id=f"spinning_top_{i}_{self.times[i]}",
-                    pattern_type="spinning_top",
-                    confidence=70,
-                    start_candle=i,
-                    end_candle=i,
-                    description="Spinning Top - market indecision",
-                    signal="neutral",
-                    action="wait"
-                ))
-            # Marubozu: body occupies most of range, tiny wicks
-            if body >= 0.9 * rng and upper <= 0.05 * rng and lower <= 0.05 * rng:
-                bullish = cl > o
-                patterns.append(Pattern(
-                    pattern_id=f"marubozu_{i}_{self.times[i]}",
-                    pattern_type="marubozu_bullish" if bullish else "marubozu_bearish",
-                    confidence=78,
-                    start_candle=i,
-                    end_candle=i,
-                    description=f"Marubozu - strong {'bullish' if bullish else 'bearish'} candle",
-                    signal="bullish" if bullish else "bearish",
-                    action="watch_closely"
-                ))
-        return patterns
-
-    def _detect_special_doji(self) -> List[Pattern]:
-        patterns: List[Pattern] = []
-        for i, c in enumerate(self.candles):
-            o, h, l, cl = float(c['open']), float(c['high']), float(c['low']), float(c['close'])
-            rng = max(h - l, 1e-9)
-            body = abs(cl - o)
-            upper = h - max(cl, o)
-            lower = min(cl, o) - l
-            # Dragonfly: tiny body near high, long lower shadow
-            if body <= 0.1 * rng and upper <= 0.05 * rng and lower >= 0.6 * rng:
-                patterns.append(Pattern(
-                    pattern_id=f"dragonfly_doji_{i}_{self.times[i]}",
-                    pattern_type="dragonfly_doji",
-                    confidence=72,
-                    start_candle=i,
-                    end_candle=i,
-                    description="Dragonfly Doji - potential bullish reversal",
-                    signal="bullish",
-                    action="watch_closely"
-                ))
-            # Gravestone: tiny body near low, long upper shadow
-            if body <= 0.1 * rng and lower <= 0.05 * rng and upper >= 0.6 * rng:
-                patterns.append(Pattern(
-                    pattern_id=f"gravestone_doji_{i}_{self.times[i]}",
-                    pattern_type="gravestone_doji",
-                    confidence=72,
-                    start_candle=i,
-                    end_candle=i,
-                    description="Gravestone Doji - potential bearish reversal",
-                    signal="bearish",
-                    action="watch_closely"
-                ))
-        return patterns
-
-    def _detect_hanging_inverted(self) -> List[Pattern]:
-        patterns: List[Pattern] = []
-        n = len(self.candles)
-        if n < 2:
-            return patterns
-        for i in range(1, n):
-            o, h, l, cl = [float(self.candles[i][k]) for k in ('open','high','low','close')]
-            prev_o, prev_c = float(self.candles[i-1]['open']), float(self.candles[i-1]['close'])
-            rng = max(h - l, 1e-9)
-            body = abs(cl - o)
-            upper = h - max(cl, o)
-            lower = min(cl, o) - l
-            # Uptrend if prev close > prev open and cl >= prev_c
-            uptrend = prev_c >= prev_o and cl >= prev_c
-            downtrend = prev_c <= prev_o and cl <= prev_c
-            # Hanging man (after uptrend): small body near top, long lower shadow
-            if uptrend and body <= 0.35*rng and lower >= 2*body and upper <= 0.2*rng:
-                patterns.append(Pattern(
-                    pattern_id=f"hanging_man_{i}_{self.times[i]}",
-                    pattern_type="hanging_man",
-                    confidence=72,
-                    start_candle=i,
-                    end_candle=i,
-                    description="Hanging Man - potential bearish reversal",
-                    signal="bearish",
-                    action="watch_closely"
-                ))
-            # Inverted hammer (after downtrend): small body near bottom, long upper shadow
-            if downtrend and body <= 0.35*rng and upper >= 2*body and lower <= 0.2*rng:
-                patterns.append(Pattern(
-                    pattern_id=f"inverted_hammer_{i}_{self.times[i]}",
-                    pattern_type="inverted_hammer",
-                    confidence=72,
-                    start_candle=i,
-                    end_candle=i,
-                    description="Inverted Hammer - potential bullish reversal",
-                    signal="bullish",
-                    action="watch_closely"
-                ))
-        return patterns
-
-    def _detect_three_inside_outside(self) -> List[Pattern]:
-        patterns: List[Pattern] = []
-        if len(self.candles) < 3:
-            return patterns
-        for i in range(2, len(self.candles)):
-            c1, c2, c3 = self.candles[i-2], self.candles[i-1], self.candles[i]
-            # Three inside up/down: 2nd contained within 1st; 3rd confirms reversal
-            if c1['close'] < c1['open'] and c2['open'] > c1['close'] and c2['close'] < c1['open'] and c3['close'] > c1['open']:
-                patterns.append(Pattern(
-                    pattern_id=f"three_inside_up_{i}_{self.times[i]}",
-                    pattern_type="three_inside_up",
-                    confidence=70,
-                    start_candle=i-2,
-                    end_candle=i,
-                    description="Three Inside Up - bullish confirmation",
-                    signal="bullish"
-                ))
-            if c1['close'] > c1['open'] and c2['open'] < c1['close'] and c2['close'] > c1['open'] and c3['close'] < c1['open']:
-                patterns.append(Pattern(
-                    pattern_id=f"three_inside_down_{i}_{self.times[i]}",
-                    pattern_type="three_inside_down",
-                    confidence=70,
-                    start_candle=i-2,
-                    end_candle=i,
-                    description="Three Inside Down - bearish confirmation",
-                    signal="bearish"
-                ))
-            # Three outside up/down: engulfing then confirmation
-            if c2['open'] < c1['close'] and c2['close'] > c1['open'] and c3['close'] > c2['close']:
-                patterns.append(Pattern(
-                    pattern_id=f"three_outside_up_{i}_{self.times[i]}",
-                    pattern_type="three_outside_up",
-                    confidence=70,
-                    start_candle=i-2,
-                    end_candle=i,
-                    description="Three Outside Up - strong bullish pattern",
-                    signal="bullish"
-                ))
-            if c2['open'] > c1['close'] and c2['close'] < c1['open'] and c3['close'] < c2['close']:
-                patterns.append(Pattern(
-                    pattern_id=f"three_outside_down_{i}_{self.times[i]}",
-                    pattern_type="three_outside_down",
-                    confidence=70,
-                    start_candle=i-2,
-                    end_candle=i,
-                    description="Three Outside Down - strong bearish pattern",
-                    signal="bearish"
-                ))
-        return patterns
-
-    # ------------------------------------------------------------------
-    # Structure/continuation detections
-    # ------------------------------------------------------------------
-
-    def _detect_double_tops_bottoms(self) -> List[Pattern]:
-        patterns: List[Pattern] = []
-        # Require enough candles to identify swing structure
-        if len(self.candles) < 20:
-            return patterns
-
-        highs_extrema = self._local_extrema(self.highs, order=3, mode='max')
-        lows_extrema = self._local_extrema(self.lows, order=3, mode='min')
-
-        if len(highs_extrema) >= 2:
-            last_two = highs_extrema[-2:]
-            (idx1, val1), (idx2, val2) = last_two
-            if self._percent_diff(val1, val2) < 0.02 and 3 <= idx2 - idx1 <= 40:
-                confidence = 72
-                patterns.append(Pattern(
-                    pattern_id=f"double_top_{idx2}_{self.times[idx2]}",
-                    pattern_type="double_top",
-                    confidence=confidence,
-                    start_candle=idx1,
-                    end_candle=idx2,
-                    description="Double Top - bearish reversal potential",
-                    signal="bearish",
-                    action="watch_closely",
-                    metadata={
-                        "neckline": float(min(self.closes[idx1:idx2+1])),
-                        "swing_highs": [
-                            {
-                                "candle": int(idx1),
-                                "price": float(val1)
-                            },
-                            {
-                                "candle": int(idx2),
-                                "price": float(val2)
-                            }
-                        ]
-                    }
-                ))
-
-        if len(lows_extrema) >= 2:
-            last_two = lows_extrema[-2:]
-            (idx1, val1), (idx2, val2) = last_two
-            if self._percent_diff(val1, val2) < 0.02 and 3 <= idx2 - idx1 <= 40:
-                confidence = 72
-                patterns.append(Pattern(
-                    pattern_id=f"double_bottom_{idx2}_{self.times[idx2]}",
-                    pattern_type="double_bottom",
-                    confidence=confidence,
-                    start_candle=idx1,
-                    end_candle=idx2,
-                    description="Double Bottom - bullish reversal potential",
-                    signal="bullish",
-                    action="watch_closely",
-                    metadata={
-                        "neckline": float(max(self.closes[idx1:idx2+1])),
-                        "swing_lows": [
-                            {
-                                "candle": int(idx1),
-                                "price": float(val1)
-                            },
-                            {
-                                "candle": int(idx2),
-                                "price": float(val2)
-                            }
-                        ]
-                    }
-                ))
-
-        return patterns
+    # Old pattern-specific trendline code removed - simplified to 2 main trends + key levels
 
     def _detect_head_shoulders(self) -> List[Pattern]:
         patterns: List[Pattern] = []

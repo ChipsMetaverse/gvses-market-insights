@@ -42,6 +42,7 @@ from services.database_service import get_database_service
 from websocket_server import chart_streamer  # Real-time chart command streaming
 from utils.telemetry import build_request_telemetry, persist_request_log
 from utils.request_context import generate_request_id, set_request_id
+from pattern_detection import PatternDetector
 
 # Sprint 1, Day 2: Prometheus metrics
 from middleware.metrics import PrometheusMiddleware, get_metrics, get_metrics_content_type
@@ -63,6 +64,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Load environment variables from .env if present
 load_dotenv()
+
+# Initialize Sentry error tracking as early as possible
+from config.sentry import init_sentry
+init_sentry()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -100,9 +105,11 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:5174",
+        "http://localhost:5175",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
+        "http://127.0.0.1:5175",
         "https://gvses-market-insights.fly.dev",
     ],
     allow_credentials=True,
@@ -513,6 +520,220 @@ async def get_stock_price(request: Request, symbol: str):
         )
         raise HTTPException(status_code=500, detail=f"Failed to fetch stock price: {str(e)}")
 
+# Extended intraday data endpoint with database-backed lazy loading
+@app.get("/api/intraday")
+@limiter.limit("100/minute")
+async def get_intraday_data(
+    request: Request,
+    symbol: str,
+    interval: str = Query('5m', regex='^(1m|5m|15m|30m|1h|4h|1d|1w|1mo)$'),
+    days: Optional[int] = Query(None, ge=1, le=2555),
+    startDate: Optional[str] = None,
+    endDate: Optional[str] = None
+):
+    """
+    Get extended intraday historical data with lazy loading support.
+
+    Two modes:
+    1. Standard mode (backward compatible): Fetch last N days from now
+       - Use `days` parameter
+       - Example: /api/intraday?symbol=AAPL&interval=5m&days=60
+
+    2. Lazy loading mode: Fetch specific date range (for scrolling back in time)
+       - Use `startDate` and `endDate` parameters
+       - Example: /api/intraday?symbol=AAPL&interval=5m&startDate=2024-01-01&endDate=2024-01-31
+
+    Architecture:
+    - L1: Redis (2ms) - Hot cache for recent data
+    - L2: Supabase (20ms) - Persistent database storage
+    - L3: Alpaca API (300-500ms) - Fetch missing data only
+
+    Args:
+        symbol: Stock ticker (e.g., TSLA, AAPL)
+        interval: Bar interval - 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1mo
+        days: Number of days to fetch from now (standard mode)
+        startDate: Start date in ISO format (lazy loading mode)
+        endDate: End date in ISO format (lazy loading mode)
+
+    Returns:
+        {
+            "symbol": "TSLA",
+            "interval": "5m",
+            "data_source": "database",  // or "api" if fetched fresh
+            "bars": [...],
+            "count": 4680,
+            "start_date": "2024-01-01T00:00:00",
+            "end_date": "2024-03-01T00:00:00",
+            "cache_tier": "redis",  // "redis", "database", or "api"
+            "duration_ms": 23.5
+        }
+    """
+    request_id = request.headers.get("X-Request-ID") or generate_request_id()
+    set_request_id(request_id)
+    telemetry = build_request_telemetry(request, request_id)
+    start_time = time.perf_counter()
+    symbol_upper = symbol.upper()
+
+    try:
+        from datetime import datetime, timedelta, timezone
+        from services.historical_data_service import get_historical_data_service
+
+        # Get historical data service (3-tier caching)
+        data_service = get_historical_data_service()
+
+        # Determine mode and calculate date range
+        if startDate and endDate:
+            # Lazy loading mode: specific date range
+            start_dt = datetime.fromisoformat(startDate.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(endDate.replace('Z', '+00:00'))
+            mode = "lazy_loading"
+
+        elif days:
+            # Standard mode: last N days from now (timezone-aware)
+            end_dt = datetime.now(timezone.utc)
+            start_dt = end_dt - timedelta(days=days)
+            mode = "standard"
+
+        else:
+            # Default: last 60 days (timezone-aware)
+            end_dt = datetime.now(timezone.utc)
+            start_dt = end_dt - timedelta(days=60)
+            days = 60
+            mode = "standard_default"
+
+        logger.info(
+            f"📊 Intraday request: {symbol_upper} {interval} "
+            f"mode={mode} range={start_dt.date()} to {end_dt.date()}"
+        )
+
+        # Smart fallback: If endDate has no data (weekend/holiday), walk back to find last trading day
+        # This ensures charts show data even when requested on weekends
+        max_lookback_days = 10
+        original_end_dt = end_dt
+        original_start_dt = start_dt
+        bars = []
+        days_adjusted = 0
+
+        for attempt in range(max_lookback_days):
+            # Fetch data using 3-tier caching
+            bars = await data_service.get_bars(
+                symbol=symbol_upper,
+                interval=interval,
+                start_date=start_dt,
+                end_date=end_dt
+            )
+
+            if len(bars) > 0:
+                # Found data! Log if we had to adjust dates
+                if days_adjusted > 0:
+                    logger.info(
+                        f"📅 Auto-adjusted dates by {days_adjusted} day(s): "
+                        f"{original_end_dt.date()} → {end_dt.date()} (last trading day)"
+                    )
+                break
+
+            # No data - try previous day
+            end_dt = end_dt - timedelta(days=1)
+            start_dt = start_dt - timedelta(days=1)
+            days_adjusted += 1
+
+            logger.debug(f"🔍 No data for {end_dt.date()}, trying previous day...")
+
+        if len(bars) == 0:
+            logger.warning(
+                f"⚠️ No data found for {symbol_upper} in last {max_lookback_days} days"
+            )
+
+        # Determine cache tier that served this request
+        metrics = data_service.get_metrics()
+        total = metrics['total_requests']
+        if metrics['redis_hits'] == total:
+            cache_tier = "redis"
+        elif metrics['db_hits'] + metrics['redis_hits'] == total:
+            cache_tier = "database"
+        else:
+            cache_tier = "api"
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+
+        logger.info(
+            "intraday_request_completed",
+            extra=completed.for_logging(
+                symbol=symbol_upper,
+                interval=interval,
+                mode=mode,
+                bars=len(bars),
+                cache_tier=cache_tier,
+                duration_ms=round(duration_ms, 2)
+            )
+        )
+
+        await persist_request_log(
+            completed,
+            {
+                "event": "intraday",
+                "symbol": symbol_upper,
+                "interval": interval,
+                "mode": mode,
+                "status": "success",
+                "bars": len(bars),
+                "cache_tier": cache_tier
+            },
+        )
+
+        return {
+            "symbol": symbol_upper,
+            "interval": interval,
+            "data_source": cache_tier,
+            "bars": bars,
+            "count": len(bars),
+            "start_date": start_dt.isoformat(),
+            "end_date": end_dt.isoformat(),
+            "cache_tier": cache_tier,
+            "duration_ms": round(duration_ms, 2),
+            "days_adjusted": days_adjusted,  # Number of days we walked back to find data
+            "requested_end_date": original_end_dt.isoformat() if days_adjusted > 0 else None  # Original requested date
+        }
+
+    except ValueError as e:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.warning(
+            "intraday_request_invalid",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e))
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "intraday_error",
+                "symbol": symbol_upper,
+                "interval": interval,
+                "status": "invalid",
+                "error": str(e),
+            },
+        )
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except Exception as e:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        errored = telemetry.with_duration(duration_ms)
+        logger.error(
+            f"Failed to get intraday data for {symbol_upper}: {e}",
+            extra=errored.for_logging(symbol=symbol_upper, error=str(e)),
+        )
+        await persist_request_log(
+            errored,
+            {
+                "event": "intraday_error",
+                "symbol": symbol_upper,
+                "interval": interval,
+                "status": "exception",
+                "error": str(e),
+            },
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to fetch intraday data: {str(e)}")
+
 # News endpoint for frontend
 @app.get("/api/v1/news")
 @limiter.limit("100/minute")
@@ -717,19 +938,57 @@ async def symbol_search(
 @app.get("/api/stock-history")
 @limiter.limit("100/minute")
 async def get_stock_history(request: Request, symbol: str, days: int = 30, interval: str = "1d"):
-    """Get historical stock data with configurable interval (1m, 5m, 15m, 30m, 1h, 1d, 1wk, 1mo)"""
+    """Get historical stock data with configurable interval (1m, 5m, 15m, 30m, 1h, 1d, 1wk, 1mo)
+
+    Updated to use 3-tier caching architecture (Redis → Supabase → Alpaca) with timezone fix.
+    Maintains backward compatibility by returning 'candles' field.
+    """
     request_id = request.headers.get("X-Request-ID") or generate_request_id()
     set_request_id(request_id)
     telemetry = build_request_telemetry(request, request_id)
     start_time = time.perf_counter()
     symbol_upper = symbol.upper()
     try:
-        history = await market_service.get_stock_history(symbol_upper, days, interval)
+        from datetime import datetime, timedelta, timezone as tz
+        from services.historical_data_service import get_historical_data_service
+
+        # Use new historical data service with timezone fix and 3-tier caching
+        data_service = get_historical_data_service()
+
+        # Calculate date range (timezone-aware)
+        end_dt = datetime.now(tz.utc)
+        start_dt = end_dt - timedelta(days=days)
+
+        # Fetch data using 3-tier caching with timezone fix
+        bars = await data_service.get_bars(
+            symbol=symbol_upper,
+            interval=interval,
+            start_date=start_dt,
+            end_date=end_dt
+        )
+
+        # Determine cache tier
+        metrics = data_service.get_metrics()
+        total = metrics['total_requests']
+        if metrics['redis_hits'] == total:
+            cache_tier = "redis"
+        elif metrics['db_hits'] + metrics['redis_hits'] == total:
+            cache_tier = "database"
+        else:
+            cache_tier = "alpaca"
+
         duration_ms = (time.perf_counter() - start_time) * 1000
         completed = telemetry.with_duration(duration_ms)
+
         logger.info(
             "stock_history_completed",
-            extra=completed.for_logging(symbol=symbol_upper, days=days, candles=len(history.get("candles", [])) if isinstance(history, dict) else None)
+            extra=completed.for_logging(
+                symbol=symbol_upper,
+                days=days,
+                candles=len(bars),
+                cache_tier=cache_tier,
+                duration_ms=round(duration_ms, 2)
+            )
         )
         await persist_request_log(
             completed,
@@ -738,9 +997,20 @@ async def get_stock_history(request: Request, symbol: str, days: int = 30, inter
                 "symbol": symbol_upper,
                 "status": "success",
                 "days": days,
+                "cache_tier": cache_tier,
             },
         )
-        return history
+
+        # Return in backward-compatible format with 'candles' field
+        return {
+            "symbol": symbol_upper,
+            "interval": interval,
+            "candles": bars,  # Frontend expects 'candles' not 'bars'
+            "data_source": cache_tier,
+            "count": len(bars),
+            "start_date": start_dt.isoformat(),
+            "end_date": end_dt.isoformat(),
+        }
     except ValueError as e:
         duration_ms = (time.perf_counter() - start_time) * 1000
         errored = telemetry.with_duration(duration_ms)
@@ -1304,9 +1574,10 @@ async def get_technical_levels(
 @limiter.limit("50/minute")
 async def get_pattern_detection(
     request: Request,
-    symbol: str = Query(..., description="Stock ticker symbol")
+    symbol: str = Query(..., description="Stock ticker symbol"),
+    interval: str = Query("1d", description="Chart interval (1m, 5m, 15m, 30m, 1h, 1d, 1wk, 1mo)")
 ):
-    """Get chart pattern detection for a stock symbol via MCP"""
+    """Get chart pattern detection for a stock symbol using local PatternDetector"""
     if not symbol:
         raise HTTPException(status_code=400, detail="Symbol is required")
 
@@ -1315,68 +1586,184 @@ async def get_pattern_detection(
     telemetry = build_request_telemetry(request, request_id)
     start_time = time.perf_counter()
     symbol_upper = symbol.upper()
-    logger.info(f"Getting pattern detection for {symbol_upper} via MCP")
+    logger.info(f"Getting pattern detection for {symbol_upper} using local PatternDetector with interval {interval}")
 
     try:
-        # Get MCP client - FAIL if unavailable (no mock data)
-        mcp_client = await get_direct_mcp_client()
-        if not mcp_client:
-            raise HTTPException(status_code=503, detail="MCP service unavailable")
+        # Determine appropriate number of days based on interval
+        # Phase 1 Fix: Balanced lookback to ensure sufficient bars without overwhelming data
+        days_map = {
+            "1m": 7,     # 1 minute: 1 week (optimal for intraday volatility)
+            "3m": 7,     # 3 minutes: 1 week
+            "5m": 7,     # 5 minutes: 1 week
+            "10m": 14,   # 10 minutes: 2 weeks
+            "15m": 30,   # 15 minutes: 1 month (increased from 14 for sufficient bars)
+            "30m": 60,   # 30 minutes: 2 months (increased from 30)
+            "1h": 60,    # 1 hour: 2 months
+            "1d": 365,   # Daily: 365 days (matches frontend chart data for accurate 200 SMA alignment)
+            "1wk": 400,  # Weekly: ~8 years
+            "1mo": 1000  # Monthly: ~80 years
+        }
+        days = days_map.get(interval, 200)
 
-        # Call MCP get_chart_patterns tool
-        mcp_result = await mcp_client.call_tool(
-            "get_chart_patterns",
-            {"symbol": symbol_upper, "timeframe": "1d"}
+        # Fetch chart data for pattern detection using same service as frontend
+        # This ensures BTD calculation uses identical data to TradingView 200 SMA
+        from datetime import datetime, timedelta, timezone
+        from services.historical_data_service import get_historical_data_service
+        data_service = get_historical_data_service()
+
+        # Calculate date range (timezone-aware) - same as stock-history endpoint
+        end_dt = datetime.now(timezone.utc)
+        start_dt = end_dt - timedelta(days=days)
+
+        # Fetch data using 3-tier caching (Redis → Supabase → Alpaca)
+        candles = await data_service.get_bars(
+            symbol=symbol_upper,
+            interval=interval,
+            start_date=start_dt,
+            end_date=end_dt
         )
 
-        # Parse MCP response - handle JSON-RPC wrapper
-        parsed_data: Dict[str, Any] = {}
-        # Extract result from JSON-RPC response
-        result_content = mcp_result.get("result", {}) if isinstance(mcp_result, dict) else {}
-        content = result_content.get("content", [])
+        # Convert to expected format
+        history = {
+            "candles": candles,
+            "data_source": "historical_data_service",
+            "symbol": symbol_upper
+        }
 
-        # Parse content array
-        if isinstance(content, list) and content:
-            first_item = content[0]
-            if isinstance(first_item, dict) and "text" in first_item:
-                import json
-                try:
-                    parsed_data = json.loads(first_item["text"])
-                except json.JSONDecodeError as json_err:
-                    logger.error(f"Failed to parse MCP JSON: {json_err}")
-                    raise HTTPException(status_code=500, detail="Failed to parse MCP response")
-        elif isinstance(result_content, dict):
-            parsed_data = result_content
+        # Debug: Log data source and candle count for pattern detection
+        if history and "candles" in history:
+            logger.info(f"[PATTERN DETECTION] Fetched {len(history['candles'])} candles from {history.get('data_source', 'unknown')} for {symbol_upper} ({days} days, interval={interval})")
 
-        # Extract patterns array
-        patterns = parsed_data.get("patterns", [])
+        if not history or "candles" not in history or not history["candles"]:
+            logger.warning(f"No chart data available for {symbol_upper}")
+            return {
+                "symbol": symbol_upper,
+                "patterns": [],
+                "trendlines": [],
+                "total_patterns": 0,
+                "visible_patterns": 0,
+                "data_source": "local_pattern_detector",
+                "timestamp": int(time.time())
+            }
 
-        # FAIL if no data (no mock)
-        if not patterns:
-            raise HTTPException(status_code=404, detail=f"No patterns detected for {symbol_upper}")
+        # Fetch daily data for PDH/PDL and BTD calculation
+        # PDH/PDL are useful reference levels for both intraday and daily charts
+        # BTD (200-day SMA) is a critical support/resistance level shown on ALL timeframes
+        # - Intraday: PDH/PDL from previous full trading day, BTD from last 200 daily closes
+        # - Daily: PDH/PDL from previous completed day, BTD from last 200 candles
+        daily_pdh_pdl = None
+        daily_candles_for_btd = None
+        is_intraday = 'm' in interval.lower() or 'h' in interval.lower()
+        is_daily = interval.lower() == "1d"
 
-        # Transform patterns to widget format
+        if is_intraday or is_daily:
+            try:
+                logger.info(f"Fetching daily data for PDH/PDL and BTD calculation (interval: {interval})")
+                # For intraday, fetch daily candles; for daily, use existing data
+                if is_intraday:
+                    # Fetch 365 days to ensure we have 200+ trading days for BTD (200-day SMA)
+                    daily_history = await data_service.get_bars(
+                        symbol=symbol_upper,
+                        interval="1d",
+                        start_date=end_dt - timedelta(days=365),
+                        end_date=end_dt
+                    )
+                    candles_for_pdh_pdl = daily_history if daily_history else []
+                    daily_candles_for_btd = daily_history if daily_history else []
+                else:
+                    # For daily charts, use the existing candles
+                    candles_for_pdh_pdl = history["candles"]
+                    daily_candles_for_btd = history["candles"]
+
+                if candles_for_pdh_pdl and len(candles_for_pdh_pdl) >= 2:
+                    # Find most recent FULL trading day (not shortened session)
+                    # Reject shortened days (early close, half day) by requiring >= 0.5% range
+                    for i in range(len(candles_for_pdh_pdl)):
+                        index = -(i + 1)  # Start from most recent (skip today if daily chart)
+                        prev_day = candles_for_pdh_pdl[index]
+
+                        # Calculate daily range
+                        pdh_pdl_range = prev_day['high'] - prev_day['low']
+                        avg_price = (prev_day['high'] + prev_day['low']) / 2
+                        range_percent = pdh_pdl_range / avg_price if avg_price > 0 else 0
+
+                        # Require >= 0.5% range to ensure it's a full trading day
+                        if range_percent >= 0.005:
+                            daily_pdh_pdl = {
+                                'pdh': prev_day['high'],
+                                'pdl': prev_day['low']
+                            }
+                            days_back = i + 1
+                            logger.info(f"Most recent full trading day ({days_back} day(s) back): PDH={daily_pdh_pdl['pdh']}, PDL={daily_pdh_pdl['pdl']} (range: ${pdh_pdl_range:.2f}, {range_percent:.1%})")
+                            break
+                        else:
+                            logger.debug(f"Candle {index} rejected: shortened session ({pdh_pdl_range:.2f}, {range_percent:.1%})")
+                    else:
+                        # Loop completed without finding full trading day
+                        logger.warning(f"No full trading day found in last {len(candles_for_pdh_pdl)} candles (all appear to be shortened sessions)")
+            except Exception as e:
+                logger.warning(f"Could not fetch data for PDH/PDL: {e}")
+        else:
+            logger.info(f"Skipping PDH/PDL for interval: {interval} (PDH/PDL only shown on intraday and daily charts)")
+
+        # Initialize PatternDetector with chart data and timeframe
+        # Passing timeframe enables timeframe-aware trendline extension (fixes off-screen trendlines)
+        detector = PatternDetector(history["candles"], timeframe=interval)
+
+        # Detect all patterns (includes trendlines) and pass daily data for PDH/PDL and BTD
+        results = detector.detect_all_patterns(
+            daily_pdh_pdl=daily_pdh_pdl,
+            daily_candles_for_btd=daily_candles_for_btd
+        )
+
+        # Transform patterns to API format
         formatted_patterns = []
-        for i, pattern in enumerate(patterns):
+        for pattern in results.get("detected", []):
             formatted_patterns.append({
-                "id": f"pattern_{i+1}",
-                "name": pattern.get("name", "Unknown Pattern"),
-                "signal": pattern.get("signal", "NEUTRAL").upper(),
-                "category": pattern.get("category", "Unknown"),
+                "id": pattern.get("id", pattern.get("pattern_id", "")),
+                "name": pattern.get("description", pattern.get("pattern_type", "Unknown")),
+                "signal": pattern.get("signal", "neutral").upper(),
+                "category": "chart_pattern",
                 "confidence": pattern.get("confidence", 0),
                 "visible": True,
                 "description": pattern.get("description", ""),
-                "timeframe": pattern.get("timeframe", "1d"),
-                "start_time": pattern.get("startTime"),
-                "end_time": pattern.get("endTime")
+                "timeframe": "1d",
+                "start_time": pattern.get("start_time"),
+                "end_time": pattern.get("end_time")
             })
+
+        # Convert trendline timestamps from Unix epoch to ISO 8601 strings
+        # This ensures compatibility with TradingView Lightweight Charts time scale
+        def convert_trendline_timestamps(trendline):
+            """Convert Unix timestamps to ISO 8601 format for frontend compatibility"""
+            converted = trendline.copy()
+            if "start" in converted and "time" in converted["start"]:
+                # Convert Unix timestamp to ISO 8601 string
+                from datetime import datetime, timezone
+                timestamp = converted["start"]["time"]
+                dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+                converted["start"]["time"] = dt.isoformat().replace("+00:00", "Z")
+
+            if "end" in converted and "time" in converted["end"]:
+                from datetime import datetime, timezone
+                timestamp = converted["end"]["time"]
+                dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+                converted["end"]["time"] = dt.isoformat().replace("+00:00", "Z")
+
+            return converted
+
+        # Convert all trendlines to ISO format
+        formatted_trendlines = [convert_trendline_timestamps(tl) for tl in results.get("trendlines", [])]
 
         response = {
             "symbol": symbol_upper,
             "patterns": formatted_patterns,
+            "trendlines": formatted_trendlines,  # Use converted trendlines with ISO timestamps
+            "active_levels": results.get("active_levels", {}),
+            "summary": results.get("summary", {}),
             "total_patterns": len(formatted_patterns),
             "visible_patterns": len(formatted_patterns),
-            "data_source": "mcp_chart_patterns",
+            "data_source": "local_pattern_detector",
             "timestamp": int(time.time())
         }
 
@@ -1384,7 +1771,12 @@ async def get_pattern_detection(
         completed = telemetry.with_duration(duration_ms)
         logger.info(
             "pattern_detection_completed",
-            extra=completed.for_logging(symbol=symbol_upper, pattern_count=len(formatted_patterns), data_source="mcp")
+            extra=completed.for_logging(
+                symbol=symbol_upper,
+                pattern_count=len(formatted_patterns),
+                trendline_count=len(results.get("trendlines", [])),
+                data_source="local"
+            )
         )
         await persist_request_log(
             completed,
@@ -1393,7 +1785,8 @@ async def get_pattern_detection(
                 "symbol": symbol_upper,
                 "status": "success",
                 "pattern_count": len(formatted_patterns),
-                "data_source": "mcp"
+                "trendline_count": len(results.get("trendlines", [])),
+                "data_source": "local"
             },
         )
         return response
