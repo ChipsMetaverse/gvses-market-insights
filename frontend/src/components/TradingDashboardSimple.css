@@ -651,11 +651,15 @@
   padding: 16px;
   position: relative;
   background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .chart-wrapper {
   position: relative;
-  height: 350px;
+  flex: 1;
+  min-height: 250px;
   background: #ffffff;
   border: 1px solid #e5e5e5;
   border-radius: 4px;
@@ -1329,6 +1333,17 @@
   border-bottom: none;
 }
 
+.level-row-compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #333333;
+  white-space: nowrap;
+}
+
+/* Pipe separators removed for equidistant spacing */
+
 .level-val {
   font-weight: 600;
   color: #000000;
@@ -1411,6 +1426,162 @@
   border-radius: 6px;
   padding: 10px;
   border: 1px dashed #cbd5f5;
+}
+
+/* ============================================
+   Two-Column Layout: Pattern Detection + News Feed
+   ============================================ */
+
+.analysis-grid-two-column {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* News Feed Section */
+.news-section {
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.news-section h4 {
+  font-size: 10px;
+  font-weight: 600;
+  color: #666666;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Custom scrollbar for news list */
+.news-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.news-list::-webkit-scrollbar-track {
+  background: #f9fafb;
+  border-radius: 3px;
+}
+
+.news-list::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.news-list::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.news-item {
+  padding: 8px 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.news-item:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  transform: translateX(2px);
+}
+
+.news-link {
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.news-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+  line-height: 1.4;
+}
+
+.news-link:hover .news-title {
+  color: #3b82f6;
+}
+
+.news-time {
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.news-error {
+  font-size: 11px;
+  color: #ef4444;
+  padding: 10px;
+  background: #fef2f2;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+}
+
+.no-news {
+  font-size: 11px;
+  color: #6b7280;
+  padding: 10px;
+  text-align: center;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.loading-spinner-small {
+  font-size: 11px;
+  color: #6b7280;
+  padding: 10px;
+  text-align: center;
+}
+
+/* Update technical section to work as full-width below grid */
+.technical-section {
+  margin-top: 0;
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  flex-shrink: 0;
+}
+
+.levels-grid {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+/* Technical Levels at Bottom of Chart Panel */
+.technical-levels-chart-bottom {
+  padding: 12px 16px;
+  border-top: 1px solid #e0e0e0;
+  background-color: #fafafa;
+  margin-top: auto;
+}
+
+/* Responsive: Stack columns on smaller screens */
+@media (max-width: 1024px) {
+  .analysis-grid-two-column {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Voice Status Animation */
@@ -2433,6 +2604,37 @@
   max-width: 400px;
 }
 
+/* Analysis Panel Below Chart */
+.analysis-panel-below {
+  background: #f9f9f9;
+  border-top: 1px solid #e5e5e5;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+  max-height: 350px;
+  min-height: 250px;
+}
+
+.analysis-panel-below .panel-title {
+  padding: 12px 16px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #666666;
+  border-bottom: 1px solid #e5e5e5;
+  background: #ffffff;
+}
+
+.analysis-panel-below .analysis-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .analysis-panel-left .panel-title {
   padding: 12px 16px;
   font-size: 10px;
@@ -2527,6 +2729,28 @@
   height: 30px;
   background: rgba(0, 0, 0, 0.2);
   border-radius: 1px;
+}
+
+/* Horizontal divider for chart/analysis split */
+.panel-divider.horizontal {
+  width: 100%;
+  height: 6px;
+  cursor: row-resize;
+  background: #e5e5e5;
+  flex-shrink: 0;
+}
+
+.panel-divider.horizontal::before {
+  width: 30px;
+  height: 2px;
+}
+
+.panel-divider.horizontal:hover {
+  background: #d0d0d0;
+}
+
+.panel-divider.horizontal.dragging {
+  background: #4a90e2;
 }
 
 .voice-panel-right .panel-title {
@@ -2645,20 +2869,39 @@
 }
 
 .levels-grid {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+/* Compact grid layout for technical levels */
+.levels-grid-compact {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 6px;
 }
 
 .level-item {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 10px;
 }
 
 .level-label {
-  display: block;
   font-size: 9px;
-  color: #999;
+  color: #666;
+  font-weight: 500;
   margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .level-value {

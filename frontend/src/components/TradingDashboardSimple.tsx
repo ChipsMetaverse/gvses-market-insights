@@ -136,24 +136,24 @@ const timeframeToDays = (timeframe: TimeRange): { fetch: number, display: number
     // Intraday - Recent data only (high resolution)
     '10S': { fetch: 1, display: 1 },
     '30S': { fetch: 1, display: 1 },
-    '1m': { fetch: 1, display: 1 },
+    '1m': { fetch: 2, display: 2 },      // 700 bars: 700min ÷ 390min/day = ~2 days
     '3m': { fetch: 1, display: 1 },
-    '5m': { fetch: 1, display: 1 },
+    '5m': { fetch: 9, display: 9 },      // 700 bars: 3500min ÷ 390min/day = ~9 days
     '10m': { fetch: 7, display: 7 },
     '15m': { fetch: 7, display: 7 },
     '30m': { fetch: 7, display: 7 },
-    
-    // Hours - Week of data for context
-    '1H': { fetch: 7, display: 7 },
+
+    // Hours - Load 700 bars
+    '1H': { fetch: 150, display: 150 }, // 700 bars: 700hrs ÷ 6.5hrs/day × 1.4 = ~150 days
     '2H': { fetch: 7, display: 7 },
     '3H': { fetch: 7, display: 7 },
-    '4H': { fetch: 7, display: 7 },
+    '4H': { fetch: 150, display: 150 }, // 700 bars: Same as 1H since both use 1h data
     '6H': { fetch: 7, display: 7 },
     '8H': { fetch: 7, display: 7 },
     '12H': { fetch: 7, display: 7 },
-    
-    // Daily+ - Use intraday intervals (15m, 1h) so fetch recent data only
-    '1D': { fetch: 1, display: 1 },      // 1 day with 15m bars (~26 bars)
+
+    // Daily+ - Load 700 bars for 1D
+    '1D': { fetch: 1000, display: 1000 }, // 700 bars: 700 trading days ≈ 1000 calendar days
     '2D': { fetch: 2, display: 2 },      // 2 days with 15m bars
     '3D': { fetch: 3, display: 3 },      // 3 days with 15m bars
     '5D': { fetch: 5, display: 5 },      // 5 days with 1h bars (~30 bars)
@@ -184,8 +184,6 @@ const timeframeToDays = (timeframe: TimeRange): { fetch: number, display: number
 const timeframeToInterval = (timeframe: TimeRange): string => {
   const map: Record<TimeRange, string> = {
     // Intraday - Use minute-based intervals
-    '10S': '1m',
-    '30S': '1m',
     '1m': '1m',
     '3m': '1m',
     '5m': '5m',
@@ -203,7 +201,7 @@ const timeframeToInterval = (timeframe: TimeRange): string => {
     '12H': '1h',
 
     // Daily+ - Use daily interval
-    '1D': '15m',    // Use 15-minute bars for 1D to show intraday movement
+    '1D': '1d',     // Use daily bars for 1D (700 bars = ~2.8 years)
     '2D': '15m',    // Use 15-minute bars for 2D
     '3D': '15m',    // Use 15-minute bars for 3D
     '5D': '1h',     // Use hourly for 5D
@@ -223,6 +221,28 @@ const timeframeToInterval = (timeframe: TimeRange): string => {
   return map[timeframe] || '1d';
 };
 
+// Helper function to format news timestamps to relative time
+const formatNewsTime = (publishedAt: string | number): string => {
+  try {
+    const now = Date.now();
+    const published = typeof publishedAt === 'number' ? publishedAt * 1000 : new Date(publishedAt).getTime();
+    const diffMs = now - published;
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffDays > 0) {
+      return `${diffDays}d ago`;
+    } else if (diffHours > 0) {
+      return `${diffHours}h ago`;
+    } else {
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+      return diffMins > 0 ? `${diffMins}m ago` : 'Just now';
+    }
+  } catch {
+    return 'Recently';
+  }
+};
+
 const CRYPTO_SYMBOLS = new Set([
   'BTC', 'ETH', 'ADA', 'DOT', 'SOL', 'MATIC', 'AVAX', 'LTC',
   'XRP', 'DOGE', 'SHIB', 'UNI', 'LINK', 'BCH', 'XLM',
@@ -240,7 +260,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [stocksData, setStocksData] = useState<StockData[]>([]);
   const [isLoadingStocks, setIsLoadingStocks] = useState(true);
   const [selectedSymbol, setSelectedSymbol] = useState('TSLA');
-  const [selectedTimeframe, setSelectedTimeframe] = useState<TimeRange>('1D');
+  const [selectedTimeframe, setSelectedTimeframe] = useState<TimeRange>('1Y');
   const [stockNews, setStockNews] = useState<any[]>([]);
   const [newsError, setNewsError] = useState<string | null>(null);
   const [technicalLevels, setTechnicalLevels] = useState<any>({});
@@ -265,6 +285,8 @@ export const TradingDashboardSimple: React.FC = () => {
   const { searchResults, isSearching, searchError, hasSearched } = useSymbolSearch(searchQuery);
   const shouldShowSearchResults = isSearchExpanded && searchQuery.trim().length > 0;
 
+  // Technical Levels are now fetched in fetchStockAnalysis() to avoid duplicate systems
+
   // Pattern visualization state - Phase 1: Smart Visibility Controls
   const [patternVisibility, setPatternVisibility] = useState<{ [patternId: string]: boolean }>({});
   const [hoveredPatternId, setHoveredPatternId] = useState<string | null>(null);
@@ -274,7 +296,7 @@ export const TradingDashboardSimple: React.FC = () => {
   const [expandedNews, setExpandedNews] = useState<number | null>(null);
   const [isCalendarCollapsed, setIsCalendarCollapsed] = useState(false);
   const [toastCommand, setToastCommand] = useState<{ command: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const [chartTimeframe, setChartTimeframe] = useState('1D');
+  const [chartTimeframe, setChartTimeframe] = useState('1Y');
   const [voiceProvider] = useState<ConversationProviderKey>('chatkit');
   const [showOnboarding, setShowOnboarding] = useState(() => {
     const completed = localStorage.getItem('gvses_onboarding_completed');
@@ -301,6 +323,15 @@ export const TradingDashboardSimple: React.FC = () => {
     const saved = localStorage.getItem('mobileChartRatio');
     return saved ? parseFloat(saved) : 35;
   });
+
+  // Desktop chart/analysis split ratio (percentage for chart)
+  const [chartPanelRatio, setChartPanelRatio] = useState(() => {
+    const saved = localStorage.getItem('chartPanelRatio');
+    return saved ? parseFloat(saved) : 60; // Default 60% for chart, 40% for analysis
+  });
+
+  // Dragging state for chart divider
+  const [isDraggingDivider, setIsDraggingDivider] = useState(false);
 
   // Update CSS variables when panel widths change
   useEffect(() => {
@@ -345,7 +376,22 @@ export const TradingDashboardSimple: React.FC = () => {
   const handleRightPanelResize = useCallback((delta: number) => {
     setRightPanelWidth(prev => Math.max(300, Math.min(500, prev - delta)));
   }, []);
-  
+
+  // Desktop chart/analysis divider resize handler
+  const handleChartDividerDrag = useCallback((delta: number) => {
+    const mainContentElement = document.querySelector('.main-content') as HTMLElement;
+    if (!mainContentElement) return;
+
+    const containerHeight = mainContentElement.clientHeight;
+    const deltaPercent = (delta / containerHeight) * 100;
+
+    setChartPanelRatio(prev => {
+      const newRatio = Math.max(30, Math.min(90, prev + deltaPercent)); // 30-90% range
+      localStorage.setItem('chartPanelRatio', newRatio.toString());
+      return newRatio;
+    });
+  }, []);
+
   // Mobile chart/chat divider resize handler
   const handleMobileDividerDrag = useCallback((startY: number) => {
     const containerHeight = window.innerHeight - 200; // Account for header and tab bar
@@ -1312,19 +1358,23 @@ export const TradingDashboardSimple: React.FC = () => {
 
     console.log(`Voice provider switched from ${prevProvider} to: ${currentProvider}`);
 
-    if (prevProvider !== currentProvider && conversationProviders[prevProvider].isConnected) {
-      console.log('Disconnecting from previous provider due to provider switch');
-      conversationProviders[prevProvider].stopConversation();
-    }
-
-    prevProviderRef.current = currentProvider;
-
+    // Only disconnect if provider actually changed
     if (prevProvider !== currentProvider) {
+      // Access stopConversation directly to avoid dependency on conversationProviders object
+      const providers = conversationProviders;
+      if (providers[prevProvider]?.isConnected) {
+        console.log('Disconnecting from previous provider due to provider switch');
+        providers[prevProvider].stopConversation();
+      }
+
       setIsRecording(false);
       setIsListening(false);
       setInputText('');
     }
-  }, [voiceProvider, conversationProviders]);
+
+    prevProviderRef.current = currentProvider;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceProvider]); // Removed conversationProviders to prevent infinite re-render loop
 
   // Single connect/disconnect handler with debounce
   const handleConnectToggle = async () => {
@@ -1680,23 +1730,44 @@ export const TradingDashboardSimple: React.FC = () => {
       setNewsError('Unable to load news at this time. Please try again later.');
     }
     
-    // Fetch comprehensive data separately
+    // Fetch pattern detection data for trendlines and technical levels
     setIsLoadingTechnicalLevels(true);
     setTechnicalLevelsError(null);
     try {
-      const comprehensive = await marketDataService.getComprehensiveData(symbol);
-      if (comprehensive.technical_levels) {
-        setTechnicalLevels(comprehensive.technical_levels);
+      const patternData = await marketDataService.getPatternDetection(symbol);
+      const patterns = patternData.patterns || [];
+      console.log(`[Pattern API] Fetched ${patterns.length} patterns from backend for ${symbol}`);
+
+      // Extract technical levels from trendlines (same data displayed on chart)
+      if (patternData.trendlines && patternData.trendlines.length > 0) {
+        const blLine = patternData.trendlines.find((t: any) => t.label === 'BL');
+        const shLine = patternData.trendlines.find((t: any) => t.label === 'SH');
+        const btdLine = patternData.trendlines.find((t: any) => t.label === 'BTD (200 SMA)');
+        const pdhLine = patternData.trendlines.find((t: any) => t.label === 'PDH');
+        const pdlLine = patternData.trendlines.find((t: any) => t.label === 'PDL');
+
+        setTechnicalLevels({
+          sell_high_level: shLine?.start?.price || null,
+          buy_low_level: blLine?.start?.price || null,
+          btd_level: btdLine?.start?.price || null,
+          pdh_level: pdhLine?.start?.price || null,
+          pdl_level: pdlLine?.start?.price || null,
+          data_source: 'pattern_detection'
+        });
         setTechnicalLevelsError(null);
+        console.log('📊 [TECHNICAL LEVELS] Extracted from trendlines:', {
+          SH: shLine?.start?.price,
+          BL: blLine?.start?.price,
+          BTD: btdLine?.start?.price,
+          PDH: pdhLine?.start?.price,
+          PDL: pdlLine?.start?.price
+        });
       } else {
         setTechnicalLevels({});
         setTechnicalLevelsError('No technical levels available');
       }
       setIsLoadingTechnicalLevels(false);
 
-      const patterns = comprehensive.patterns?.detected || [];
-      console.log(`[Pattern API] Fetched ${patterns.length} patterns from backend for ${symbol}`);
-      
       if (patterns.length > 0) {
         const now = Date.now();
         const filterDays = 365;
@@ -1713,22 +1784,22 @@ export const TradingDashboardSimple: React.FC = () => {
         const sortedPatterns = [...recentPatterns].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0));
         setBackendPatterns(sortedPatterns);
         setDetectedPatterns(sortedPatterns.slice(0, 3));
-        
+
         // Patterns will be drawn by the pattern rendering useEffect based on visibility state
       } else {
         setBackendPatterns([]);
         setDetectedPatterns([]);
         enhancedChartControl.clearDrawings();
       }
-    } catch (error) {
-      console.error('Error fetching comprehensive data:', error);
-      // Technical levels will just remain undefined/empty if this fails
-      setTechnicalLevels({});
-      setTechnicalLevelsError('Unable to load technical levels. Please try again.');
-      setIsLoadingTechnicalLevels(false);
+    } catch (error: any) {
+      console.error('Error fetching pattern detection data:', error);
       setBackendPatterns([]);
       setDetectedPatterns([]);
       enhancedChartControl.clearDrawings();
+      // Also handle technical levels error
+      setTechnicalLevels({});
+      setTechnicalLevelsError(error.message || 'Unable to load technical levels');
+      setIsLoadingTechnicalLevels(false);
     }
     
     setIsLoadingNews(false);
@@ -2054,14 +2125,132 @@ export const TradingDashboardSimple: React.FC = () => {
 
       {/* Main Layout */}
       <div className="dashboard-layout">
-        {/* Left Panel - Chart Analysis */}
-        <aside
-          className="analysis-panel-left left-panel panel"
-          style={{ width: isMobile ? '100%' : `${leftPanelWidth}px` }}
-          data-panel="analysis"
-          data-active={!isMobile || activePanel === 'analysis'}
+        {/* Center - Chart + Chart Analysis (stacked vertically) */}
+        <main
+          className={`main-content panel ${isMobile ? 'mobile-chart-voice-merged' : ''}`}
+          data-panel="chart"
+          data-active={!isMobile || activePanel === 'chart'}
         >
+          {/* Chart Section */}
+          <div
+            className="chart-section chart-container"
+            style={isMobile
+              ? { flex: `0 0 ${mobileChartRatio}%`, maxHeight: `${mobileChartRatio}%` }
+              : { flex: `0 0 ${chartPanelRatio}%`, minHeight: '300px' }
+            }
+          >
+            {/* Timeframe Selector */}
+            <TimeRangeSelector
+              selected={selectedTimeframe}
+              options={['1m', '5m', '15m', '30m', '1H', '2H', '4H', '1Y', '2Y', '3Y', 'YTD', 'MAX']}
+              onChange={(range) => setSelectedTimeframe(range)}
+              showAdvancedMenu={false}
+            />
+            <div className="chart-wrapper">
+              <TradingChart
+                symbol={selectedSymbol}
+                initialDays={timeframeToDays(selectedTimeframe).fetch}
+                displayDays={timeframeToDays(selectedTimeframe).display}
+                interval={timeframeToInterval(selectedTimeframe)}
+                // technicalLevels removed - now provided by pattern-detection API via drawAutoTrendlines
+                // This prevents duplicate SH/BL/BTD lines (pattern-detection already draws these as key levels)
+                enableLazyLoading={true}
+                showCacheInfo={false}
+                onChartReady={(chart: any) => {
+                  chartRef.current = chart;
+                  chartControlService.setChartRef(chart);
+                  enhancedChartControl.setChartRef(chart);
+                  console.log('Chart ready for enhanced agent control with lazy loading');
+                }}
+              />
+            </div>
 
+            {/* Voice Status Indicator (desktop only - minimal) */}
+            {!isMobile && isConversationConnected && (
+              <div className="voice-status-bar" data-testid="voice-interface">
+                <div className="audio-level-mini">
+                  <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
+                  <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 400)}%` }}></div>
+                  <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 600)}%` }}></div>
+                </div>
+                <span className="voice-status-text">{isListening ? 'Listening...' : 'Connected'}</span>
+              </div>
+            )}
+
+            {/* Technical Levels - Bottom of Chart Panel */}
+            <div className="technical-levels-chart-bottom">
+              {isLoadingTechnicalLevels ? (
+                <div className="level-loading">Loading...</div>
+              ) : technicalLevelsError ? (
+                <div className="level-error">{technicalLevelsError}</div>
+              ) : (
+                <div className="levels-grid">
+                  <div className="level-row-compact">
+                    <Tooltip content="Resistance level - Consider taking profits near this price">
+                      <span>Sell High</span>
+                    </Tooltip>
+                    <span className="level-val qe">
+                      ${technicalLevels.sell_high_level ? technicalLevels.sell_high_level.toFixed(2) : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="level-row-compact">
+                    <Tooltip content="Support level - Potential buying opportunity near this price">
+                      <span>Buy Low</span>
+                    </Tooltip>
+                    <span className="level-val st">
+                      ${technicalLevels.buy_low_level ? technicalLevels.buy_low_level.toFixed(2) : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="level-row-compact">
+                    <Tooltip content="Buy The Dip - Strong support level for accumulation">
+                      <span>BTD</span>
+                    </Tooltip>
+                    <span className="level-val ltb">
+                      ${technicalLevels.btd_level ? technicalLevels.btd_level.toFixed(2) : 'N/A'}
+                    </span>
+                  </div>
+                  {technicalLevels.pdh_level && (
+                    <div className="level-row-compact">
+                      <Tooltip content="Previous Day High - Intraday resistance from yesterday's trading">
+                        <span>PDH</span>
+                      </Tooltip>
+                      <span className="level-val qe">
+                        ${technicalLevels.pdh_level.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {technicalLevels.pdl_level && (
+                    <div className="level-row-compact">
+                      <Tooltip content="Previous Day Low - Intraday support from yesterday's trading">
+                        <span>PDL</span>
+                      </Tooltip>
+                      <span className="level-val st">
+                        ${technicalLevels.pdl_level.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Draggable Divider for Chart/Analysis resize */}
+          {!isMobile && (
+            <PanelDivider
+              onDrag={handleChartDividerDrag}
+              orientation="horizontal"
+            />
+          )}
+
+          {/* Chart Analysis Panel - Now Below Chart */}
+          <aside
+            className="analysis-panel-below"
+            data-panel="analysis"
+            style={!isMobile
+              ? { flex: `1 1 ${100 - chartPanelRatio}%`, minHeight: '200px', overflow: 'auto' }
+              : undefined
+            }
+          >
           <h2 className="panel-title">CHART ANALYSIS</h2>
           <div className="analysis-content">
             <div className="calendar-card">
@@ -2083,98 +2272,10 @@ export const TradingDashboardSimple: React.FC = () => {
               )}
             </div>
 
-            {isLoadingNews ? (
-              <div className="loading-spinner">Loading analysis...</div>
-            ) : (
-              <>
-                {/* Scrollable news section */}
-                <div className="news-scroll-container">
-                  {/* Streaming controls removed - keeping automatic news updates */}
-
-                  {newsError && (
-                    <div className="analysis-item error-message">
-                      <p className="news-error-text">{newsError}</p>
-                    </div>
-                  )}
-                  
-                  {/* Show streaming news when active, otherwise show regular news */}
-                  {(isStreaming ? streamingNews : stockNews).map((news, index) => (
-                    <div key={index} className="analysis-item clickable-news">
-                      <div 
-                        className="news-header"
-                        onClick={() => handleNewsToggle(index)}
-                      >
-                        <div className="analysis-header">
-                          <h3>{news.tickers?.[0] || selectedSymbol}</h3>
-                          <span className="time">{news.published || news.time || `${index * 3 + 2} min ago`}</span>
-                        </div>
-                        <p className="news-title">{news.title}</p>
-                        <div className="news-source">
-                          <span className="source-name">{news.source || 'Market News'}</span>
-                          <span className="expand-icon">{expandedNews === index ? '▼' : '▶'}</span>
-                        </div>
-                      </div>
-                      
-                      {expandedNews === index && (
-                        <div className="news-expanded">
-                          {news.description && (
-                            <p className="news-description">{news.description}</p>
-                          )}
-                          {news.url && (
-                            <a 
-                              href={news.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="news-link"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              Read Full Article →
-                            </a>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Fixed Technical Levels section */}
-                <div className="technical-section">
-                  <h4>TECHNICAL LEVELS</h4>
-                  {isLoadingTechnicalLevels ? (
-                    <div className="level-loading">Loading technical levels...</div>
-                  ) : technicalLevelsError ? (
-                    <div className="level-error">{technicalLevelsError}</div>
-                  ) : (
-                    <>
-                      <div className="level-row">
-                        <Tooltip content="Resistance level - Consider taking profits near this price">
-                          <span>Sell High</span>
-                        </Tooltip>
-                        <span className="level-val qe">
-                          ${technicalLevels.sell_high_level ? technicalLevels.sell_high_level.toFixed(2) : 'N/A'}
-                        </span>
-                      </div>
-                      <div className="level-row">
-                        <Tooltip content="Support level - Potential buying opportunity near this price">
-                          <span>Buy Low</span>
-                        </Tooltip>
-                        <span className="level-val st">
-                          ${technicalLevels.buy_low_level ? technicalLevels.buy_low_level.toFixed(2) : 'N/A'}
-                        </span>
-                      </div>
-                      <div className="level-row">
-                        <Tooltip content="Buy The Dip - Strong support level for accumulation">
-                          <span>BTD</span>
-                        </Tooltip>
-                        <span className="level-val ltb">
-                          ${technicalLevels.btd_level ? technicalLevels.btd_level.toFixed(2) : 'N/A'}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className="pattern-section">
+            {/* Two-column layout: Pattern Detection + News Feed */}
+            <div className="analysis-grid-two-column">
+              {/* Left Column: Pattern Detection */}
+              <div className="pattern-section">
                   <h4>PATTERN DETECTION</h4>
                   
                   {backendPatterns.length === 0 && detectedPatterns.length === 0 ? (
@@ -2368,60 +2469,39 @@ export const TradingDashboardSimple: React.FC = () => {
                     </>
                   )}
                 </div>
-              </>
-            )}
+
+              {/* Right Column: News Feed */}
+              <div className="news-section">
+                <h4>📰 NEWS FEED - {selectedSymbol}</h4>
+                {isLoadingNews ? (
+                  <div className="loading-spinner-small">Loading news...</div>
+                ) : newsError ? (
+                  <div className="news-error">{newsError}</div>
+                ) : (isStreaming ? streamingNews : stockNews).length > 0 ? (
+                  <div className="news-list">
+                    {(isStreaming ? streamingNews : stockNews).map((news, index) => (
+                      <div key={index} className="news-item">
+                        <a
+                          href={news.url || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="news-link"
+                        >
+                          <div className="news-title">{news.title}</div>
+                          <div className="news-time">
+                            {formatNewsTime(news.published || news.time || news.published_at || Date.now() / 1000)}
+                          </div>
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="no-news">No news available</div>
+                )}
+              </div>
+            </div>
           </div>
         </aside>
-
-        {/* Left Panel Divider - Desktop only */}
-        {!isMobile && <PanelDivider onDrag={handleLeftPanelResize} />}
-
-        {/* Center - Chart + Voice (merged on mobile, separate on desktop) */}
-        <main
-          className={`main-content panel ${isMobile ? 'mobile-chart-voice-merged' : ''}`}
-          data-panel="chart"
-          data-active={!isMobile || activePanel === 'chart'}
-        >
-          {/* Chart Section */}
-          <div 
-            className="chart-section chart-container"
-            style={isMobile ? { flex: `0 0 ${mobileChartRatio}%`, maxHeight: `${mobileChartRatio}%` } : undefined}
-          >
-            {/* Timeframe Selector */}
-            <TimeRangeSelector
-              selected={selectedTimeframe}
-              options={['1D', '5D', '1M', '6M', '1Y', '2Y', '3Y', 'YTD', 'MAX']}
-              onChange={(range) => setSelectedTimeframe(range)}
-              showAdvancedMenu={true}
-            />
-            <div className="chart-wrapper">
-              <TradingChart
-                symbol={selectedSymbol}
-                days={timeframeToDays(selectedTimeframe).fetch}
-                displayDays={timeframeToDays(selectedTimeframe).display}
-                interval={timeframeToInterval(selectedTimeframe)}
-                technicalLevels={technicalLevels}
-                onChartReady={(chart: any) => {
-                  chartRef.current = chart;
-                  chartControlService.setChartRef(chart);
-                  enhancedChartControl.setChartRef(chart);
-                  console.log('Chart ready for enhanced agent control');
-                }}
-              />
-            </div>
-
-            {/* Voice Status Indicator (desktop only - minimal) */}
-            {!isMobile && isConversationConnected && (
-              <div className="voice-status-bar" data-testid="voice-interface">
-                <div className="audio-level-mini">
-                  <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 500)}%` }}></div>
-                  <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 400)}%` }}></div>
-                  <div className="audio-bar" style={{ height: `${Math.min(100, audioLevel * 600)}%` }}></div>
-                </div>
-                <span className="voice-status-text">{isListening ? 'Listening...' : 'Connected'}</span>
-              </div>
-            )}
-          </div>
 
           {/* Mobile: Voice/Chat Section (below chart on mobile only) */}
           {isMobile && activePanel === 'chart' && (
@@ -2760,114 +2840,6 @@ export const TradingDashboardSimple: React.FC = () => {
           </nav>
         )}
 
-      {/* Widget Testing Launcher - Floating Button Menu */}
-      {!isMobile && (
-        <div style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-          zIndex: 40,
-        }}>
-          <button
-            onClick={() => setActiveWidget('economic-calendar')}
-            style={{
-              padding: '12px 20px',
-              background: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-              transition: 'all 0.2s',
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
-            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
-          >
-            📅 Calendar
-          </button>
-          <button
-            onClick={() => setActiveWidget('market-news')}
-            style={{
-              padding: '12px 20px',
-              background: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-              transition: 'all 0.2s',
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
-            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
-          >
-            📰 News
-          </button>
-          <button
-            onClick={() => setActiveWidget('technical-levels')}
-            style={{
-              padding: '12px 20px',
-              background: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-              transition: 'all 0.2s',
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
-            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
-          >
-            📊 Levels
-          </button>
-          <button
-            onClick={() => setActiveWidget('pattern-detection')}
-            style={{
-              padding: '12px 20px',
-              background: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-              transition: 'all 0.2s',
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
-            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
-          >
-            🔍 Patterns
-          </button>
-          <button
-            onClick={() => setActiveWidget('trading-chart')}
-            style={{
-              padding: '12px 20px',
-              background: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-              transition: 'all 0.2s',
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
-            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
-          >
-            📈 Chart
-          </button>
-        </div>
-      )}
 
       {/* Widget Modal Renders */}
       {activeWidget === 'economic-calendar' && (
