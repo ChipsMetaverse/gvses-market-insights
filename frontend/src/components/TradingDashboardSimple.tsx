@@ -133,43 +133,20 @@ const PanelDivider: React.FC<{
 // - Daily+ (>=1D): Historical long-term data (3+ years)
 const timeframeToDays = (timeframe: TimeRange): { fetch: number, display: number } => {
   const map: Record<TimeRange, { fetch: number, display: number }> = {
-    // Intraday - Recent data only (high resolution)
-    '10S': { fetch: 1, display: 1 },
-    '30S': { fetch: 1, display: 1 },
+    // Intraday - Alpaca-native intervals only
     '1m': { fetch: 2, display: 2 },      // 700 bars: 700min ÷ 390min/day = ~2 days
-    '3m': { fetch: 1, display: 1 },
     '5m': { fetch: 9, display: 9 },      // 700 bars: 3500min ÷ 390min/day = ~9 days
-    '10m': { fetch: 7, display: 7 },
-    '15m': { fetch: 7, display: 7 },
-    '30m': { fetch: 7, display: 7 },
+    '15m': { fetch: 7, display: 7 },     // Initial load only - lazy loading handles more
 
-    // Hours - Load 700 bars
+    // Hours
     '1H': { fetch: 150, display: 150 }, // 700 bars: 700hrs ÷ 6.5hrs/day × 1.4 = ~150 days
-    '2H': { fetch: 7, display: 7 },
-    '3H': { fetch: 7, display: 7 },
-    '4H': { fetch: 150, display: 150 }, // 700 bars: Same as 1H since both use 1h data
-    '6H': { fetch: 7, display: 7 },
-    '8H': { fetch: 7, display: 7 },
-    '12H': { fetch: 7, display: 7 },
 
-    // Daily+ - Load 700 bars for 1D
+    // Daily
     '1D': { fetch: 1000, display: 1000 }, // 700 bars: 700 trading days ≈ 1000 calendar days
-    '2D': { fetch: 2, display: 2 },      // 2 days with 15m bars
-    '3D': { fetch: 3, display: 3 },      // 3 days with 15m bars
-    '5D': { fetch: 5, display: 5 },      // 5 days with 1h bars (~30 bars)
-    '1W': { fetch: 7, display: 7 },      // 7 days with 1h bars (~42 bars)
-    
-    // Months - Fetch extra for MA200 but display only requested range
-    '1M': { fetch: 250, display: 30 },   // Fetch 250, display 30
-    '3M': { fetch: 300, display: 90 },   // Fetch 300, display 90
-    '6M': { fetch: 380, display: 180 },  // Fetch 380, display 180
-    
-    // Years - Fetch all needed data
+
+    // Long-term
     '1Y': { fetch: 365, display: 365 },     // 1 year
-    '2Y': { fetch: 730, display: 730 },     // 2 years
-    '3Y': { fetch: 1095, display: 1095 },   // 3 years
-    '5Y': { fetch: 1825, display: 1825 },   // 5 years
-    
+
     // Special
     'YTD': (() => {
       const ytdDays = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24));
@@ -183,38 +160,17 @@ const timeframeToDays = (timeframe: TimeRange): { fetch: number, display: number
 // Helper function to convert TimeRange to data interval for API
 const timeframeToInterval = (timeframe: TimeRange): string => {
   const map: Record<TimeRange, string> = {
-    // Intraday - Use minute-based intervals
+    // Intraday - Alpaca-native intervals only
     '1m': '1m',
-    '3m': '1m',
     '5m': '5m',
-    '10m': '5m',
     '15m': '15m',
-    '30m': '30m',
 
-    // Hours - Use hourly interval
+    // Hours
     '1H': '1h',
-    '2H': '1h',
-    '3H': '1h',
-    '4H': '1h',
-    '6H': '1h',
-    '8H': '1h',
-    '12H': '1h',
 
-    // Daily+ - Use daily interval
-    '1D': '1d',     // Use daily bars for 1D (700 bars = ~2.8 years)
-    '2D': '15m',    // Use 15-minute bars for 2D
-    '3D': '15m',    // Use 15-minute bars for 3D
-    '5D': '1h',     // Use hourly for 5D
-    '1W': '1h',     // Use hourly for 1W
-
-    // Longer periods - Use daily interval
-    '1M': '1d',
-    '3M': '1d',
-    '6M': '1d',
+    // Daily and long-term - Use daily interval
+    '1D': '1d',
     '1Y': '1d',
-    '2Y': '1d',
-    '3Y': '1d',
-    '5Y': '1d',
     'YTD': '1d',
     'MAX': '1d'
   };
@@ -1805,6 +1761,44 @@ export const TradingDashboardSimple: React.FC = () => {
     setIsLoadingNews(false);
   };
 
+  // Handle technical levels update from chart component
+  // This callback is triggered when the chart fetches new pattern detection data
+  // (e.g., when interval/timeframe changes)
+  const handleTechnicalLevelsUpdate = useCallback((patternData: any) => {
+    if (!patternData || !patternData.trendlines || patternData.trendlines.length === 0) {
+      console.log('[TECH LEVELS CALLBACK] No trendlines in pattern data');
+      setTechnicalLevels({});
+      return;
+    }
+
+    // Extract technical levels from trendlines (same logic as fetchStockAnalysis)
+    const blLine = patternData.trendlines.find((t: any) => t.label === 'BL');
+    const shLine = patternData.trendlines.find((t: any) => t.label === 'SH');
+    const btdLine = patternData.trendlines.find((t: any) => t.label === 'BTD (200 SMA)');
+    const pdhLine = patternData.trendlines.find((t: any) => t.label === 'PDH');
+    const pdlLine = patternData.trendlines.find((t: any) => t.label === 'PDL');
+
+    const updatedLevels = {
+      sell_high_level: shLine?.start?.price || null,
+      buy_low_level: blLine?.start?.price || null,
+      btd_level: btdLine?.start?.price || null,
+      pdh_level: pdhLine?.start?.price || null,
+      pdl_level: pdlLine?.start?.price || null,
+      data_source: 'chart_callback'
+    };
+
+    setTechnicalLevels(updatedLevels);
+    setTechnicalLevelsError(null);
+
+    console.log('📊 [TECH LEVELS CALLBACK] Updated from chart:', {
+      SH: updatedLevels.sell_high_level,
+      BL: updatedLevels.buy_low_level,
+      BTD: updatedLevels.btd_level,
+      PDH: updatedLevels.pdh_level,
+      PDL: updatedLevels.pdl_level
+    });
+  }, []);
+
   // Fetch data when watchlist changes and set up refresh interval
   useEffect(() => {
     fetchStocksData(watchlist);
@@ -2129,20 +2123,21 @@ export const TradingDashboardSimple: React.FC = () => {
         <main
           className={`main-content panel ${isMobile ? 'mobile-chart-voice-merged' : ''}`}
           data-panel="chart"
-          data-active={!isMobile || activePanel === 'chart'}
+          data-active={!isMobile || activePanel === 'chart' || activePanel === 'analysis'}
         >
           {/* Chart Section */}
           <div
             className="chart-section chart-container"
+            data-active={!isMobile || activePanel === 'chart'}
             style={isMobile
               ? { flex: `0 0 ${mobileChartRatio}%`, maxHeight: `${mobileChartRatio}%` }
               : { flex: `0 0 ${chartPanelRatio}%`, minHeight: '300px' }
             }
           >
-            {/* Timeframe Selector */}
+            {/* Timeframe Selector - Alpaca-native intervals only */}
             <TimeRangeSelector
               selected={selectedTimeframe}
-              options={['1m', '5m', '15m', '30m', '1H', '2H', '4H', '1Y', '2Y', '3Y', 'YTD', 'MAX']}
+              options={['1m', '5m', '15m', '1H', '1D', '1Y', 'YTD', 'MAX']}
               onChange={(range) => setSelectedTimeframe(range)}
               showAdvancedMenu={false}
             />
@@ -2162,6 +2157,7 @@ export const TradingDashboardSimple: React.FC = () => {
                   enhancedChartControl.setChartRef(chart);
                   console.log('Chart ready for enhanced agent control with lazy loading');
                 }}
+                onTechnicalLevelsUpdate={handleTechnicalLevelsUpdate}
               />
             </div>
 
@@ -2246,6 +2242,7 @@ export const TradingDashboardSimple: React.FC = () => {
           <aside
             className="analysis-panel-below"
             data-panel="analysis"
+            data-active={!isMobile || activePanel === 'analysis'}
             style={!isMobile
               ? { flex: `1 1 ${100 - chartPanelRatio}%`, minHeight: '200px', overflow: 'auto' }
               : undefined

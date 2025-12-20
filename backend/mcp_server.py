@@ -526,7 +526,7 @@ async def get_stock_price(request: Request, symbol: str):
 async def get_intraday_data(
     request: Request,
     symbol: str,
-    interval: str = Query('5m', regex='^(1m|5m|15m|30m|1h|4h|1d|1w|1mo)$'),
+    interval: str = Query('5m', regex='^(1m|5m|15m|1h|1d|1w|1mo)$'),
     days: Optional[int] = Query(None, ge=1, le=2555),
     startDate: Optional[str] = None,
     endDate: Optional[str] = None
@@ -550,7 +550,7 @@ async def get_intraday_data(
 
     Args:
         symbol: Stock ticker (e.g., TSLA, AAPL)
-        interval: Bar interval - 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1mo
+        interval: Bar interval - 1m, 5m, 15m, 1h, 1d, 1w, 1mo (Alpaca-native intervals only)
         days: Number of days to fetch from now (standard mode)
         startDate: Start date in ISO format (lazy loading mode)
         endDate: End date in ISO format (lazy loading mode)

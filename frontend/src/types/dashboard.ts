@@ -1,8 +1,8 @@
 export type TimeRange =
-  | '10S' | '30S' | '1m' | '3m' | '5m' | '10m' | '15m' | '30m'
-  | '1H' | '2H' | '3H' | '4H' | '6H' | '8H' | '12H'
-  | '1D' | '2D' | '3D' | '5D' | '1W' | '1M' | '3M' | '6M'
-  | 'YTD' | '1Y' | '2Y' | '3Y' | '5Y' | 'MAX';
+  | '1m' | '5m' | '15m'
+  | '1H'
+  | '1D'
+  | 'YTD' | '1Y' | 'MAX';
 export type CandleInterval = '1m' | '5m' | '15m' | '1h' | '1d' | '1w';
 
 export interface ApiResponse<T> {
