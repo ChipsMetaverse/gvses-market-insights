@@ -128,6 +128,23 @@ class HTTPMCPClient:
                 self._session_id = session_id
                 logger.info(f"MCP session initialized successfully: {session_id}")
 
+                # Send 'initialized' notification to complete MCP handshake
+                initialized_notification = {
+                    "jsonrpc": "2.0",
+                    "method": "notifications/initialized"
+                }
+                headers["Mcp-Session-Id"] = session_id
+                try:
+                    await self._client.post(
+                        self.base_url,
+                        json=initialized_notification,
+                        headers=headers
+                    )
+                    logger.info("Sent 'initialized' notification to complete handshake")
+                except Exception as notify_err:
+                    logger.warning(f"Failed to send initialized notification: {notify_err}")
+                    # Continue anyway - some servers may not require it
+
                 # Safely parse JSON response with fallback for empty bodies
                 try:
                     result = response.json()

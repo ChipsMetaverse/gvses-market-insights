@@ -295,6 +295,11 @@ export function useInfiniteChartData(
    * Uses logical coordinates (bar indices) instead of time coordinates
    * Based on TradingView Lightweight Charts "Infinite History" pattern
    */
+  // Track last data length to prevent infinite loops
+  const lastDataLengthRef = useRef<number>(0)
+  // Track last load trigger time to implement cooldown (initialize to current time)
+  const lastLoadTimeRef = useRef<number>(Date.now())
+
   const checkEdgeProximity = useCallback((logicalRange: { from: number; to: number } | null) => {
     if (!logicalRange || !chartRef.current || !data.length || !enabled || isLoadingRef.current) {
       return
@@ -303,11 +308,36 @@ export function useInfiniteChartData(
     // logicalRange.from is the leftmost visible bar index (0-based)
     // When it's close to 0 (first bar), we need to load more historical data
     const EDGE_THRESHOLD = 10  // Load when < 10 bars from left edge
+    const COOLDOWN_MS = 2000    // 2 second cooldown between loads
+    const MIN_GROWTH = 10       // Require at least 10 bars growth to re-trigger
 
     console.log(`[LAZY LOAD] 📊 Visible logical range: from=${logicalRange.from.toFixed(2)}, to=${logicalRange.to.toFixed(2)}`)
 
     if (logicalRange.from < EDGE_THRESHOLD && hasMore) {
+      const currentDataLength = data.length
+      const dataGrowth = currentDataLength - lastDataLengthRef.current
+      const timeSinceLastLoad = Date.now() - lastLoadTimeRef.current
+
+      console.log(`[LAZY LOAD] 🔍 Edge check: data=${currentDataLength}, lastData=${lastDataLengthRef.current}, growth=${dataGrowth}, time=${timeSinceLastLoad}ms`)
+
+      // CRITICAL FIX: Prevent rapid successive loads when data grows slowly (1 bar at a time)
+      // Only trigger if:
+      // 1. First load (lastDataLengthRef = 0), OR
+      // 2. Data has grown significantly (>= MIN_GROWTH bars), OR
+      // 3. Enough time has passed since last load (cooldown expired)
+      const shouldLoad =
+        lastDataLengthRef.current === 0 ||
+        dataGrowth >= MIN_GROWTH ||
+        timeSinceLastLoad >= COOLDOWN_MS
+
+      if (!shouldLoad) {
+        console.log(`[LAZY LOAD] ⏸️ Skipping load - cooldown active (data: ${currentDataLength} bars, growth: ${dataGrowth}, time: ${timeSinceLastLoad}ms)`)
+        return
+      }
+
       console.log(`[LAZY LOAD] 🔄 Near left edge (${logicalRange.from.toFixed(2)} bars from start), loading more data...`)
+      lastDataLengthRef.current = currentDataLength
+      lastLoadTimeRef.current = Date.now()
       loadMore()
     }
   }, [data, enabled, hasMore, loadMore])

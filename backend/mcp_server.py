@@ -22,6 +22,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Requ
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import httpx
 from supabase import create_client, Client
@@ -127,6 +128,12 @@ app.add_middleware(
 # Add enhanced rate limiting middleware
 app.add_middleware(RateLimitMiddleware)
 logger.info("Enhanced rate limiting middleware enabled (Redis-backed with in-memory fallback)")
+
+# Mount static files for test results page
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    logger.info(f"Static files mounted from {static_dir}")
 
 # Sprint 1, Day 2: Add Prometheus metrics middleware
 app.add_middleware(PrometheusMiddleware)
@@ -1616,6 +1623,112 @@ async def get_technical_levels(
         )
         raise HTTPException(status_code=500, detail=f"Failed to get technical levels: {str(e)}")
 
+# Helper methods for pattern visual_config generation
+def _get_pattern_color(pattern_type: str, signal: str) -> str:
+    """Return color based on pattern bias."""
+    if signal == "bullish":
+        return "#10b981"  # Green
+    elif signal == "bearish":
+        return "#ef4444"  # Red
+    else:
+        return "#3b82f6"  # Blue (neutral)
+
+
+def _parse_candle_timestamp(candle: Dict[str, Any]) -> int:
+    """Extract Unix timestamp from candle (handles ISO string or Unix int)."""
+    ts = candle.get("timestamp") or candle.get("time") or candle.get("date")
+    if ts is None:
+        return 0
+    if isinstance(ts, (int, float)):
+        return int(ts)
+    if isinstance(ts, str):
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+            return int(dt.timestamp())
+        except:
+            return 0
+    return 0
+
+
+def _generate_pattern_markers(
+    pattern: Dict[str, Any],
+    candles: List[Dict[str, Any]],
+    start_idx: int,
+    end_idx: int
+) -> List[Dict[str, Any]]:
+    """Generate visual markers (arrows, circles) for pattern education."""
+    markers = []
+    pattern_type = pattern.get("pattern_type", pattern.get("type", ""))
+
+    # Doji - circle marker at center
+    if "doji" in pattern_type.lower():
+        if start_idx < len(candles):
+            candle = candles[start_idx]
+            markers.append({
+                "type": "circle",
+                "time": _parse_candle_timestamp(candle),
+                "price": candle.get("close"),
+                "color": "#3b82f6",
+                "radius": 8,
+                "label": "Doji (Indecision)"
+            })
+
+    # Bullish Engulfing - arrow up on engulfing candle
+    elif pattern_type == "bullish_engulfing":
+        if end_idx < len(candles):
+            candle = candles[end_idx]
+            markers.append({
+                "type": "arrow",
+                "direction": "up",
+                "time": _parse_candle_timestamp(candle),
+                "price": candle.get("high"),
+                "color": "#10b981",
+                "label": "Engulfing Candle"
+            })
+
+    # Bearish Engulfing - arrow down on engulfing candle
+    elif pattern_type == "bearish_engulfing":
+        if end_idx < len(candles):
+            candle = candles[end_idx]
+            markers.append({
+                "type": "arrow",
+                "direction": "down",
+                "time": _parse_candle_timestamp(candle),
+                "price": candle.get("low"),
+                "color": "#ef4444",
+                "label": "Engulfing Candle"
+            })
+
+    # Hammer - arrow up below candle
+    elif "hammer" in pattern_type.lower():
+        if start_idx < len(candles):
+            candle = candles[start_idx]
+            markers.append({
+                "type": "arrow",
+                "direction": "up",
+                "time": _parse_candle_timestamp(candle),
+                "price": candle.get("low"),
+                "color": "#10b981",
+                "label": "Hammer Support"
+            })
+
+    # Shooting Star - arrow down above candle
+    elif "shooting_star" in pattern_type.lower():
+        if start_idx < len(candles):
+            candle = candles[start_idx]
+            markers.append({
+                "type": "arrow",
+                "direction": "down",
+                "time": _parse_candle_timestamp(candle),
+                "price": candle.get("high"),
+                "color": "#ef4444",
+                "label": "Shooting Star Resistance"
+            })
+
+    return markers
+
+
 # Pattern detection endpoint - MCP ONLY, NO MOCK DATA
 @app.get("/api/pattern-detection")
 @limiter.limit("50/minute")
@@ -1763,20 +1876,96 @@ async def get_pattern_detection(
             daily_candles_for_btd=daily_candles_for_btd
         )
 
+        # Add visual_config to patterns for frontend rendering
+        candles = history["candles"]
+        for pattern in results.get("detected", []):
+            # Get start and end indices from pattern
+            start_idx = pattern.get("start_candle")
+            end_idx = pattern.get("end_candle")
+            pattern_type = pattern.get("pattern_type", "")
+            signal = pattern.get("signal", "neutral")
+
+            # Only add visual_config if we have valid indices
+            if start_idx is not None and end_idx is not None and start_idx < len(candles):
+                try:
+                    # Clamp end_idx to available data to prevent index out of range
+                    end_idx = min(end_idx, len(candles) - 1)
+
+                    # Build list of candle indices (for overlay coloring)
+                    candle_indices = list(range(start_idx, end_idx + 1))
+
+                    # Get timestamps for boundary box - candles use "timestamp" field (ISO string)
+                    start_time = _parse_candle_timestamp(candles[start_idx])
+                    end_time = _parse_candle_timestamp(candles[end_idx])
+
+                    # Ensure end_time is after start_time
+                    if end_time <= start_time:
+                        end_time = start_time + 86400  # Add 1 day
+
+                    pattern_color = _get_pattern_color(pattern_type, signal)
+                    
+                    # Calculate high/low for boundary box from pattern candles
+                    pattern_candles = candles[start_idx:end_idx + 1]
+                    pattern_high = max(c.get("high", 0) for c in pattern_candles) if pattern_candles else 0
+                    pattern_low = min(c.get("low", float('inf')) for c in pattern_candles) if pattern_candles else 0
+                    if pattern_low == float('inf'):
+                        pattern_low = 0
+
+                    pattern["visual_config"] = {
+                        "candle_indices": candle_indices,
+                        "candle_overlay_color": pattern_color,
+                        "boundary_box": {
+                            "start_time": start_time,
+                            "end_time": end_time,
+                            "high": float(pattern_high),
+                            "low": float(pattern_low),
+                            "border_color": pattern_color,
+                            "border_width": 2,
+                            "fill_opacity": 0.1
+                        },
+                        "label": {
+                            "text": pattern.get("description", pattern_type),
+                            "position": "top" if signal == "bullish" else "bottom",
+                            "color": pattern_color,
+                            "font_size": 12
+                        },
+                        "markers": _generate_pattern_markers(pattern, candles, start_idx, end_idx)
+                    }
+                    
+                    # #region agent log
+                    import json as _json_log
+                    with open("/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log", "a") as _f:
+                        _f.write(_json_log.dumps({"location":"mcp_server.py:1920","message":"Visual config generated","data":{"pattern_type":pattern_type,"start_time":start_time,"end_time":end_time,"high":float(pattern_high),"low":float(pattern_low),"valid_timestamps":start_time > 0 and end_time > 0},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"post-fix","hypothesisId":"TIMESTAMP_FIX"}) + "\n")
+                    # #endregion
+
+                    logger.info(f"[{symbol}] Added visual_config to {pattern_type}: {len(candle_indices)} candles, {len(pattern['visual_config']['markers'])} markers")
+                except Exception as visual_error:
+                    logger.error(f"[{symbol}] Failed to add visual_config to {pattern.get('pattern_type', 'unknown')}: {visual_error}")
+                    # Continue without visual_config for this pattern - don't crash entire response
+                    pass
+
         # Transform patterns to API format
         formatted_patterns = []
         for pattern in results.get("detected", []):
+            # #region agent log
+            import json as _json_log
+            with open("/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log", "a") as _f:
+                _f.write(_json_log.dumps({"location":"mcp_server.py:1775","message":"Pattern before formatting","data":{"pattern_type":pattern.get("pattern_type"),"has_visual_config":bool(pattern.get("visual_config")),"has_chart_metadata":bool(pattern.get("chart_metadata")),"visual_config_keys":list(pattern.get("visual_config",{}).keys()) if pattern.get("visual_config") else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","hypothesisId":"A,B"}) + "\n")
+            # #endregion
             formatted_patterns.append({
                 "id": pattern.get("id", pattern.get("pattern_id", "")),
                 "name": pattern.get("description", pattern.get("pattern_type", "Unknown")),
+                "pattern_type": pattern.get("pattern_type", "unknown"),
                 "signal": pattern.get("signal", "neutral").upper(),
-                "category": "chart_pattern",
+                "category": pattern.get("category", "chart_pattern"),
                 "confidence": pattern.get("confidence", 0),
                 "visible": True,
                 "description": pattern.get("description", ""),
-                "timeframe": "1d",
+                "timeframe": interval,
                 "start_time": pattern.get("start_time"),
-                "end_time": pattern.get("end_time")
+                "end_time": pattern.get("end_time"),
+                "visual_config": pattern.get("visual_config"),
+                "chart_metadata": pattern.get("chart_metadata")
             })
 
         # Convert trendline timestamps from Unix epoch to ISO 8601 strings

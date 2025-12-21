@@ -105,7 +105,7 @@ export const EconomicCalendar: React.FC = () => {
         <div>
           <h3 id="economic-calendar-title">Economic Calendar</h3>
           <p className="calendar-subtitle">
-            Stay ahead of high-impact macro events from ForexFactory.
+            Stay ahead of high-impact macro events.
           </p>
         </div>
         <div className="calendar-actions">

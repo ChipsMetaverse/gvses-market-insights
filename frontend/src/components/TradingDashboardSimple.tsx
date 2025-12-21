@@ -884,6 +884,10 @@ export const TradingDashboardSimple: React.FC = () => {
   const drawPatternOverlay = useCallback((pattern: any) => {
     const patternTimestamp: number | null = pattern.start_time ?? null;
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/4890a0a7-5cad-435e-a844-c64ed142a90b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TradingDashboardSimple.tsx:884',message:'drawPatternOverlay called',data:{pattern_type:pattern.pattern_type,has_visual_config:!!pattern.visual_config,visual_config:pattern.visual_config,has_chart_metadata:!!pattern.chart_metadata,timestamp:patternTimestamp},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D,E'})}).catch(()=>{});
+    // #endregion
+    
     console.log('[Pattern] Drawing overlay:', {
       pattern_type: pattern.pattern_type,
       has_visual_config: !!pattern.visual_config,
@@ -904,12 +908,18 @@ export const TradingDashboardSimple: React.FC = () => {
 
     // PHASE 2C: Use visual_config if available (new enhanced rendering)
     const visualConfig = pattern.visual_config;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/4890a0a7-5cad-435e-a844-c64ed142a90b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TradingDashboardSimple.tsx:906',message:'Checking visual_config',data:{has_visual_config:!!visualConfig,boundary_box:visualConfig?.boundary_box,markers_count:visualConfig?.markers?.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
     if (visualConfig) {
       console.log('[Pattern] Using visual_config for enhanced rendering');
       
       // Draw boundary box around pattern
       if (visualConfig.boundary_box) {
         console.log('[Pattern] Drawing boundary box');
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/4890a0a7-5cad-435e-a844-c64ed142a90b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TradingDashboardSimple.tsx:913',message:'Drawing boundary box',data:{boundary_box:visualConfig.boundary_box},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
         enhancedChartControl.drawPatternBoundaryBox(visualConfig.boundary_box);
       }
       
@@ -1731,6 +1741,9 @@ export const TradingDashboardSimple: React.FC = () => {
       setIsLoadingTechnicalLevels(false);
 
       if (patterns.length > 0) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/4890a0a7-5cad-435e-a844-c64ed142a90b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TradingDashboardSimple.tsx:1733',message:'Patterns received from API',data:{count:patterns.length,sample_pattern_type:patterns[0]?.pattern_type,sample_has_visual_config:!!patterns[0]?.visual_config,sample_visual_config_keys:patterns[0]?.visual_config?Object.keys(patterns[0].visual_config):null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C'})}).catch(()=>{});
+        // #endregion
         const now = Date.now();
         const filterDays = 365;
         const filterDate = now - filterDays * 24 * 60 * 60 * 1000;
