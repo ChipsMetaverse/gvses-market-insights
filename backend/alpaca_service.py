@@ -166,18 +166,23 @@ class AlpacaService:
             }
             
             tf = timeframe_map.get(timeframe, TimeFrame.Day)
-            
+
+            # Calculate start date
+            start_date = datetime.now() - timedelta(days=days_back)
+            logger.info(f"[ALPACA DEBUG] Requesting {symbol} bars from {start_date.strftime('%Y-%m-%d')} ({days_back} days back, timeframe={timeframe})")
+
             request = StockBarsRequest(
                 symbol_or_symbols=symbol,
                 timeframe=tf,
-                start=datetime.now() - timedelta(days=days_back),
+                start=start_date,
                 limit=limit
             )
-            
+
             bars_response = self.data_client.get_stock_bars(request)
-            
+
             if symbol in bars_response.data:
                 bars = bars_response.data[symbol]
+                logger.info(f"[ALPACA DEBUG] Alpaca API returned {len(bars)} bars for {symbol}")
                 return {
                     "symbol": symbol,
                     "timeframe": timeframe,

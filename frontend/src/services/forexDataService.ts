@@ -86,7 +86,7 @@ class ForexDataService {
   }
 
   async getWeek(): Promise<ForexCalendarResponse> {
-    return this.getCalendar({ timePeriod: 'week' });
+    return this.getCalendar({ timePeriod: 'this_week' });
   }
 }
 

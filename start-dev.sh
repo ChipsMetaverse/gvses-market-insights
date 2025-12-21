@@ -24,6 +24,8 @@ source backend/.env
 echo "🧹 Cleaning up existing processes..."
 pkill -f "uvicorn mcp_server:app"
 pkill -f "npm run dev"
+pkill -f "node index.js" # market-mcp-server
+pkill -f "forex_mcp" # forex-mcp-server
 pkill -f "lt --port"
 sleep 2
 
@@ -32,6 +34,23 @@ echo "🔧 Starting backend server..."
 cd backend
 uvicorn mcp_server:app --reload --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
+cd ..
+sleep 3
+
+# Start market-mcp-server in HTTP mode on port 3001
+echo "📡 Starting market-mcp-server on port 3001..."
+cd market-mcp-server
+node index.js 3001 &
+MCP_SERVER_PID=$!
+cd ..
+sleep 3
+
+# Start forex-mcp-server in HTTP mode on port 3002
+echo "📊 Starting forex-mcp-server on port 3002..."
+cd forex-mcp-server
+export PYTHONPATH="$PWD/src:$PYTHONPATH"
+python3 -m forex_mcp.server --transport http --host 0.0.0.0 --port 3002 > ../forex-mcp-server.log 2>&1 &
+FOREX_MCP_PID=$!
 cd ..
 sleep 3
 
@@ -53,9 +72,11 @@ echo ""
 echo "✅ All services started!"
 echo ""
 echo "📍 Local Access:"
-echo "   Frontend: http://localhost:5173"
-echo "   Backend:  http://localhost:8000"
-echo "   API Docs: http://localhost:8000/docs"
+echo "   Frontend:       http://localhost:5173"
+echo "   Backend:        http://localhost:8000"
+echo "   Market MCP:     http://localhost:3001"
+echo "   Forex MCP:      http://localhost:3002"
+echo "   API Docs:       http://localhost:8000/docs"
 echo ""
 echo "🌐 Public Webhook URL:"
 echo "   https://gvses-backend.loca.lt"
@@ -73,9 +94,13 @@ cleanup() {
     echo ""
     echo "🛑 Stopping all services..."
     kill $BACKEND_PID 2>/dev/null
+    kill $MCP_SERVER_PID 2>/dev/null
+    kill $FOREX_MCP_PID 2>/dev/null
     kill $FRONTEND_PID 2>/dev/null
     kill $TUNNEL_PID 2>/dev/null
     pkill -f "uvicorn mcp_server:app"
+    pkill -f "node index.js"
+    pkill -f "forex_mcp"
     pkill -f "npm run dev"
     pkill -f "lt --port"
     echo "✅ All services stopped"

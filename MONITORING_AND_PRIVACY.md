@@ -1,8 +1,8 @@
 # Monitoring, Analytics & Privacy Documentation
 
 **GVSES Market Analysis Assistant**
-**Last Updated**: December 4, 2025
-**Version**: 2.0.2
+**Last Updated**: November 11, 2025
+**Version**: 2.0.3 (Sentry Integration)
 
 ---
 
@@ -20,14 +20,16 @@
 
 ## Overview
 
-The GVSES platform implements comprehensive first-party monitoring and analytics without any third-party tracking services. All data collection is performed through Supabase (PostgreSQL) and Prometheus metrics.
+The GVSES platform implements comprehensive monitoring and analytics with both first-party and third-party error tracking. Core analytics use Supabase (PostgreSQL) and Prometheus metrics, while error monitoring leverages Sentry for AI-assisted debugging.
 
 **Key Principles:**
-- ✅ First-party data collection only (no external analytics services)
+- ✅ First-party data collection for core analytics (Supabase + Prometheus)
+- ✅ Third-party error tracking via Sentry (optional, configurable)
 - ✅ Row Level Security (RLS) protects user data
 - ✅ Prometheus-based observability for operations
 - ✅ Optional authentication (anonymous usage supported)
 - ⚠️ IP addresses and user agents are collected for security/debugging
+- ⚠️ Sentry captures error context including stack traces and session replays
 
 ---
 
@@ -79,7 +81,147 @@ Comprehensive metrics collection for operational monitoring:
 - `sse_chunk_duration_seconds{endpoint}` - Chunk interval timing
 - `sse_ttfb_seconds{endpoint}` - Time to first byte
 
-### 2. Health Check Endpoint (`/health`)
+### 2. Sentry Error Monitoring (`sentry.io`)
+
+**Integration**: November 11, 2025
+**Configuration**: `frontend/src/config/sentry.ts`, `backend/config/sentry.py`
+
+Third-party error tracking and performance monitoring via Sentry.io:
+
+#### Frontend Error Tracking
+**SDK**: `@sentry/react`
+**Location**: `frontend/src/config/sentry.ts`
+
+**Captured Data**:
+- ✅ JavaScript errors and unhandled exceptions
+- ✅ Browser console errors
+- ✅ API request failures
+- ✅ Performance metrics (page load, API latency)
+- ⚠️ Session replays (video recordings of user interactions)
+- ✅ Breadcrumbs (user actions leading to errors)
+- ✅ User context (user ID, if authenticated)
+- ⚠️ Custom error context (symbol, timeframe, component name)
+
+**Sample Rates** (Production):
+- Error capture: **100%** (all errors sent to Sentry)
+- Performance tracing: **10%** (1 in 10 requests)
+- Session replay (normal): **10%** (1 in 10 sessions)
+- Session replay (on error): **100%** (all error sessions recorded)
+
+**Privacy Controls**:
+```typescript
+beforeSend(event, hint) {
+  // Filter expected WebSocket/ElevenLabs disconnections
+  const error = hint.originalException;
+  if (error && 'message' in error) {
+    const message = String(error.message).toLowerCase();
+    if (message.includes('websocket') || message.includes('elevenlabs')) {
+      event.level = 'info'; // Downgrade to info level
+    }
+  }
+  return event;
+}
+```
+
+**Data Sent to Sentry**:
+- Error messages and stack traces
+- Browser version, OS, screen resolution
+- URL of page where error occurred
+- User ID (if authenticated) - **PII**
+- IP address (Sentry automatic) - **PII**
+- Session replay video (if error occurred) - **May contain PII**
+
+#### Backend Error Tracking
+**SDK**: `sentry-sdk` (Python)
+**Location**: `backend/config/sentry.py`
+
+**Captured Data**:
+- ✅ Python exceptions and tracebacks
+- ✅ FastAPI request failures (500 errors)
+- ✅ API endpoint performance metrics
+- ✅ Database query errors
+- ✅ External API failures (Alpaca, ElevenLabs)
+- ✅ Logging integration (ERROR level logs)
+- ✅ Request context (endpoint, method, headers)
+- ⚠️ User context (user ID, if authenticated)
+
+**Sample Rates** (Production):
+- Error capture: **100%** (all errors sent)
+- Performance tracing: **10%** (1 in 10 requests)
+- Performance profiling: **10%** (CPU/memory sampling)
+
+**Privacy Controls**:
+```python
+def _before_send(event, hint):
+    if "exc_info" in hint:
+        exc_type, exc_value, tb = hint["exc_info"]
+
+        # Filter expected rate limit errors
+        if exc_type.__name__ == "RateLimitExceeded":
+            event["level"] = "info"
+
+        # Filter expected WebSocket disconnections
+        if "websocket" in str(exc_value).lower():
+            event["level"] = "info"
+
+    return event
+```
+
+**Data Sent to Sentry**:
+- Error messages and Python tracebacks
+- Python version, OS, server hostname
+- API endpoint and HTTP method
+- Request headers (sanitized)
+- User ID (if authenticated) - **PII**
+- IP address (Sentry automatic) - **PII**
+
+#### Sentry MCP Integration
+**Status**: Configured, requires OAuth authentication
+**URL**: `https://mcp.sentry.dev/mcp`
+
+**Available Capabilities**:
+- AI-assisted root cause analysis (Seer)
+- Issue search and filtering
+- Automated fix recommendations
+- Project and DSN management
+- Integration with Claude Code for debugging
+
+**Privacy Implications**:
+- ⚠️ Sentry MCP allows AI analysis of error data
+- ⚠️ Error context may be sent to Sentry's Seer AI
+- ✅ No additional data collection (uses existing Sentry data)
+
+#### Sentry Data Retention
+**Default Policy** (configured in Sentry dashboard):
+- Error events: **90 days** (Sentry default)
+- Performance data: **90 days**
+- Session replays: **30 days**
+- Aggregated statistics: **Indefinite**
+
+**Data Location**:
+- Sentry.io cloud (US or EU, configured during setup)
+- Third-party service (not self-hosted)
+- Subject to [Sentry Privacy Policy](https://sentry.io/privacy/)
+
+#### Opt-Out Mechanism
+**Current Status**: ⚠️ Not Implemented
+
+Users cannot currently opt out of Sentry error tracking. To implement:
+1. Add user preference in frontend
+2. Conditionally initialize Sentry based on preference
+3. Store preference in localStorage or user profile
+4. Respect "Do Not Track" browser setting
+
+**Recommended Implementation**:
+```typescript
+// Frontend - check user preference
+const userConsent = localStorage.getItem('sentry_consent');
+if (userConsent !== 'false') {
+  initSentry();
+}
+```
+
+### 3. Health Check Endpoint (`/health`)
 
 **Location**: `backend/mcp_server.py:229-317`
 
@@ -349,12 +491,13 @@ CREATE TABLE market_news (
 
 ### What is NOT Collected?
 
-✅ **No Third-Party Analytics**
-- No Google Analytics
-- No Facebook Pixel
-- No Mixpanel, Amplitude, Segment, PostHog, Heap, etc.
-- No advertising trackers
-- No social media widgets with tracking
+⚠️ **Limited Third-Party Services**
+- ✅ Sentry.io for error tracking (optional, configurable)
+- ❌ No Google Analytics
+- ❌ No Facebook Pixel
+- ❌ No Mixpanel, Amplitude, Segment, PostHog, Heap, etc.
+- ❌ No advertising trackers
+- ❌ No social media widgets with tracking
 
 ✅ **No Cross-Site Tracking**
 - No cookies for advertising
@@ -523,7 +666,9 @@ Response:
 3. Add "Download My Data" feature
 4. Add "Delete My Account" feature (with data erasure)
 5. Verify Supabase DPA (Data Processing Agreement)
-6. Document lawful basis for each data type
+6. Verify Sentry.io DPA and data processing terms
+7. Document lawful basis for each data type
+8. Add Sentry opt-out mechanism (respect user consent)
 
 ### CCPA (California, USA)
 
@@ -612,11 +757,13 @@ rate(openai_total_cost_usd[1h])
 
 ### Privacy Enhancements
 
-1. **Privacy policy page** - Legal disclosure of data collection
+1. **Privacy policy page** - Legal disclosure of data collection (including Sentry)
 2. **Data export feature** - GDPR Article 20 compliance
 3. **Account deletion** - Right to erasure (GDPR Article 17)
 4. **Analytics opt-out** - User preference for query_analytics
-5. **Consent management** - Cookie/tracking consent banner
+5. **Consent management** - Cookie/tracking consent banner (include Sentry consent)
+6. **Sentry opt-out** - Respect user preference for error tracking
+7. **Session replay review** - Verify no PII captured in Sentry replays
 
 ### Compliance Readiness
 
@@ -652,7 +799,11 @@ rate(openai_total_cost_usd[1h])
 
 - `CLAUDE.md` - Project overview and architecture
 - `ARCHITECTURE.md` - System design and data flows
+- `SENTRY_INTEGRATION.md` - Sentry error monitoring setup guide
+- `SENTRY_AUDIT_REPORT.md` - Sentry integration audit and compliance review
 - `backend/middleware/metrics.py` - Prometheus metrics definitions
 - `backend/utils/telemetry.py` - Request telemetry implementation
+- `backend/config/sentry.py` - Sentry backend configuration
+- `frontend/src/config/sentry.ts` - Sentry frontend configuration
 - `supabase/migrations/` - Database schema definitions
 - `fly.toml` - Production deployment configuration

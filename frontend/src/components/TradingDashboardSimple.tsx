@@ -141,11 +141,13 @@ const timeframeToDays = (timeframe: TimeRange): { fetch: number, display: number
     // Hours
     '1H': { fetch: 150, display: 150 }, // 700 bars: 700hrs ÷ 6.5hrs/day × 1.4 = ~150 days
 
-    // Daily
+    // Daily+
     '1D': { fetch: 1000, display: 1000 }, // 700 bars: 700 trading days ≈ 1000 calendar days
+    '1W': { fetch: 3650, display: 3650 }, // ~10 years for weekly candles
+    '1M': { fetch: 7300, display: 7300 }, // ~20 years for monthly candles
 
-    // Long-term
-    '1Y': { fetch: 365, display: 365 },     // 1 year
+    // Long-term (yearly aggregation)
+    '1Y': { fetch: 18250, display: 18250 },   // ~50 years → aggregated to yearly bars (Yahoo Finance has decades of data)
 
     // Special
     'YTD': (() => {
@@ -168,9 +170,13 @@ const timeframeToInterval = (timeframe: TimeRange): string => {
     // Hours
     '1H': '1h',
 
-    // Daily and long-term - Use daily interval
+    // Daily+
     '1D': '1d',
-    '1Y': '1d',
+    '1W': '1w',   // Weekly candles (Alpaca-native)
+    '1M': '1mo',  // Monthly candles (Alpaca-native)
+
+    // Long-term
+    '1Y': '1y',   // Yearly candles (monthly → yearly aggregation)
     'YTD': '1d',
     'MAX': '1d'
   };
@@ -2137,7 +2143,7 @@ export const TradingDashboardSimple: React.FC = () => {
             {/* Timeframe Selector - Alpaca-native intervals only */}
             <TimeRangeSelector
               selected={selectedTimeframe}
-              options={['1m', '5m', '15m', '1H', '1D', '1Y', 'YTD', 'MAX']}
+              options={['1m', '5m', '15m', '1H', '1D', '1W', '1M', '1Y', 'YTD', 'MAX']}
               onChange={(range) => setSelectedTimeframe(range)}
               showAdvancedMenu={false}
             />

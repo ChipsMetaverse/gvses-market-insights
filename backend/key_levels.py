@@ -234,8 +234,9 @@ class KeyLevelsGenerator:
         sma_value = sum(closing_prices) / len(closing_prices)
         print(f"[BTD DEBUG] Calculated {period}-period SMA: ${sma_value:.2f}")
 
-        # NOTE: Always show BTD (200 SMA) - it's a critical institutional indicator
-        # Removed 1% proximity filter that was hiding TSLA's BTD ($379 vs BL $382 = 0.98%)
+        # Don't show BTD if it's too close to BL (would be redundant)
+        if bl_price and abs(sma_value - bl_price) / bl_price < 0.01:  # <1% diff
+            return None
 
         # Always label as "200 SMA" for consistency across all timeframes
         label = 'BTD (200 SMA)'

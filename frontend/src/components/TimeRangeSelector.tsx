@@ -9,8 +9,6 @@ interface TimeRangeSelectorProps {
 }
 
 const DEFAULT_OPTIONS: TimeRange[] = [
-  '10S',
-  '30S',
   '1m',
   '3m',
   '5m',
@@ -41,7 +39,6 @@ const DEFAULT_OPTIONS: TimeRange[] = [
 ];
 
 const ADVANCED_TIMEFRAMES: { category: string; options: TimeRange[] }[] = [
-  { category: 'Seconds', options: ['10S', '30S'] },
   { category: 'Minutes', options: ['1m', '3m', '5m', '10m', '15m', '30m'] },
   { category: 'Hours', options: ['1H', '2H', '3H', '4H', '6H', '8H', '12H'] },
   { category: 'Days', options: ['2D', '3D'] },

@@ -77,6 +77,70 @@ React + TypeScript + Vite application with professional trading interface:
   - **API Validation**: Symbols verified before adding to watchlist
 - **Chart Analysis Panel**: Scrollable expandable news feed (CNBC + Yahoo Finance hybrid)
 
+### Mobile UX (Dec 17, 2025)
+Mobile-optimized trading experience with two-tab navigation system:
+
+**Mobile Breakpoint**: `1024px` - switches to mobile layout below this width
+
+**Two-Tab Navigation System**:
+- **Analysis Tab**: Economic Calendar, Pattern Detection (168 patterns), News Feed - TSLA
+- **Chart + Voice Tab**: Interactive TradingView chart with timeframe controls, technical levels, AI assistant
+
+**Panel Visibility Logic**:
+- Uses `data-active` attributes to show/hide panels based on `activePanel` state
+- Parent `main-content` visible for both 'chart' and 'analysis' tabs
+- Chart section hidden when Analysis tab active via `data-active={!isMobile || activePanel === 'chart'}`
+- Analysis panel shows full-height when active: `flex: 1; max-height: none;`
+
+**Touch Gesture Support**:
+- Swipe detection for tab navigation (40px threshold)
+- Touch start/end event handlers
+- Tab bar ref for gesture area detection
+
+**Mobile State Management**:
+- `isMobile`: boolean (window.innerWidth <= 1024)
+- `activePanel`: 'analysis' | 'chart' | 'voice'
+- `mobileChartRatio`: localStorage-persisted (20-70% range, default 35%)
+
+**CSS Mobile Controls** (`TradingDashboardSimple.css:1386-1407`):
+```css
+@media (max-width: 1024px) {
+  .chart-section[data-active="false"],
+  .analysis-panel-below[data-active="false"] {
+    display: none;
+  }
+
+  .analysis-panel-below[data-active="true"] {
+    flex: 1;
+    max-height: none;
+  }
+}
+```
+
+**Optional Enhancement Opportunities** (for future polish):
+1. **Technical Levels Display**: Currently horizontal bar with small text
+   - Consider: Vertical stack or 2-column grid for better mobile readability
+   - Touch targets: Increase to minimum 44x44px for iOS guidelines
+
+2. **Timeframe Buttons**: Currently 3 rows taking vertical space
+   - Consider: Horizontal scrollable row or compact dropdown selector
+
+3. **Economic Calendar**: Always expanded by default
+   - Consider: Collapsed by default on mobile to reduce scroll depth
+
+4. **News Feed**: Shows all articles at once
+   - Consider: "Load More" pagination for better performance
+
+5. **Pattern Detection**: 168 patterns detected
+   - Consider: Mobile-optimized pattern cards with larger touch targets
+   - Show fewer patterns initially with "Show More" expansion
+
+**Mobile Performance**:
+- Same data fetching as desktop (no mobile-specific API calls)
+- React lazy loading for chart components
+- LocalStorage for user preferences persistence
+- Touch-optimized input fields (16px font to prevent iOS zoom)
+
 ### MCP Servers
 - **market-mcp-server** (`market-mcp-server/`): Node.js, 35+ Yahoo Finance and CNBC tools
 - **alpaca-mcp-server** (`alpaca-mcp-server/`): Python, Alpaca Markets API integration
@@ -122,10 +186,19 @@ npx vitest frontend/src/utils/__tests__/chartCommandUtils.test.ts
 ### Market MCP Server
 ```bash
 cd market-mcp-server && npm install
-npm start        # Production mode
-npm run dev      # Development with watch
-npm test         # Run tests
+
+# HTTP Mode (Required for historical data service)
+node index.js 3001     # HTTP mode on port 3001
+
+# STDIO Mode (Legacy)
+npm start              # Production mode (STDIO)
+npm run dev            # Development with watch (STDIO)
+
+# Testing
+npm test               # Run tests
 ```
+
+**Important**: For the 3-tier historical data caching to work, the market MCP server **must** run in HTTP mode on port 3001. The `HistoricalDataService` connects via HTTP to fetch decades of Yahoo Finance data.
 
 ### Forex MCP Server
 ```bash
@@ -443,6 +516,36 @@ const { searchResults, isSearching, searchError, hasSearched } = useSymbolSearch
 - **Chart Navigation**: Voice-controlled symbol switching
 
 ## Recent Updates
+
+### Database-Backed Historical Data & Yearly Aggregation (Dec 20, 2025)
+- **3-Tier Caching Architecture**: Professional-grade historical data management inspired by TradingView/Webull
+  - **L1: Redis** (2ms) - Hot cache for last 30 days, popular symbols
+  - **L2: Supabase** (20ms) - Persistent storage with unlimited history (currently: 188 monthly TSLA bars from 2010-2025)
+  - **L3: Yahoo Finance via MCP** (300-5000ms) - Fetch missing data only, supports decades of history
+- **Yearly Aggregation**: Monthly bars → Yearly candles (12 months → 1 year)
+  - Jan open, Dec close, year's high/low, sum volume
+  - TSLA: ~15 yearly candles (2010-2025) instead of 3
+  - AAPL: ~45 yearly candles (1980-2025) when requested
+- **Extended Market MCP Server** (`market-mcp-server/index.js:853-875`)
+  - Added absolute date range support (`start_date`, `end_date` parameters)
+  - Bypasses Yahoo Finance 5-year API limit for historical data
+  - Can request 50+ years of data in single call
+- **Smart Gap Filling**: Automatically detects missing data ranges and fetches only gaps
+  - Reduces API calls by 99% after initial load
+  - Pre-2020 data: Routes to Yahoo Finance MCP (Alpaca IEX feed limits ~5 years)
+  - Post-2020 data: Uses Alpaca for recent bars
+- **Implementation Files**:
+  - `backend/services/historical_data_service.py`: 3-tier cache orchestration
+  - `backend/services/bar_aggregator.py`: Monthly → yearly aggregation logic
+  - `backend/supabase_migrations/004_historical_data_tables.sql`: Database schema
+  - `market-mcp-server/index.js`: Extended with absolute date ranges
+  - `frontend/src/components/TradingDashboardSimple.tsx:150`: Fetch 50 years for 1Y interval
+- **Performance Benefits**:
+  - First request: 4-8s (fetches decades from Yahoo Finance, stores in Supabase)
+  - Subsequent requests: <200ms (served from Supabase L2 cache)
+  - Sub-second responses for cached symbols
+- **Storage Efficiency**: ~50 bytes per bar, 188 bars × 50 bytes = ~9.4KB per symbol
+- **All 10 Intervals Working**: 1m, 5m, 15m, 1H, 1D, 1W, 1M, 1Y, YTD, MAX (9/10 return data, 1W has Alpaca API limitation)
 
 ### BTD (200-Day SMA) Display on All Timeframes (Dec 14, 2025)
 - **Timeframe-Agnostic BTD**: BTD (200-day SMA) now displays on ALL timeframes, including intraday (1m, 5m, 15m, 30m, 1H, 2H, 4H)

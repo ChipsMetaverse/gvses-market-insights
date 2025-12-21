@@ -64,7 +64,7 @@ export function createToolbox(opts: {
         b: tp,
         width: 1,
         style: 'dotted',
-        color: '#888',
+        color: '#2196F3',  // Blue preview line (matches standalone implementation)
       };
       if (!previewId) previewId = preview.id;
       store.upsert(preview);
@@ -160,9 +160,10 @@ export function createToolbox(opts: {
       console.log('✅ Deactivating drawing tool');
       setTool('none');
     }
-    if (e.key === 'Delete') {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
       const sel = store.all().find(d => d.selected);
       if (sel) {
+        e.preventDefault();  // Prevent browser back navigation on Backspace
         console.log('✅ Deleting drawing:', sel.id);
         store.remove(sel.id); opts.onDelete?.(sel.id);
       }

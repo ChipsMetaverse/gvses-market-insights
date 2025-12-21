@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 1 API Test Results</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #4ec9b0;
+            border-bottom: 2px solid #4ec9b0;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #252526;
+            border-left: 4px solid #007acc;
+            border-radius: 4px;
+        }
+        .test-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .passed {
+            background: #4ec9b0;
+            color: #000;
+        }
+        .failed {
+            background: #f48771;
+            color: #000;
+        }
+        .running {
+            background: #dcdcaa;
+            color: #000;
+        }
+        .details {
+            margin-top: 10px;
+            padding: 10px;
+            background: #1e1e1e;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        .summary {
+            margin: 30px 0;
+            padding: 20px;
+            background: #252526;
+            border: 2px solid #4ec9b0;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .summary h2 {
+            color: #4ec9b0;
+            margin: 0 0 15px 0;
+        }
+        .summary .score {
+            font-size: 48px;
+            color: #4ec9b0;
+            font-weight: bold;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #dcdcaa;
+        }
+        .error {
+            background: #f48771;
+            color: #000;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Phase 1 Behavioral Coaching API - Integration Test Results</h1>
+
+        <div id="loading" class="loading">
+            Running tests... Please wait...
+        </div>
+
+        <div id="results" style="display: none;"></div>
+
+        <div id="summary" style="display: none;"></div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:8000';
+        const USER_ID = '00000000-0000-0000-0000-000000000001';
+
+        const tests = [
+            {
+                name: 'Legal Disclaimers',
+                id: 'disclaimers',
+                run: async () => {
+                    const response = await fetch(`${BASE_URL}/api/coaching/disclaimers`);
+                    const data = await response.json();
+                    if (!data.success) throw new Error('success=False');
+                    if (data.disclaimers.length !== 4) throw new Error(`Expected 4 disclaimers, got ${data.disclaimers.length}`);
+                    return `✅ 4 disclaimers loaded`;
+                }
+            },
+            {
+                name: 'ACT Exercises Library',
+                id: 'act_exercises',
+                run: async () => {
+                    const response = await fetch(`${BASE_URL}/api/coaching/act/exercises`);
+                    const data = await response.json();
+                    if (!data.success) throw new Error('success=False');
+                    if (data.exercises.length !== 5) throw new Error(`Expected 5 exercises, got ${data.exercises.length}`);
+                    return `✅ 5 exercises with complete data`;
+                }
+            },
+            {
+                name: 'Trade Journal Capture',
+                id: 'trade_capture',
+                run: async () => {
+                    const tradeData = {
+                        symbol: 'AAPL',
+                        entry_price: 180.00,
+                        exit_price: 182.00,
+                        entry_timestamp: new Date().toISOString(),
+                        exit_timestamp: new Date(Date.now() + 15 * 60000).toISOString(),
+                        position_size: 100,
+                        direction: 'long',
+                        timeframe: '5m',
+                        emotional_tags: ['confident', 'calm'],
+                        plan_entry: 'Buy at support level 180',
+                        plan_exit: 'Sell at resistance 182',
+                        stress_level: 3,
+                        confidence_level: 8
+                    };
+
+                    const response = await fetch(`${BASE_URL}/api/coaching/trades/capture`, {
+                        method: 'POST',
+                        headers: {
+                            'X-User-ID': USER_ID,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(tradeData)
+                    });
+
+                    const data = await response.json();
+                    if (!data.success) throw new Error('success=False');
+                    if (!data.trade_id) throw new Error('Missing trade_id');
+
+                    const flags = data.behavioral_flags || {};
+                    return `✅ Trade captured (ID: ${data.trade_id.substring(0, 8)}...)<br>` +
+                           `   Behavioral flags: disciplined=${flags.is_disciplined}, revenge=${flags.is_revenge}, impulsive=${flags.is_impulsive}`;
+                }
+            },
+            {
+                name: 'Journal Entries Retrieval',
+                id: 'journal_retrieval',
+                run: async () => {
+                    const response = await fetch(`${BASE_URL}/api/coaching/trades/journal?limit=10`, {
+                        headers: { 'X-User-ID': USER_ID }
+                    });
+
+                    const data = await response.json();
+                    if (!data.success) throw new Error('success=False');
+
+                    const entries = data.entries || [];
+                    if (entries.length < 1) throw new Error('Expected at least 1 trade');
+
+                    const first = entries[0];
+                    return `✅ ${entries.length} trades retrieved<br>` +
+                           `   Most recent: ${first.symbol} $${first.entry_price} → $${first.exit_price} (P/L: $${first.pl.toFixed(2)})`;
+                }
+            },
+            {
+                name: 'Weekly Insights Analytics',
+                id: 'weekly_insights',
+                run: async () => {
+                    const response = await fetch(`${BASE_URL}/api/coaching/insights/weekly`, {
+                        headers: { 'X-User-ID': USER_ID }
+                    });
+
+                    const data = await response.json();
+                    if (!data.success) throw new Error('success=False');
+
+                    const insights = data.insights || {};
+                    return `✅ Weekly insights generated<br>` +
+                           `   Total trades: ${insights.total_trades || 0}<br>` +
+                           `   Disciplined: ${insights.disciplined_trades || 0}<br>` +
+                           `   Impulsive: ${insights.impulsive_trades || 0}`;
+                }
+            },
+            {
+                name: 'ACT Exercise Completion Tracking',
+                id: 'act_completion',
+                run: async () => {
+                    // First get an exercise
+                    const exercisesResponse = await fetch(`${BASE_URL}/api/coaching/act/exercises`);
+                    const exercisesData = await exercisesResponse.json();
+                    const exerciseId = exercisesData.exercises[0].id;
+
+                    const completionData = {
+                        exercise_id: exerciseId,
+                        trigger_context: 'post_stopout',
+                        completed: true,
+                        duration_seconds: 120,
+                        quality_rating: 4,
+                        user_notes: 'Automated test completion',
+                        prevented_impulsive_trade: true,
+                        improved_emotional_state: true
+                    };
+
+                    const response = await fetch(`${BASE_URL}/api/coaching/act/complete`, {
+                        method: 'POST',
+                        headers: {
+                            'X-User-ID': USER_ID,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(completionData)
+                    });
+
+                    const data = await response.json();
+                    if (!data.success) throw new Error('success=False');
+                    if (!data.completion_id) throw new Error('Missing completion_id');
+
+                    return `✅ Completion tracked (ID: ${data.completion_id.substring(0, 8)}...)`;
+                }
+            },
+            {
+                name: 'Behavioral Pattern Detection',
+                id: 'pattern_detection',
+                run: async () => {
+                    const response = await fetch(`${BASE_URL}/api/coaching/patterns/detect`, {
+                        headers: { 'X-User-ID': USER_ID }
+                    });
+
+                    const data = await response.json();
+                    if (!data.success) throw new Error('success=False');
+
+                    const patterns = data.patterns || [];
+                    const message = data.message || '';
+
+                    if (message && message.includes('Need')) {
+                        return `✅ Pattern detection working<br>   ${message}`;
+                    } else if (patterns.length > 0) {
+                        return `✅ ${patterns.length} patterns detected`;
+                    } else {
+                        return `✅ Pattern detection working (no patterns)`;
+                    }
+                }
+            }
+        ];
+
+        async function runTests() {
+            const resultsDiv = document.getElementById('results');
+            const loadingDiv = document.getElementById('loading');
+            const summaryDiv = document.getElementById('summary');
+
+            let passed = 0;
+            let failed = 0;
+
+            for (const test of tests) {
+                const testDiv = document.createElement('div');
+                testDiv.className = 'test-section';
+                testDiv.innerHTML = `
+                    <div class="test-name">
+                        ${test.name}
+                        <span class="status running">RUNNING...</span>
+                    </div>
+                    <div class="details" id="${test.id}-details">Testing...</div>
+                `;
+                resultsDiv.appendChild(testDiv);
+                resultsDiv.style.display = 'block';
+
+                try {
+                    const result = await test.run();
+                    passed++;
+                    testDiv.innerHTML = `
+                        <div class="test-name">
+                            ${test.name}
+                            <span class="status passed">PASSED</span>
+                        </div>
+                        <div class="details">${result}</div>
+                    `;
+                } catch (error) {
+                    failed++;
+                    testDiv.innerHTML = `
+                        <div class="test-name">
+                            ${test.name}
+                            <span class="status failed">FAILED</span>
+                        </div>
+                        <div class="details">❌ ${error.message}</div>
+                    `;
+                }
+            }
+
+            loadingDiv.style.display = 'none';
+
+            const total = passed + failed;
+            const allPassed = failed === 0;
+
+            summaryDiv.innerHTML = `
+                <h2>${allPassed ? '🎉 ALL TESTS PASSED!' : '⚠️ SOME TESTS FAILED'}</h2>
+                <div class="score">${passed}/${total}</div>
+                <div style="margin-top: 20px; font-size: 18px;">
+                    ${allPassed ?
+                        '✅ Phase 1 Backend is fully functional<br><br>Ready for frontend development!' :
+                        `${passed} tests passed, ${failed} tests failed`
+                    }
+                </div>
+            `;
+            summaryDiv.style.display = 'block';
+        }
+
+        // Run tests on page load
+        window.addEventListener('load', runTests);
+    </script>
+</body>
+</html>

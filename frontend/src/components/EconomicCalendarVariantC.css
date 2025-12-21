@@ -1,0 +1,720 @@
+/**
+ * Economic Calendar - Variant C Styles
+ * Unified Split View with Calendar Timeline
+ */
+
+.economic-calendar-variant-c {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+
+.economic-calendar-variant-c .unified-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fafbfc;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.economic-calendar-variant-c .unified-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.economic-calendar-variant-c .refresh-btn {
+  padding: 4px 10px;
+  font-size: 14px;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.economic-calendar-variant-c .refresh-btn:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+/* ============================================
+   Calendar Timeline Section (Top)
+   ============================================ */
+
+.economic-calendar-variant-c .calendar-timeline-section {
+  background: linear-gradient(to bottom, #f9fafb 0%, #ffffff 100%);
+  border-bottom: 2px solid #e5e7eb;
+  padding: 12px 16px;
+}
+
+.economic-calendar-variant-c .timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.economic-calendar-variant-c .timeline-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: 0.5px;
+}
+
+.economic-calendar-variant-c .event-count-badge {
+  font-size: 11px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.economic-calendar-variant-c .timeline-axis {
+  position: relative;
+  height: 60px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  padding: 0 20px;
+}
+
+.economic-calendar-variant-c .timeline-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  gap: 16px;
+}
+
+.economic-calendar-variant-c .label-now {
+  color: #3b82f6;
+  flex: 1;
+  text-align: center;
+}
+
+.economic-calendar-variant-c .label-start {
+  flex: 0 0 auto;
+}
+
+.economic-calendar-variant-c .label-end {
+  flex: 0 0 auto;
+}
+
+.economic-calendar-variant-c .refresh-btn-inline {
+  padding: 4px 8px;
+  font-size: 14px;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+
+.economic-calendar-variant-c .refresh-btn-inline:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+/* Current Time Indicator */
+.economic-calendar-variant-c .current-time-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #3b82f6 0%, rgba(59, 130, 246, 0.3) 100%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.economic-calendar-variant-c .time-line-marker {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  background: #3b82f6;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+}
+
+/* ============================================
+   Event Markers Layer
+   ============================================ */
+
+.economic-calendar-variant-c .event-markers-layer {
+  position: absolute;
+  top: 25px;
+  left: 0;
+  right: 0;
+  height: 35px;
+  padding: 0 20px;
+}
+
+.economic-calendar-variant-c .event-marker {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  z-index: 3;
+  transition: all 0.2s;
+}
+
+.economic-calendar-variant-c .marker-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s;
+}
+
+/* Grouped Event Marker Styles */
+.economic-calendar-variant-c .event-marker.grouped .event-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 12px;
+  font-weight: 700;
+  color: #dc2626;
+  background: #fee2e2;
+  border-radius: 50%;
+}
+
+.economic-calendar-variant-c .event-marker.grouped .event-dot {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.economic-calendar-variant-c .event-marker.grouped:hover .marker-icon {
+  transform: scale(1.2);
+  border-color: #dc2626;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+  z-index: 10;
+}
+
+/* Grouped Tooltip Styles */
+.economic-calendar-variant-c .tooltip-group-header {
+  padding: 8px 12px;
+  background: #fef2f2;
+  border-bottom: 1px solid #fee2e2;
+  font-size: 11px;
+  font-weight: 700;
+  color: #dc2626;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.economic-calendar-variant-c .tooltip-event {
+  padding: 10px 12px;
+}
+
+.economic-calendar-variant-c .tooltip-event.tooltip-divider {
+  border-top: 1px solid #f3f4f6;
+}
+
+.economic-calendar-variant-c .marker-line {
+  width: 1px;
+  height: 15px;
+  background: #d1d5db;
+  margin-top: 1px;
+}
+
+/* Impact Colors */
+.economic-calendar-variant-c .event-marker.high .marker-icon {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.economic-calendar-variant-c .event-marker.medium .marker-icon {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.economic-calendar-variant-c .event-marker.low .marker-icon {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+/* Past Events (faded) */
+.economic-calendar-variant-c .event-marker.past .marker-icon {
+  opacity: 0.5;
+  filter: grayscale(40%);
+}
+
+/* Hover State */
+.economic-calendar-variant-c .event-marker.hovered .marker-icon,
+.economic-calendar-variant-c .event-marker:hover .marker-icon {
+  transform: scale(1.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.economic-calendar-variant-c .event-marker.high.hovered .marker-icon,
+.economic-calendar-variant-c .event-marker.high:hover .marker-icon {
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.economic-calendar-variant-c .event-marker.medium.hovered .marker-icon,
+.economic-calendar-variant-c .event-marker.medium:hover .marker-icon {
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+/* ============================================
+   Hover Tooltip
+   ============================================ */
+
+.economic-calendar-variant-c .event-tooltip {
+  position: absolute;
+  top: 65px;
+  min-width: 200px;
+  max-width: 260px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  padding: 10px;
+  z-index: 100;
+  pointer-events: auto; /* ✅ Allow interaction with tooltip */
+  cursor: default; /* Normal cursor for reading text */
+  user-select: text; /* Allow text selection */
+  animation: tooltipFadeIn 0.2s ease-out;
+}
+
+.economic-calendar-variant-c .event-tooltip.grouped {
+  min-width: 280px;
+  max-width: 320px;
+  max-height: 400px; /* Limit height to prevent overflow */
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto; /* Ensure grouped tooltips are also interactive */
+}
+
+/* Scrollable event list container */
+.economic-calendar-variant-c .event-tooltip.grouped .tooltip-events-list {
+  overflow-y: auto;
+  max-height: 350px; /* Leave room for header */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+/* Webkit scrollbar styling */
+.economic-calendar-variant-c .event-tooltip.grouped .tooltip-events-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.economic-calendar-variant-c .event-tooltip.grouped .tooltip-events-list::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.economic-calendar-variant-c .event-tooltip.grouped .tooltip-events-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.economic-calendar-variant-c .event-tooltip.grouped .tooltip-events-list::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.economic-calendar-variant-c .tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.economic-calendar-variant-c .tooltip-emoji {
+  font-size: 14px;
+}
+
+.economic-calendar-variant-c .tooltip-currency {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 2px 6px;
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+.economic-calendar-variant-c .tooltip-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 5px;
+  line-height: 1.3;
+}
+
+.economic-calendar-variant-c .tooltip-time {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+.economic-calendar-variant-c .tooltip-countdown {
+  font-size: 10px;
+  color: #9ca3af;
+  margin-bottom: 6px;
+}
+
+.economic-calendar-variant-c .tooltip-metrics {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.economic-calendar-variant-c .metric-label {
+  color: #6b7280;
+}
+
+.economic-calendar-variant-c .metric-value {
+  font-weight: 600;
+  color: #111827;
+}
+
+/* Tooltip metrics container */
+.economic-calendar-variant-c .tooltip-metrics-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+/* Highlight actual values in tooltip (blue like in detailed list) */
+.economic-calendar-variant-c .metric-value--actual {
+  color: #2563eb;
+  background: #dbeafe;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* ============================================
+   Detailed Event List (from Variant A)
+   ============================================ */
+
+.economic-calendar-variant-c .calendar-detailed-list {
+  padding: 16px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.economic-calendar-variant-c .calendar-empty {
+  padding: 40px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.economic-calendar-variant-c .calendar-updated {
+  padding: 8px 16px;
+  text-align: right;
+  font-size: 11px;
+  color: #9ca3af;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+/* Scrollbar styling for event list */
+.economic-calendar-variant-c .calendar-detailed-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.economic-calendar-variant-c .calendar-detailed-list::-webkit-scrollbar-track {
+  background: #f9fafb;
+  border-radius: 4px;
+}
+
+.economic-calendar-variant-c .calendar-detailed-list::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.economic-calendar-variant-c .calendar-detailed-list::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* ============================================
+   Bottom Split Content (Legacy - kept for compatibility)
+   ============================================ */
+
+.economic-calendar-variant-c .unified-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Left Panel (Technical Context) */
+.economic-calendar-variant-c .left-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.economic-calendar-variant-c .context-section {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.economic-calendar-variant-c .context-section h4 {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  letter-spacing: 0.5px;
+}
+
+/* Technical Levels */
+.economic-calendar-variant-c .levels-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.economic-calendar-variant-c .level-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  background: white;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.economic-calendar-variant-c .level-label {
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.economic-calendar-variant-c .level-value {
+  font-weight: 600;
+  color: #111827;
+}
+
+/* Pattern Detection */
+.economic-calendar-variant-c .pattern-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.economic-calendar-variant-c .pattern-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: white;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.economic-calendar-variant-c .pattern-indicator {
+  font-size: 16px;
+}
+
+.economic-calendar-variant-c .pattern-text {
+  color: #374151;
+}
+
+/* ============================================
+   Right Panel (News Feed)
+   ============================================ */
+
+.economic-calendar-variant-c .right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.economic-calendar-variant-c .news-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.economic-calendar-variant-c .news-section-header h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  letter-spacing: 0.5px;
+}
+
+.economic-calendar-variant-c .news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Custom scrollbar */
+.economic-calendar-variant-c .news-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.economic-calendar-variant-c .news-list::-webkit-scrollbar-track {
+  background: #f9fafb;
+  border-radius: 3px;
+}
+
+.economic-calendar-variant-c .news-list::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.economic-calendar-variant-c .news-list::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.economic-calendar-variant-c .news-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 12px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.economic-calendar-variant-c .news-item:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  transform: translateX(2px);
+}
+
+.economic-calendar-variant-c .news-title {
+  flex: 1;
+  color: #374151;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.economic-calendar-variant-c .news-time {
+  color: #9ca3af;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.economic-calendar-variant-c .news-link {
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.economic-calendar-variant-c .news-link:hover .news-title {
+  color: #3b82f6;
+}
+
+/* Update Timestamp */
+.economic-calendar-variant-c .update-timestamp {
+  font-size: 10px;
+  color: #9ca3af;
+  text-align: right;
+}
+
+/* ============================================
+   Loading/Error States
+   ============================================ */
+
+.economic-calendar-variant-c .loading-state,
+.economic-calendar-variant-c .error-state {
+  padding: 40px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.economic-calendar-variant-c .error-state {
+  color: #ef4444;
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+
+@media (max-width: 1024px) {
+  .economic-calendar-variant-c .unified-content {
+    grid-template-columns: 1fr;
+  }
+
+  .economic-calendar-variant-c .calendar-timeline-section {
+    padding: 10px 12px;
+  }
+
+  .economic-calendar-variant-c .timeline-axis {
+    padding: 0 12px;
+  }
+
+  .economic-calendar-variant-c .event-markers-layer {
+    padding: 0 12px;
+  }
+
+  .economic-calendar-variant-c .event-tooltip {
+    min-width: 160px;
+    max-width: 200px;
+  }
+}

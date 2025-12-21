@@ -1,9 +1,57 @@
-<!-- f48ef0f1-e1f9-450b-8676-79ae9cb78df3 a7ce09ab-13c1-4378-b509-58ea20403bb4 -->
+---
+name: Pattern Recognition with Knowledge Base Integration
+overview: ""
+todos:
+  - id: 6500a74c-3559-4e9e-bf23-d99f8de036ff
+    content: Add API key authentication middleware to market-mcp-server/index.js
+    status: pending
+  - id: 2be055fb-c890-473e-95ff-7544f9e66c2b
+    content: Implement origin validation in MCP server
+    status: pending
+  - id: f5658c15-c6fb-41e9-804a-4cbf3be1ede6
+    content: Add express-rate-limit to prevent abuse
+    status: pending
+  - id: 7fac87d7-3dc1-4a59-bfc6-b8de8e05082e
+    content: Update protocol version to 2025-06-18 and add validation
+    status: pending
+  - id: 2b2a2402-bae0-4bd8-879c-e7adacd1c2c7
+    content: Update Python client to send API key header
+    status: pending
+  - id: 6e496f78-d8af-4799-b986-ebe8ef580134
+    content: Add streaming capability to server capabilities response
+    status: pending
+  - id: 7f6d657d-9db4-4e97-b554-23d8c4a0de39
+    content: Refactor streamMarketNews to use true SSE with event-stream headers
+    status: pending
+  - id: a955e5a1-53ff-4def-8ace-a15130a1cb16
+    content: Add call_tool_streaming method to HTTPMCPClient for SSE
+    status: pending
+  - id: ee29a343-77e7-4227-822c-12b736b3c0cf
+    content: Add EventSource handling to TradingDashboardSimple.tsx
+    status: pending
+  - id: 91fb3bde-8734-4f23-b5ef-bc5b85a5ed82
+    content: Create /api/mcp/stream-news endpoint in FastAPI backend
+    status: pending
+  - id: e6ab3fc8-ec45-4287-a06b-de3e97251a89
+    content: Add ENABLE_STREAMING environment variable and feature flag
+    status: pending
+  - id: 28d20343-e5e9-45e9-910d-82338ff19ed6
+    content: Test security features (auth, origin, rate limit) with existing clients
+    status: pending
+  - id: 3cb63638-19d1-450f-afc5-a5dda3229c2c
+    content: Test streaming with manual test script and real clients
+    status: pending
+  - id: 69e84c82-e728-414c-b449-742024b350f0
+    content: Create STREAMING_IMPLEMENTATION.md with usage guide and examples
+    status: pending
+---
+
 # Pattern Recognition with Knowledge Base Integration
 
 ## Phase 1: Knowledge-Driven Pattern Validation
 
 ### 1.1 Load Structured Pattern Knowledge
+
 **File**: `backend/pattern_detection.py`
 
 Create a new `PatternLibrary` class that loads `backend/training/patterns.json` at module import:
@@ -38,6 +86,7 @@ class PatternLibrary:
 ```
 
 ### 1.2 Enhance Pattern Detectors with Knowledge Validation
+
 **File**: `backend/pattern_detection.py`
 
 Refactor each pattern detector method (e.g., `_detect_head_shoulders`, `_detect_triangles`, `_detect_cup_handle`) to:
@@ -46,6 +95,7 @@ Refactor each pattern detector method (e.g., `_detect_head_shoulders`, `_detect_
 2. Pass candidates to `PatternLibrary.validate_against_rules()` for knowledge-based validation
 3. Apply confidence adjustments based on validation results
 4. Enrich pattern metadata with knowledge base fields:
+
    - Add `entry`, `stop_loss`, `targets` from `trading_playbook`
    - Add `invalidations` from `recognition_rules`
    - Add `description` and `risk_notes` for UI display
@@ -83,9 +133,11 @@ def _detect_head_shoulders(self, peaks, troughs):
 ```
 
 ### 1.3 Remove Arbitrary Threshold Adjustments
+
 **File**: `backend/pattern_detection.py`
 
 Replace the proposed threshold changes (0.4→0.6, etc.) with knowledge-driven validation. Instead of relaxing thresholds blindly, patterns must pass:
+
 - Geometric structure test (existing logic, keep strict)
 - Knowledge base validation (candle_structure, trend_context, volume_confirmation)
 - Invalidation checks (ensure none of the invalidation conditions are met)
@@ -95,6 +147,7 @@ Confidence scores will now reflect alignment with knowledge base criteria, not a
 ## Phase 2: Frontend Chart Visualization
 
 ### 2.1 Pattern Overlay Rendering System
+
 **File**: `frontend/src/components/TradingDashboardSimple.tsx`
 
 Add state for pattern visualization:
@@ -168,6 +221,7 @@ const drawPatternOverlay = useCallback((pattern: Pattern) => {
 ```
 
 ### 2.2 Pattern List Panel with Interactive Controls
+
 **File**: `frontend/src/components/TradingDashboardSimple.tsx`
 
 Replace the "No patterns detected" message with an interactive pattern list:
@@ -249,6 +303,7 @@ Replace the "No patterns detected" message with an interactive pattern list:
 ```
 
 ### 2.3 Pattern Styling
+
 **File**: `frontend/src/components/TradingDashboardSimple.tsx` (inline styles section)
 
 Add CSS for pattern list:
@@ -344,6 +399,7 @@ Add CSS for pattern list:
 ## Phase 3: Enhanced Chart Control Integration
 
 ### 3.1 Extend Chart Control with Pattern Management
+
 **File**: `frontend/src/services/enhancedChartControl.ts`
 
 Add pattern-specific drawing methods:
@@ -420,6 +476,7 @@ clearHighlight(): void {
 ## Phase 4: Testing & Validation
 
 ### 4.1 Backend Testing
+
 Create `backend/test_knowledge_patterns.py`:
 
 ```python
@@ -454,6 +511,7 @@ def test_invalidation_conditions():
 ```
 
 ### 4.2 Integration Testing
+
 ```bash
 # Restart backend with knowledge integration
 cd backend && uvicorn mcp_server:app --host 0.0.0.0 --port 8000
@@ -465,10 +523,12 @@ curl -s "http://localhost:8000/api/comprehensive-stock-data?symbol=NVDA" | jq '.
 ```
 
 ### 4.3 Frontend Visual Testing
+
 1. Load dashboard at `http://localhost:5174`
 2. Switch to volatile symbol (GME, TSLA, BTC)
 3. Change timeframe to 1D, 1W, 1M to trigger different patterns
 4. Verify:
+
    - Patterns automatically appear in left panel
    - Clicking pattern name toggles chart overlay
    - Hovering pattern highlights trendlines/levels
@@ -491,29 +551,14 @@ curl -s "http://localhost:8000/api/comprehensive-stock-data?symbol=NVDA" | jq '.
 ## Files Modified
 
 **Backend:**
+
 - `backend/pattern_detection.py` (major refactor: add PatternLibrary class, enhance all detectors)
 - `backend/services/market_service_factory.py` (minor: ensure entry_guidance fields passed through)
 - `backend/test_knowledge_patterns.py` (new file: comprehensive testing)
 
 **Frontend:**
+
 - `frontend/src/components/TradingDashboardSimple.tsx` (add pattern list UI, overlay rendering, interactive controls)
 - `frontend/src/services/enhancedChartControl.ts` (extend with pattern management methods)
 
 **No threshold changes** - pattern detection remains strict, knowledge base provides validation and enrichment.
-
-### To-dos
-
-- [ ] Add API key authentication middleware to market-mcp-server/index.js
-- [ ] Implement origin validation in MCP server
-- [ ] Add express-rate-limit to prevent abuse
-- [ ] Update protocol version to 2025-06-18 and add validation
-- [ ] Update Python client to send API key header
-- [ ] Add streaming capability to server capabilities response
-- [ ] Refactor streamMarketNews to use true SSE with event-stream headers
-- [ ] Add call_tool_streaming method to HTTPMCPClient for SSE
-- [ ] Add EventSource handling to TradingDashboardSimple.tsx
-- [ ] Create /api/mcp/stream-news endpoint in FastAPI backend
-- [ ] Add ENABLE_STREAMING environment variable and feature flag
-- [ ] Test security features (auth, origin, rate limit) with existing clients
-- [ ] Test streaming with manual test script and real clients
-- [ ] Create STREAMING_IMPLEMENTATION.md with usage guide and examples

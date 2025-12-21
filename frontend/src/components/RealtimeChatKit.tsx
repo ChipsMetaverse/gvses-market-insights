@@ -44,6 +44,9 @@ export function RealtimeChatKit({
   const [chatKitControl, setChatKitControl] = useState<any>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
+  // CRITICAL FIX: Make ChatKit opt-in to prevent automatic OpenAI session creation
+  const [shouldInitChatKit, setShouldInitChatKit] = useState(false);
+
   // MCP widget state
   const [technicalLevelsData, setTechnicalLevelsData] = useState<any>(null);
   const [patternDetectionData, setPatternDetectionData] = useState<any>(null);
@@ -272,7 +275,11 @@ export function RealtimeChatKit({
     }
   }), [onMessage, onChartCommand]);
 
-  const chatKitHookResult = useChatKit(chatKitConfig) as { control?: any; error?: unknown };
+  // CRITICAL FIX: Only initialize ChatKit when user explicitly requests it
+  // This prevents automatic OpenAI Agent Builder session creation on page load
+  const chatKitHookResult = shouldInitChatKit
+    ? (useChatKit(chatKitConfig) as { control?: any; error?: unknown })
+    : { control: null, error: null };
 
   // Update control when ChatKit hook result changes
   useEffect(() => {
@@ -280,10 +287,14 @@ export function RealtimeChatKit({
       setChatKitControl(chatKitHookResult.control);
       setIsLoading(false);
       console.log('✅ RealtimeChatKit initialized with Agent Builder integration');
-    } else {
+    } else if (shouldInitChatKit) {
+      // Only show loading if user requested ChatKit
       setIsLoading(true);
+    } else {
+      // User hasn't requested ChatKit yet
+      setIsLoading(false);
     }
-  }, [chatKitHookResult]);
+  }, [chatKitHookResult, shouldInitChatKit]);
   
   // Create conversation on mount if none exists
   useEffect(() => {
@@ -306,17 +317,19 @@ export function RealtimeChatKit({
     }
   }, [chatKitHookResult]);
 
-  // Update chart context whenever symbol, timeframe, or snapshotId changes
+  // CRITICAL FIX: DISABLED automatic context updates to prevent excessive OpenAI API calls
+  // Context now only updates when user sends a message, not on every symbol/timeframe change
+  // This prevents 10+ OpenAI calls every time user switches between TSLA -> AAPL -> NVDA
+  /*
   useEffect(() => {
     const updateChartContext = async () => {
       if (!sessionId || !symbol) {
-        // Need both session ID and symbol to update context
         return;
       }
 
       try {
         const backendUrl = getApiUrl();
-        
+
         const response = await fetch(`${backendUrl}/api/chatkit/update-context`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -340,6 +353,7 @@ export function RealtimeChatKit({
 
     updateChartContext();
   }, [sessionId, symbol, timeframe, snapshotId]);
+  */
 
   // Widget action handler - routes widget actions to appropriate callbacks
   const handleWidgetAction = useCallback((action: WidgetAction) => {
@@ -406,7 +420,40 @@ export function RealtimeChatKit({
     );
   }
 
-  // Loading state
+  // Show "Start Chat" button if ChatKit not initialized yet
+  if (!shouldInitChatKit) {
+    return (
+      <div className="realtime-chatkit">
+        <div className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+          AI Assistant
+        </div>
+        <div className="border rounded-lg p-6 bg-gradient-to-br from-blue-50 to-indigo-50 text-center">
+          <div className="mb-4">
+            <svg className="w-16 h-16 mx-auto text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">
+            Chat Assistant Ready
+          </h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Start a conversation with the AI trading assistant for market insights and analysis.
+          </p>
+          <button
+            onClick={() => setShouldInitChatKit(true)}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md hover:shadow-lg"
+          >
+            Start Chat Session
+          </button>
+          <p className="text-xs text-gray-500 mt-3">
+            💡 Voice control available after connecting
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state (only shown after user clicks "Start Chat")
   if (isLoading) {
     return (
       <div className="realtime-chatkit">
@@ -418,7 +465,7 @@ export function RealtimeChatKit({
             <div className="h-4 bg-gray-200 rounded mb-2"></div>
             <div className="h-3 bg-gray-200 rounded w-3/4"></div>
           </div>
-          <p className="text-sm text-gray-600 mt-2">Initializing voice and chat...</p>
+          <p className="text-sm text-gray-600 mt-2">Initializing chat session...</p>
         </div>
       </div>
     );

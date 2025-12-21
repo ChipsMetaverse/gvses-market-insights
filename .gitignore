@@ -122,7 +122,6 @@ lt.log
 fly.toml.bak
 
 # Test and investigation artifacts
-test_*.py
 test_*.js
 test_*.sh
 test_*.cjs

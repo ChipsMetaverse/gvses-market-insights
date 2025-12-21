@@ -1,0 +1,449 @@
+/**
+ * ⚠️ DEPRECATED - DO NOT USE
+ *
+ * This component has been deprecated and merged into TradingChart.tsx
+ *
+ * Lazy loading functionality has been integrated directly into the main TradingChart component.
+ * Use TradingChart instead with enableLazyLoading={true} prop.
+ *
+ * Migration:
+ *   OLD: <TradingChartLazy symbol="AAPL" initialDays={60} />
+ *   NEW: <TradingChart symbol="AAPL" initialDays={60} enableLazyLoading={true} />
+ *
+ * This file is kept for reference only and will be removed in a future update.
+ * Date deprecated: November 29, 2025
+ */
+
+import { useEffect, useRef, useState, useCallback } from 'react'
+import {
+  createChart,
+  ColorType,
+  IChartApi,
+  ISeriesApi,
+  CandlestickSeries,
+  LineSeries,
+  LineStyle,
+} from 'lightweight-charts'
+import { useInfiniteChartData } from '../hooks/useInfiniteChartData'
+import { ChartLoadingIndicator } from './ChartLoadingIndicator'
+import { ChartToolbar } from './ChartToolbar'
+import { TrendlineHandlePrimitive } from '../drawings/TrendlineHandlePrimitive'
+import './TradingChart.css'
+
+interface TradingChartLazyProps {
+  symbol: string
+  interval?: string // '1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo'
+  initialDays?: number // Number of days to load initially (default: 60)
+  displayDays?: number // Number of days to DISPLAY on chart (zoom level)
+  technicalLevels?: any
+  onChartReady?: (chart: any) => void
+  enableLazyLoading?: boolean // Enable/disable lazy loading (default: true)
+  showCacheInfo?: boolean // Show cache performance info (debug mode)
+}
+
+interface TrendlineVisual {
+  primitive: TrendlineHandlePrimitive
+}
+
+export function TradingChartLazy({
+  symbol,
+  interval = '1d',
+  initialDays = 60,
+  displayDays,
+  technicalLevels,
+  onChartReady,
+  enableLazyLoading = true,
+  showCacheInfo = false,
+}: TradingChartLazyProps) {
+  // Lazy loading hook
+  const {
+    data: chartData,
+    isLoading,
+    isLoadingMore,
+    error,
+    cacheInfo,
+    attachToChart,
+    detachFromChart,
+  } = useInfiniteChartData({
+    symbol,
+    interval,
+    initialDays,
+    loadMoreDays: 30,
+    edgeThreshold: 0.15,
+    enabled: enableLazyLoading,
+  })
+
+  // Chart refs
+  const chartContainerRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<IChartApi | null>(null)
+  const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const trendlinesRef = useRef<Map<string, TrendlineVisual>>(new Map())
+
+  // Chart ready state - triggers data update when chart is initialized
+  const [chartReady, setChartReady] = useState(0)
+
+  // Drawing state
+  const [drawingMode, setDrawingMode] = useState(false)
+  const drawingModeRef = useRef(false)
+  const [drawingPoints, setDrawingPoints] = useState<Array<{ time: number; price: number }>>([])
+  const drawingPointsRef = useRef<Array<{ time: number; price: number }>>([])
+  const [selectedTrendlineId, setSelectedTrendlineId] = useState<string | null>(null)
+
+  // Edit state (drag system)
+  const editStateRef = useRef<{
+    isDragging: boolean
+    trendlineId: string | null
+    handleType: 'a' | 'b' | null
+    anchorPoint: { time: number; price: number } | null
+  }>({ isDragging: false, trendlineId: null, handleType: null, anchorPoint: null })
+
+  const previewLineRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const lastDragPositionRef = useRef<{ time: number; price: number } | null>(null)
+  const documentMouseUpHandlerRef = useRef<(() => void) | null>(null)
+  const isUpdatingPreviewRef = useRef(false)
+
+  // PDH/PDL lines (Previous Day High/Low)
+  const pdhLineRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const pdlLineRef = useRef<ISeriesApi<'Line'> | null>(null)
+
+  const [levelPositions, setLevelPositions] = useState<{
+    sell_high?: number
+    buy_low?: number
+    btd?: number
+  }>({})
+
+  // Lifecycle management refs
+  const isMountedRef = useRef(true)
+  const isChartDisposedRef = useRef(false)
+  const priceLineRefsRef = useRef<Array<any>>([])
+  const currentSymbolRef = useRef(symbol)
+
+  // Sync drawingMode ref with state
+  useEffect(() => {
+    drawingModeRef.current = drawingMode
+  }, [drawingMode])
+
+  // Sync drawingPoints ref with state
+  useEffect(() => {
+    drawingPointsRef.current = drawingPoints
+  }, [drawingPoints])
+
+  /**
+   * Apply timeframe zoom (if displayDays is specified)
+   */
+  const applyTimeframeZoom = useCallback(
+    (data: any[]) => {
+      if (!chartRef.current || !displayDays || data.length === 0) return
+
+      try {
+        const timeScale = chartRef.current.timeScale()
+        const latestTime = data[data.length - 1].time
+
+        // Calculate start time based on displayDays
+        const startTime =
+          (latestTime as number) - displayDays * 24 * 60 * 60
+
+        timeScale.setVisibleRange({
+          from: startTime as any,
+          to: latestTime,
+        })
+      } catch (error) {
+        console.debug('Error applying timeframe zoom:', error)
+      }
+    },
+    [displayDays]
+  )
+
+  /**
+   * Update chart with new data
+   */
+  useEffect(() => {
+    console.log('[CHART LAZY] 🔄 Data update effect triggered', {
+      hasData: !!chartData,
+      dataLength: chartData?.length,
+      isDisposed: isChartDisposedRef.current,
+      hasSeries: !!candlestickSeriesRef.current
+    })
+
+    // Wait for both data AND series to be ready
+    if (!chartData || chartData.length === 0) {
+      console.log('[CHART LAZY] ⚠️ Skipping update - no data')
+      return
+    }
+
+    if (!candlestickSeriesRef.current) {
+      console.log('[CHART LAZY] ⚠️ Skipping update - no series (will retry when series is ready)')
+      return
+    }
+
+    try {
+      console.log('[CHART LAZY] 💾 Setting data:', chartData.length, 'bars')
+
+      // Backend now guarantees unique timestamps and ascending order
+      // No frontend deduplication needed
+      candlestickSeriesRef.current.setData(chartData)
+      console.log('[CHART LAZY] ✅ Data set successfully')
+
+      // Apply zoom if specified
+      if (chartRef.current && !isChartDisposedRef.current) {
+        console.log('[CHART LAZY] 🎯 Applying timeframe zoom')
+        applyTimeframeZoom(chartData)
+      }
+    } catch (error) {
+      console.error('[CHART LAZY] ❌ Error updating chart data:', error)
+    }
+  }, [chartData, chartReady, applyTimeframeZoom])
+
+  /**
+   * Update technical levels
+   */
+  const updateTechnicalLevels = useCallback(() => {
+    if (isChartDisposedRef.current || !candlestickSeriesRef.current) {
+      return
+    }
+
+    try {
+      // Remove old price lines
+      priceLineRefsRef.current.forEach((priceLine) => {
+        try {
+          candlestickSeriesRef.current?.removePriceLine(priceLine)
+        } catch (e) {}
+      })
+      priceLineRefsRef.current = []
+
+      // Add new price lines
+      if (technicalLevels?.sell_high_level) {
+        const line = candlestickSeriesRef.current.createPriceLine({
+          price: technicalLevels.sell_high_level,
+          color: '#ef4444',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: '',
+        })
+        priceLineRefsRef.current.push(line)
+      }
+
+      if (technicalLevels?.buy_low_level) {
+        const line = candlestickSeriesRef.current.createPriceLine({
+          price: technicalLevels.buy_low_level,
+          color: '#eab308',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: '',
+        })
+        priceLineRefsRef.current.push(line)
+      }
+
+      if (technicalLevels?.btd_level) {
+        const line = candlestickSeriesRef.current.createPriceLine({
+          price: technicalLevels.btd_level,
+          color: '#3b82f6',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: '',
+        })
+        priceLineRefsRef.current.push(line)
+      }
+    } catch (error) {
+      console.debug('Error updating technical levels:', error)
+    }
+  }, [technicalLevels])
+
+  /**
+   * Handle resize
+   */
+  const handleResize = useCallback(() => {
+    if (
+      isChartDisposedRef.current ||
+      !chartRef.current ||
+      !chartContainerRef.current
+    ) {
+      return
+    }
+
+    try {
+      chartRef.current.applyOptions({
+        width: chartContainerRef.current.clientWidth,
+      })
+    } catch (error) {
+      console.debug('Error handling resize:', error)
+    }
+  }, [])
+
+  /**
+   * Initialize chart
+   */
+  useEffect(() => {
+    console.log('[CHART LAZY] 🏗️ Chart initialization effect running')
+    if (!chartContainerRef.current) return
+
+    isMountedRef.current = true
+    isChartDisposedRef.current = false
+    currentSymbolRef.current = symbol
+
+    console.log('[CHART LAZY] 🔨 Creating chart instance')
+    // Create the chart
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: 'white' },
+        textColor: '#333',
+      },
+      width: chartContainerRef.current.clientWidth,
+      height: 300,
+      grid: {
+        vertLines: { color: '#f0f0f0' },
+        horzLines: { color: '#f0f0f0' },
+      },
+      crosshair: {
+        mode: 0,
+      },
+      rightPriceScale: {
+        borderColor: '#e0e0e0',
+      },
+      timeScale: {
+        borderColor: '#e0e0e0',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+    })
+
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderDownColor: '#ef4444',
+      borderUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+      wickUpColor: '#22c55e',
+    })
+
+    chartRef.current = chart
+    candlestickSeriesRef.current = candlestickSeries
+
+    console.log('[CHART LAZY] ✅ Chart and series created successfully')
+
+    // Notify that chart is ready (triggers data update effect)
+    setChartReady(prev => prev + 1)
+
+    // Attach lazy loading to chart
+    if (enableLazyLoading) {
+      attachToChart(chart)
+    }
+
+    // Window resize listener
+    window.addEventListener('resize', handleResize)
+
+    // Notify parent
+    if (onChartReady) {
+      onChartReady(chart)
+    }
+
+    // Cleanup
+    return () => {
+      console.log('[CHART LAZY] 🧹 Cleanup function running')
+      isMountedRef.current = false
+      isChartDisposedRef.current = true
+
+      window.removeEventListener('resize', handleResize)
+
+      // Detach lazy loading
+      detachFromChart()
+
+      // NOTE: We DON'T clear candlestickSeriesRef here!
+      // React 18 Strict Mode causes multiple mount/unmount cycles during development.
+      // If we clear the series ref during cleanup, and data arrives between unmount and remount,
+      // the data update effect will skip the update because there's no series ref.
+      // The series becomes invalid when chart.remove() is called anyway, so we let
+      // the next chart initialization replace the ref naturally.
+
+      // Dispose chart
+      if (chartRef.current) {
+        try {
+          chartRef.current.remove()
+        } catch (error) {
+          console.debug('Error disposing chart:', error)
+        }
+        chartRef.current = null
+      }
+    }
+  }, [symbol, enableLazyLoading, attachToChart, detachFromChart, handleResize, onChartReady])
+
+  /**
+   * Update technical levels when they change
+   */
+  useEffect(() => {
+    updateTechnicalLevels()
+  }, [technicalLevels, updateTechnicalLevels])
+
+  return (
+    <div className="trading-chart-container" style={{ position: 'relative', height: '100%' }}>
+      {/* Loading Indicators */}
+      <ChartLoadingIndicator
+        isLoading={isLoading}
+        isLoadingMore={isLoadingMore}
+        cacheInfo={cacheInfo}
+        showCacheInfo={showCacheInfo}
+      />
+
+      {/* Error State */}
+      {error && !isLoading && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 10,
+            background: 'rgba(255, 255, 255, 0.95)',
+            padding: '20px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+            border: '2px solid #ef4444',
+            maxWidth: '400px',
+            textAlign: 'center' as const,
+          }}
+        >
+          <div
+            style={{
+              color: '#ef4444',
+              fontWeight: 'bold',
+              marginBottom: '10px',
+            }}
+          >
+            Chart Error
+          </div>
+          <div style={{ color: '#666', fontSize: '14px', lineHeight: '1.4' }}>
+            {error}
+          </div>
+        </div>
+      )}
+
+      {/* Chart Container */}
+      <div
+        ref={chartContainerRef}
+        className="main-chart"
+        style={{
+          opacity: isLoading || error ? 0.3 : 1,
+          height: '100%',
+          position: 'relative',
+        }}
+      />
+
+      {/* Chart Toolbar (Drawing Tools) */}
+      <ChartToolbar
+        isDrawingMode={drawingMode}
+        onToggleDrawing={() => setDrawingMode(!drawingMode)}
+        onClearDrawings={() => {
+          trendlinesRef.current.forEach((_, id) => {
+            // Delete trendline logic here
+          })
+          trendlinesRef.current.clear()
+        }}
+      />
+    </div>
+  )
+}
+
+export default TradingChartLazy

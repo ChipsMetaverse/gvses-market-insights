@@ -1,0 +1,151 @@
+Starting interval accuracy verification...
+This will test all 8 timeframe buttons (1m, 5m, 15m, 1H, 1D, 1Y, YTD, MAX)
+
+Make sure:
+  1. Frontend is running on http://localhost:5174
+  2. Backend is running on http://localhost:8000
+  3. /demo page is accessible
+
+Navigating to http://localhost:5174/demo
+Dismissing onboarding overlay...
+
+============================================================
+Testing: 1m
+============================================================
+Clicked 1m button
+  Still waiting for API response... (1.0s)
+
+Results for 1m:
+  Expected: 60s interval
+  API Param: 1m (expected: 1m) ✅
+  Actual Spacing: 65.5s (min: 60.0s, max: 840.0s) ✅
+  Intraday Samples: 11 (filtered from 20 total)
+  Bar Count: 799
+  Sample Timestamps:
+    2025-12-18T13:26:00+00:00 → 2025-12-18T13:32:00+00:00 (360s)
+    2025-12-18T13:32:00+00:00 → 2025-12-18T13:33:00+00:00 (60s)
+    2025-12-18T13:33:00+00:00 → 2025-12-18T13:36:00+00:00 (180s)
+    2025-12-18T13:36:00+00:00 → 2025-12-18T13:37:00+00:00 (60s)
+    2025-12-18T13:37:00+00:00 → 2025-12-18T13:39:00+00:00 (120s)
+  Status: ✅ PASS
+
+============================================================
+Testing: 5m
+============================================================
+Clicked 5m button
+  Still waiting for API response... (1.0s)
+  Still waiting for API response... (2.0s)
+  Still waiting for API response... (3.0s)
+
+Results for 5m:
+  Expected: 300s interval
+  API Param: 5m (expected: 5m) ✅
+  Actual Spacing: 300.0s (min: 300.0s, max: 300.0s) ✅
+  Intraday Samples: 20 (filtered from 20 total)
+  Bar Count: 611
+  Sample Timestamps:
+    2025-12-11T14:30:00+00:00 → 2025-12-11T14:35:00+00:00 (300s)
+    2025-12-11T14:35:00+00:00 → 2025-12-11T14:40:00+00:00 (300s)
+    2025-12-11T14:40:00+00:00 → 2025-12-11T14:45:00+00:00 (300s)
+    2025-12-11T14:45:00+00:00 → 2025-12-11T14:50:00+00:00 (300s)
+    2025-12-11T14:50:00+00:00 → 2025-12-11T14:55:00+00:00 (300s)
+  Status: ✅ PASS
+
+============================================================
+Testing: 15m
+============================================================
+Clicked 15m button
+  Still waiting for API response... (1.0s)
+  Still waiting for API response... (2.0s)
+  Still waiting for API response... (3.0s)
+  Still waiting for API response... (4.0s)
+
+============================================================
+Testing: 1H
+============================================================
+Clicked 1H button
+  Still waiting for API response... (1.0s)
+  Still waiting for API response... (2.0s)
+  Still waiting for API response... (3.0s)
+
+Results for 1H:
+  Expected: 3600s interval
+  API Param: 1h (expected: 1h) ✅
+  Actual Spacing: 3600.0s (min: 3600.0s, max: 61200.0s) ✅
+  Intraday Samples: 18 (filtered from 20 total)
+  Bar Count: 174
+  Sample Timestamps:
+    2025-11-10T14:00:00+00:00 → 2025-11-10T15:00:00+00:00 (3600s)
+    2025-11-10T15:00:00+00:00 → 2025-11-10T16:00:00+00:00 (3600s)
+    2025-11-10T16:00:00+00:00 → 2025-11-10T17:00:00+00:00 (3600s)
+    2025-11-10T17:00:00+00:00 → 2025-11-10T18:00:00+00:00 (3600s)
+    2025-11-10T18:00:00+00:00 → 2025-11-10T19:00:00+00:00 (3600s)
+  Status: ✅ PASS
+
+============================================================
+Testing: 1D
+============================================================
+Clicked 1D button
+
+============================================================
+Testing: 1Y
+============================================================
+Clicked 1Y button
+  Still waiting for API response... (1.0s)
+
+Results for 1Y:
+  Expected: 86400s interval
+  API Param: 1d (expected: 1d) ✅
+  Actual Spacing: 146880.0s (min: 86400.0s, max: 345600.0s) ✅
+  Bar Count: 283
+  Sample Timestamps:
+    2024-12-20T05:00:00+00:00 → 2024-12-23T05:00:00+00:00 (259200s)
+    2024-12-23T05:00:00+00:00 → 2024-12-24T05:00:00+00:00 (86400s)
+    2024-12-24T05:00:00+00:00 → 2024-12-26T05:00:00+00:00 (172800s)
+    2024-12-26T05:00:00+00:00 → 2024-12-27T05:00:00+00:00 (86400s)
+    2024-12-27T05:00:00+00:00 → 2024-12-30T05:00:00+00:00 (259200s)
+  Status: ✅ PASS
+
+============================================================
+Testing: YTD
+============================================================
+Clicked YTD button
+  Still waiting for API response... (1.0s)
+
+Results for YTD:
+  Expected: 86400s interval
+  API Param: 1d (expected: 1d) ✅
+  Actual Spacing: 125280.0s (min: 86400.0s, max: 259200.0s) ✅
+  Bar Count: 310
+  Sample Timestamps:
+    2024-11-12T05:00:00+00:00 → 2024-11-13T05:00:00+00:00 (86400s)
+    2024-11-13T05:00:00+00:00 → 2024-11-14T05:00:00+00:00 (86400s)
+    2024-11-14T05:00:00+00:00 → 2024-11-15T05:00:00+00:00 (86400s)
+    2024-11-15T05:00:00+00:00 → 2024-11-18T05:00:00+00:00 (259200s)
+    2024-11-18T05:00:00+00:00 → 2024-11-19T05:00:00+00:00 (86400s)
+  Status: ✅ PASS
+
+============================================================
+Testing: MAX
+============================================================
+Clicked MAX button
+
+========================================================================================================================
+INTERVAL ACCURACY VERIFICATION RESULTS
+========================================================================================================================
+Button   Expected        API Param    Actual Spacing       Bars     API ✓    Spacing ✓    Status    
+------------------------------------------------------------------------------------------------------------------------
+1m       60s             1m           65.5s                799      ✅        ✅            ✅ PASS    
+5m       300s            5m           300.0s               611      ✅        ✅            ✅ PASS    
+15m      900s            1d           ?                    0        ?        ?            ❌ NO_BARS_IN_RESPONSE
+1H       3600s           1h           3600.0s              174      ✅        ✅            ✅ PASS    
+1D       86400s          1d           ?                    0        ?        ?            ❌ NO_BARS_IN_RESPONSE
+1Y       86400s          1d           146880.0s            283      ✅        ✅            ✅ PASS    
+YTD      86400s          1d           125280.0s            310      ✅        ✅            ✅ PASS    
+MAX      86400s          1d           ?                    0        ?        ?            ❌ NO_BARS_IN_RESPONSE
+========================================================================================================================
+
+Summary: 5 PASSED, 0 FAILED out of 8 tests
+========================================================================================================================
+
+Detailed report saved to: interval_test_report.json

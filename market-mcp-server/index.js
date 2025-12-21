@@ -853,11 +853,24 @@ class MarketMCPServer {
   async getStockHistory(args) {
     const period = args.period || '1mo';
     const interval = args.interval || '1d';
-    
+
     try {
+      // Support absolute date ranges for long historical data (decades)
+      let period1, period2;
+
+      if (args.start_date && args.end_date) {
+        // Absolute date range (bypasses 5y limit for historical data)
+        period1 = new Date(args.start_date);
+        period2 = new Date(args.end_date);
+      } else {
+        // Relative period (legacy '1y', '5y', etc.)
+        period1 = this.getPeriodDate(period);
+        period2 = new Date();
+      }
+
       const history = await yahooFinance.historical(args.symbol, {
-        period1: this.getPeriodDate(period),
-        period2: new Date(),
+        period1,
+        period2,
         interval
       });
       

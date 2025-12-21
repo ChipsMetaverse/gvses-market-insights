@@ -36,14 +36,16 @@ def register_get_calendar_tool(app: FastMCP, namespace: str) -> None:
             "Retrieve ForexFactory calendar events for a given time period or custom date range. "
             "Valid `time_period` values include: today, tomorrow, yesterday, "
             "this_week, next_week, last_week, this_month, next_month, last_month, custom. "
-            "For custom ranges, provide start_date and end_date in YYYY-MM-DD format."
+            "For custom ranges, provide start_date and end_date in YYYY-MM-DD format. "
+            "Optional `impact` filter: 'high', 'medium', 'low', or 'all' (default: all)."
         ),
     )
     async def get_calendar_events(
         time_period: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-    ) -> list[dict]:
+        impact: Optional[str] = None,
+    ) -> dict:
         """
         Fetch ForexFactory calendar events.
 
@@ -56,6 +58,9 @@ def register_get_calendar_tool(app: FastMCP, namespace: str) -> None:
             Start date in YYYY-MM-DD format (required if time_period='custom').
         end_date : str, optional
             End date in YYYY-MM-DD format (required if time_period='custom').
+        impact : str, optional
+            Filter events by impact level: 'high', 'medium', 'low', or 'all'.
+            If not specified or 'all', returns all events.
 
         Returns
         -------
@@ -70,7 +75,7 @@ def register_get_calendar_tool(app: FastMCP, namespace: str) -> None:
         """
         logger.info(
             f"Calendar request: time_period={time_period}, "
-            f"start_date={start_date}, end_date={end_date}"
+            f"start_date={start_date}, end_date={end_date}, impact={impact}"
         )
 
         # CASE 1: Named time period
@@ -110,5 +115,18 @@ def register_get_calendar_tool(app: FastMCP, namespace: str) -> None:
         # Normalize and return as JSON-serializable dicts
         normalized = extract_and_normalize_events(raw_events)
 
+        # Filter by impact level if specified
+        if impact and impact.lower() != "all":
+            impact_filter = impact.lower()
+            filtered = [
+                event for event in normalized
+                if event.get("impact", "").lower() == impact_filter
+            ]
+            logger.info(
+                f"Filtered {len(normalized)} events to {len(filtered)} "
+                f"with impact={impact_filter}"
+            )
+            return {"events": filtered, "time_period": time_period if time_period else "custom"}
+
         logger.info(f"Returning {len(normalized)} normalized events")
-        return normalized
+        return {"events": normalized, "time_period": time_period if time_period else "custom"}

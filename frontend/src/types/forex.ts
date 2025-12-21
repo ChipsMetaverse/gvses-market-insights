@@ -3,8 +3,8 @@ export type ForexImpact = 'high' | 'medium' | 'low' | 'holiday';
 export type ForexTimePeriod =
   | 'today'
   | 'tomorrow'
-  | 'week'
-  | 'next-week'
+  | 'this_week'
+  | 'next_week'
   | 'custom';
 
 export interface ForexCalendarEvent {

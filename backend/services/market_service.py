@@ -308,25 +308,35 @@ async def get_quote(symbol: str) -> Dict[str, Any]:
         raise ValueError(f"Unable to fetch real market data for {symbol}. Please check the symbol and try again.")
 
 
-async def get_ohlcv_from_alpaca(symbol: str, days: int) -> List[Dict[str, Any]]:
+async def get_ohlcv_from_alpaca(symbol: str, days: int, interval: str = "1d") -> List[Dict[str, Any]]:
     """Get OHLCV data from Alpaca Markets for chart display."""
-    
+
     if not ALPACA_AVAILABLE:
         raise ValueError("Alpaca service not available")
-    
-    logger.info(f"Fetching Alpaca OHLCV data for {symbol} - {days} days")
-    
+
+    logger.info(f"Fetching Alpaca OHLCV data for {symbol} - {days} days, interval={interval}")
+
     try:
         # Get Alpaca service instance
         alpaca_service = get_alpaca_service()
-        
-        # Determine timeframe based on days
-        if days <= 1:
-            timeframe = "15Min"  # Intraday data
-        elif days <= 7:
-            timeframe = "1Hour"  # Hourly for a week
-        else:
-            timeframe = "1Day"  # Daily for longer periods
+
+        # Map requested interval to Alpaca timeframe
+        interval_to_alpaca = {
+            "1m": "1Min",
+            "5m": "5Min",
+            "15m": "15Min",
+            "30m": "30Min",
+            "1H": "1Hour",
+            "1h": "1Hour",
+            "2H": "2Hour",
+            "2h": "2Hour",
+            "4H": "4Hour",
+            "4h": "4Hour",
+            "1d": "1Day",
+            "1wk": "1Week",
+            "1mo": "1Month"
+        }
+        timeframe = interval_to_alpaca.get(interval, "1Day")
         
         # Fetch bars from Alpaca
         result = await alpaca_service.get_stock_bars(
@@ -361,8 +371,8 @@ async def get_ohlcv_from_alpaca(symbol: str, days: int) -> List[Dict[str, Any]]:
                     "close": bar.get("close", 0),
                     "volume": bar.get("volume", 0)
                 })
-        
-        logger.info(f"Alpaca returned {len(candles)} candles for {symbol}")
+
+        logger.info(f"[ALPACA OHLCV] Returning {len(candles)} candles for {symbol} (from {days} days request)")
         return candles
         
     except Exception as e:
@@ -370,17 +380,17 @@ async def get_ohlcv_from_alpaca(symbol: str, days: int) -> List[Dict[str, Any]]:
         raise ValueError(f"Unable to fetch Alpaca historical data: {str(e)}")
 
 
-async def get_ohlcv(symbol: str, range_str: str) -> List[Dict[str, Any]]:
+async def get_ohlcv(symbol: str, range_str: str, interval: str = "1d") -> List[Dict[str, Any]]:
     """Get OHLCV data for a symbol and time range - REAL DATA ONLY"""
-    
-    # Check cache
-    cache_key = f"ohlcv_{symbol}_{range_str}"
+
+    # Check cache (include interval in cache key)
+    cache_key = f"ohlcv_{symbol}_{range_str}_{interval}"
     cached = cache.get(cache_key)
     if cached:
-        logger.info(f"Returning cached OHLCV data for {symbol} {range_str}")
+        logger.info(f"Returning cached OHLCV data for {symbol} {range_str} interval={interval}")
         return cached
-    
-    logger.info(f"Fetching OHLCV data for {symbol} with range {range_str}")
+
+    logger.info(f"Fetching OHLCV data for {symbol} with range {range_str}, interval={interval}")
     try:
         # Map our range format to MCP period format
         # Note: Using 5d for 1D to ensure we get data
@@ -412,13 +422,14 @@ async def get_ohlcv(symbol: str, range_str: str) -> List[Dict[str, Any]]:
         
         # Get real data from MCP server
         client = await get_direct_mcp_client()
-        
-        # Build parameters - let MCP server use its defaults for interval
+
+        # Build parameters - pass interval explicitly
         params = {
             "symbol": symbol,
-            "period": period
+            "period": period,
+            "interval": interval  # Pass the requested interval to MCP
         }
-        
+
         logger.info(f"Calling get_stock_history with params: {params}")
         result = await client.call_tool("get_stock_history", params)
         

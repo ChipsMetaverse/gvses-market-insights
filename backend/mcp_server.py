@@ -138,11 +138,17 @@ mcp_client = None
 # Supabase client
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
+supabase_service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = None
 
-if supabase_url and supabase_anon_key:
+# Use SERVICE_ROLE_KEY if available (bypasses RLS for testing),
+# otherwise use ANON_KEY (enforces RLS for production)
+if supabase_url and supabase_service_role_key:
+    supabase = create_client(supabase_url, supabase_service_role_key)
+    logger.info("✅ Supabase client initialized with SERVICE_ROLE_KEY (RLS bypassed)")
+elif supabase_url and supabase_anon_key:
     supabase = create_client(supabase_url, supabase_anon_key)
-    logger.info("Supabase client initialized successfully")
+    logger.info("Supabase client initialized with ANON_KEY (RLS enforced)")
 else:
     logger.warning("Supabase credentials not found - some features may not work")
 
@@ -4220,6 +4226,343 @@ async def get_chart_controls_widget(request: Request):
 
 # ============================================================================
 # End Function Calling Endpoints
+# ============================================================================
+
+# ============================================================================
+# Behavioral Coaching Endpoints - Phase 1
+# Progressive Behavioral Architecture for Trading Psychology
+# ============================================================================
+#
+# Implements non-directive mental skill development based on:
+# - ACT (Acceptance and Commitment Therapy) principles
+# - Behavioral analytics and pattern detection
+# - Just-in-Time learning vs Just-in-Case courses
+#
+# Regulatory Positioning:
+# - Educational wellness tool (NOT investment advice)
+# - General stress management (NOT medical treatment)
+# - User-controlled insights (NOT automated trading)
+# ============================================================================
+
+from services.behavioral_coaching_service import get_behavioral_coaching_service
+from pydantic import BaseModel, Field
+from typing import Optional
+from datetime import datetime as dt
+
+# Pydantic models for request/response validation
+class TradeJournalRequest(BaseModel):
+    symbol: str
+    entry_price: float
+    exit_price: Optional[float] = None
+    entry_timestamp: dt
+    exit_timestamp: Optional[dt] = None
+    position_size: int
+    direction: str  # 'long' or 'short'
+    timeframe: str
+    emotional_tags: Optional[List[str]] = None
+    plan_entry: Optional[str] = None
+    plan_exit: Optional[str] = None
+    actual_vs_plan: Optional[str] = None
+    stress_level: Optional[int] = Field(None, ge=1, le=10)
+    confidence_level: Optional[int] = Field(None, ge=1, le=10)
+    chart_snapshot_url: Optional[str] = None
+    market_conditions: Optional[Dict] = None
+    voice_plan_url: Optional[str] = None
+    voice_review_url: Optional[str] = None
+
+class ACTCompletionRequest(BaseModel):
+    exercise_id: str
+    trigger_context: str
+    related_trade_id: Optional[str] = None
+    completed: bool = True
+    duration_seconds: Optional[int] = None
+    quality_rating: Optional[int] = Field(None, ge=1, le=5)
+    user_notes: Optional[str] = None
+    prevented_impulsive_trade: Optional[bool] = None
+    improved_emotional_state: Optional[bool] = None
+
+@app.post("/api/coaching/trades/capture")
+async def capture_trade_journal_entry(request: Request, trade: TradeJournalRequest):
+    """
+    Capture a trade in the journal with psychological context.
+
+    This is the foundation of the Reflection Engine - allowing traders
+    to document not just WHAT they traded, but WHY and HOW they felt.
+
+    Returns trade_id and behavioral flags (is_disciplined, is_revenge, etc.)
+    """
+    try:
+        start_time = time.perf_counter()
+        telemetry = build_request_telemetry(request, "coaching_capture_trade")
+
+        # Get authenticated user (in production, extract from JWT token)
+        # For now, using a placeholder - integrate with your auth system
+        user_id = request.headers.get("X-User-ID", "demo_user")
+
+        # Get behavioral coaching service
+        coaching_service = get_behavioral_coaching_service(supabase)
+
+        # Capture trade
+        result = await coaching_service.capture_trade(
+            user_id=user_id,
+            symbol=trade.symbol,
+            entry_price=trade.entry_price,
+            exit_price=trade.exit_price,
+            entry_timestamp=trade.entry_timestamp,
+            exit_timestamp=trade.exit_timestamp,
+            position_size=trade.position_size,
+            direction=trade.direction,
+            timeframe=trade.timeframe,
+            emotional_tags=trade.emotional_tags,
+            plan_entry=trade.plan_entry,
+            plan_exit=trade.plan_exit,
+            actual_vs_plan=trade.actual_vs_plan,
+            stress_level=trade.stress_level,
+            confidence_level=trade.confidence_level,
+            chart_snapshot_url=trade.chart_snapshot_url,
+            market_conditions=trade.market_conditions,
+            voice_plan_url=trade.voice_plan_url,
+            voice_review_url=trade.voice_review_url
+        )
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        completed = telemetry.with_duration(duration_ms)
+
+        logger.info(
+            "coaching_trade_captured",
+            extra=completed.for_logging(
+                symbol=trade.symbol,
+                direction=trade.direction,
+                behavioral_flags=result.get('behavioral_flags'),
+                duration_ms=round(duration_ms, 2)
+            )
+        )
+
+        await persist_request_log(
+            completed,
+            {
+                "event": "coaching_trade_capture",
+                "symbol": trade.symbol,
+                "success": result.get('success'),
+                "behavioral_flags": result.get('behavioral_flags')
+            }
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ Coaching trade capture error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/coaching/trades/journal")
+async def get_trade_journal(
+    request: Request,
+    limit: int = Query(50, le=200),
+    offset: int = Query(0, ge=0),
+    symbol: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    emotional_filter: Optional[str] = None
+):
+    """
+    Retrieve journal entries with filters.
+
+    Returns array of trades with emotional context and behavioral flags.
+    """
+    try:
+        user_id = request.headers.get("X-User-ID", "demo_user")
+        coaching_service = get_behavioral_coaching_service(supabase)
+
+        # Parse dates if provided
+        start_dt = dt.fromisoformat(start_date) if start_date else None
+        end_dt = dt.fromisoformat(end_date) if end_date else None
+
+        # Parse emotional filter (comma-separated list)
+        emotional_list = emotional_filter.split(',') if emotional_filter else None
+
+        result = await coaching_service.get_journal_entries(
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+            symbol=symbol,
+            start_date=start_dt,
+            end_date=end_dt,
+            emotional_filter=emotional_list
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ Journal retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/coaching/insights/weekly")
+async def get_weekly_behavioral_insights(
+    request: Request,
+    week_start: Optional[str] = None
+):
+    """
+    Get behavioral insights for a specific week.
+
+    Returns:
+    - Disciplined vs impulsive trade performance
+    - Emotional costs (FOMO, revenge trading)
+    - Best/worst trading hours
+    - ACT exercise engagement
+
+    This shows traders the "cost" of emotional trading in concrete terms.
+    """
+    try:
+        user_id = request.headers.get("X-User-ID", "demo_user")
+        coaching_service = get_behavioral_coaching_service(supabase)
+
+        # Parse week_start if provided
+        week_start_dt = dt.fromisoformat(week_start) if week_start else None
+
+        result = await coaching_service.get_weekly_insights(
+            user_id=user_id,
+            week_start=week_start_dt
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ Weekly insights error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/coaching/act/exercises")
+async def get_act_exercises(
+    request: Request,
+    exercise_type: Optional[str] = None,
+    trigger_context: Optional[str] = None
+):
+    """
+    Get ACT exercises from library.
+
+    Exercises are educational content for psychological flexibility.
+    NOT mental health treatment - general wellness education.
+
+    Filter by:
+    - exercise_type: cognitive_defusion, mindfulness, acceptance, etc.
+    - trigger_context: post_stopout, pre_fomo_entry, etc.
+    """
+    try:
+        coaching_service = get_behavioral_coaching_service(supabase)
+
+        result = await coaching_service.get_act_exercises(
+            exercise_type=exercise_type,
+            trigger_context=trigger_context
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ ACT exercises retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/coaching/act/complete")
+async def record_act_exercise_completion(
+    request: Request,
+    completion: ACTCompletionRequest
+):
+    """
+    Record completion of an ACT exercise.
+
+    Tracks effectiveness:
+    - Did it prevent an impulsive trade?
+    - Did it improve emotional state?
+    - User quality rating
+
+    This data helps measure the effectiveness of ACT interventions.
+    """
+    try:
+        user_id = request.headers.get("X-User-ID", "demo_user")
+        coaching_service = get_behavioral_coaching_service(supabase)
+
+        result = await coaching_service.record_act_completion(
+            user_id=user_id,
+            exercise_id=completion.exercise_id,
+            trigger_context=completion.trigger_context,
+            related_trade_id=completion.related_trade_id,
+            completed=completion.completed,
+            duration_seconds=completion.duration_seconds,
+            quality_rating=completion.quality_rating,
+            user_notes=completion.user_notes,
+            prevented_impulsive_trade=completion.prevented_impulsive_trade,
+            improved_emotional_state=completion.improved_emotional_state
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ ACT completion recording error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/coaching/patterns/detect")
+async def detect_behavioral_patterns(
+    request: Request,
+    min_trades: int = Query(20, ge=10, le=100)
+):
+    """
+    Analyze trading history to detect behavioral patterns.
+
+    This implements educational insights (NOT investment advice).
+    Patterns are presented as data-driven observations, allowing
+    traders to see their own behavioral leaks.
+
+    Requires minimum number of trades for statistical validity.
+
+    Patterns detected:
+    - Revenge trading (trading after losses)
+    - FOMO entries (chasing price movements)
+    - Time-of-day performance bias
+    - Emotional state correlation with outcomes
+
+    Returns educational insights, not recommendations.
+    """
+    try:
+        user_id = request.headers.get("X-User-ID", "demo_user")
+        coaching_service = get_behavioral_coaching_service(supabase)
+
+        result = await coaching_service.detect_behavioral_patterns(
+            user_id=user_id,
+            min_trades=min_trades
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ Pattern detection error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/coaching/disclaimers")
+async def get_legal_disclaimers(request: Request):
+    """
+    Get legal disclaimers for behavioral coaching features.
+
+    Returns all disclaimers that must be displayed in the UI:
+    - Wellness education (not medical treatment)
+    - Not investment advice
+    - Not a medical device (for biofeedback)
+    - User responsibility
+    """
+    try:
+        result = supabase.table('legal_disclaimers') \
+            .select('*') \
+            .order('type') \
+            .execute()
+
+        return {
+            'success': True,
+            'disclaimers': result.data
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Disclaimers retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# End Behavioral Coaching Endpoints
 # ============================================================================
 
 if __name__ == "__main__":

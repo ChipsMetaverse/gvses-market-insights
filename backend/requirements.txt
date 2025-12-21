@@ -23,6 +23,8 @@ tenacity>=8.2.3  # Retry logic with exponential backoff
 openai-chatkit>=1.2.0  # ChatKit server and widget components (includes openai-agents)
 prometheus-client>=0.20.0  # Sprint 1 Day 2: Prometheus metrics
 redis>=5.0.0  # Redis backend for distributed rate limiting
+alpaca-py>=0.28.0  # Alpaca Markets API for extended intraday data (7+ years)
+sentry-sdk>=2.47.0  # Error monitoring and performance tracking
 
 # PDF Processing (Keep minimal for now, review later)
 pypdf==3.17.4

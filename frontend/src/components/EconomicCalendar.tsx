@@ -14,8 +14,8 @@ type ImpactFilter = ForexImpact | 'all';
 const PERIOD_OPTIONS: Array<{ label: string; value: ForexTimePeriod }> = [
   { label: 'Today', value: 'today' },
   { label: 'Tomorrow', value: 'tomorrow' },
-  { label: 'This Week', value: 'week' },
-  { label: 'Next Week', value: 'next-week' },
+  { label: 'This Week', value: 'this_week' },
+  { label: 'Next Week', value: 'next_week' },
 ];
 
 const IMPACT_OPTIONS: Array<{ label: string; value: ImpactFilter; emoji: string }> = [
@@ -30,9 +30,15 @@ interface GroupedEvents {
   events: ForexCalendarEvent[];
 }
 
+/**
+ * Economic Calendar Component
+ * - Simple event list grouped by date
+ * - Period and impact filters
+ * - Clean timeline layout
+ */
 export const EconomicCalendar: React.FC = () => {
   const [timePeriod, setTimePeriod] = useState<ForexTimePeriod>('today');
-  const [impact, setImpact] = useState<ImpactFilter>('high');
+  const [impact] = useState<ImpactFilter>('high'); // Fixed impact filter for high-impact events
   const [calendar, setCalendar] = useState<ForexCalendarResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,17 +99,6 @@ export const EconomicCalendar: React.FC = () => {
     fetchCalendar({ silent: true });
   };
 
-  const impactSummary = useMemo(() => {
-    if (!calendar?.events) return null;
-    return calendar.events.reduce(
-      (acc, event) => {
-        acc[event.impact] = (acc[event.impact] ?? 0) + 1;
-        return acc;
-      },
-      {} as Record<ForexImpact, number>
-    );
-  }, [calendar]);
-
   return (
     <section className="economic-calendar" aria-labelledby="economic-calendar-title">
       <div className="calendar-header">
@@ -141,36 +136,7 @@ export const EconomicCalendar: React.FC = () => {
             ))}
           </div>
         </div>
-
-        <div className="filter-section">
-          <span className="filter-label">Impact</span>
-          <div className="filter-pills">
-            {IMPACT_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`pill ${impact === option.value ? 'pill--active' : ''}`}
-                onClick={() => setImpact(option.value)}
-              >
-                <span className="impact-emoji" aria-hidden="true">{option.emoji}</span>
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
-
-      {impactSummary && (
-        <ul className="impact-summary" aria-label="Impact distribution">
-          {IMPACT_OPTIONS.filter((option) => option.value !== 'all').map((option) => (
-            <li key={option.value}>
-              <span className="summary-dot" data-impact={option.value}></span>
-              <span className="summary-label">{option.label}</span>
-              <span className="summary-count">{impactSummary[option.value as ForexImpact] ?? 0}</span>
-            </li>
-          ))}
-        </ul>
-      )}
 
       {error && (
         <div className="calendar-error" role="alert">

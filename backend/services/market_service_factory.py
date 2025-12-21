@@ -146,13 +146,13 @@ class MarketServiceWrapper:
             db_service = get_database_service()
             cached_candles = await db_service.get_market_candles(
                 symbol=symbol.upper(),
-                timeframe="1d",
+                timeframe=interval,  # Use actual interval parameter instead of hardcoded "1d"
                 start_time=datetime.now(timezone.utc) - timedelta(days=days),
                 limit=days * 2  # Get extra in case of weekends/holidays
             )
             
             if cached_candles and len(cached_candles) >= days * 0.7:  # At least 70% of expected data
-                logger.info(f"Using cached data for {symbol}: {len(cached_candles)} candles")
+                logger.info(f"[CACHE HIT] Using cached data for {symbol}: {len(cached_candles)} candles (requested {days} days)")
                 return {
                     "symbol": symbol.upper(),
                     "candles": cached_candles,
@@ -170,11 +170,11 @@ class MarketServiceWrapper:
                 from services.market_service import get_ohlcv_from_alpaca, ALPACA_AVAILABLE
                 
                 if ALPACA_AVAILABLE:
-                    logger.info(f"Using Alpaca for {mapped_symbol} chart data")
-                    candles = await get_ohlcv_from_alpaca(mapped_symbol, days)
-                    
+                    logger.info(f"Using Alpaca for {mapped_symbol} chart data with interval={interval}")
+                    candles = await get_ohlcv_from_alpaca(mapped_symbol, days, interval)
+
                     # Cache the data asynchronously
-                    asyncio.create_task(self._cache_candles(symbol.upper(), "1d", candles, "alpaca"))
+                    asyncio.create_task(self._cache_candles(symbol.upper(), interval, candles, "alpaca"))
                     
                     return {
                         "symbol": symbol.upper(),
@@ -187,13 +187,13 @@ class MarketServiceWrapper:
                 logger.warning(f"Alpaca chart data failed: {e}, falling back to Yahoo Finance")
         
         # Use Yahoo Finance (supports both stocks and crypto)
-        logger.info(f"Using Yahoo Finance for {mapped_symbol} chart data (asset_type: {asset_type})")
-        
+        logger.info(f"Using Yahoo Finance for {mapped_symbol} chart data (asset_type: {asset_type}, interval={interval})")
+
         # Map days to range string for Yahoo
         if days <= 1:
             range_str = "1D"
         elif days <= 5:
-            range_str = "5D" 
+            range_str = "5D"
         elif days <= 30:
             range_str = "1M"
         elif days <= 90:
@@ -204,11 +204,11 @@ class MarketServiceWrapper:
             range_str = "1Y"
         else:
             range_str = "5Y"
-        
-        candles = await self._get_ohlcv(mapped_symbol, range_str)
-        
+
+        candles = await self._get_ohlcv(mapped_symbol, range_str, interval)
+
         # Cache the data asynchronously
-        asyncio.create_task(self._cache_candles(symbol.upper(), "1d", candles, "yahoo_mcp"))
+        asyncio.create_task(self._cache_candles(symbol.upper(), interval, candles, "yahoo_mcp"))
         
         result = {
             "symbol": symbol.upper(),
@@ -1047,7 +1047,7 @@ class HybridMarketService:
                     data = await self.direct_service.get_comprehensive_stock_data(symbol)
                     results = data
         elif self.direct_available:
-            data = await self.mcp_service.get_comprehensive_stock_data(symbol)
+            data = await self.direct_service.get_comprehensive_stock_data(symbol)
             results = data
         
         # Try to enhance with MCP news if available and not already included

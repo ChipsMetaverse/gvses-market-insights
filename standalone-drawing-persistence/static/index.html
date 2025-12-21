@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drawing Test - Standalone</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .ticker-bar {
+            display: flex;
+            gap: 15px;
+            padding: 15px 20px;
+            background: #0a0a0a;
+            border-bottom: 1px solid #1a1a1a;
+        }
+
+        .ticker-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: #1a1a1a;
+            border-radius: 8px;
+        }
+
+        .ticker-symbol {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .ticker-price {
+            font-size: 14px;
+        }
+
+        .ticker-change {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .ticker-change.positive {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .chart-container {
+            height: calc(100vh - 140px);
+            padding: 0 20px 20px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            padding: 15px 20px;
+            background: #0a0a0a;
+            border-bottom: 1px solid #1a1a1a;
+            align-items: center;
+        }
+
+        .period-buttons {
+            display: flex;
+            gap: 5px;
+            margin-right: 20px;
+        }
+
+        .period-btn {
+            padding: 6px 12px;
+            background: #1a1a1a;
+            color: #fff;
+            border: 1px solid #333;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .period-btn:hover {
+            background: #2a2a2a;
+        }
+
+        .period-btn.active {
+            background: #2196F3;
+            border-color: #2196F3;
+        }
+
+        .drawing-buttons {
+            display: flex;
+            gap: 8px;
+            padding-left: 20px;
+            border-left: 1px solid #333;
+        }
+
+        .draw-btn {
+            padding: 6px 14px;
+            background: #1a1a1a;
+            color: #fff;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .draw-btn:hover {
+            background: #2a2a2a;
+        }
+
+        .draw-btn.cancel {
+            border-color: #ef4444;
+        }
+
+        #chart {
+            width: 100%;
+            height: 100%;
+            background: #0a0a0a;
+        }
+
+        .status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            background: rgba(26, 26, 26, 0.95);
+            border-radius: 20px;
+            font-size: 12px;
+            border: 1px solid #333;
+            z-index: 1000;
+        }
+
+        .status.connected {
+            border-color: #4CAF50;
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div class="status" id="status">Connecting...</div>
+
+    <div class="ticker-bar">
+        <div class="ticker-item">
+            <span class="ticker-symbol">AAPL</span>
+            <span class="ticker-price">$277.60</span>
+            <span class="ticker-change positive">+0.3%</span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="period-buttons">
+            <button class="period-btn active">1D</button>
+            <button class="period-btn">5D</button>
+            <button class="period-btn">1M</button>
+            <button class="period-btn">6M</button>
+            <button class="period-btn">1Y</button>
+        </div>
+
+        <div class="drawing-buttons">
+            <button class="draw-btn" onclick="testDrawing()">
+                ↗️ Trendline
+            </button>
+            <button class="draw-btn">
+                ➡️ Ray
+            </button>
+            <button class="draw-btn">
+                — Horizontal
+            </button>
+            <button class="draw-btn cancel">
+                ✕ Cancel
+            </button>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <div id="chart"></div>
+    </div>
+
+    <script>
+        const API = 'http://localhost:8001';
+        let chart, series;
+        let currentSymbol = 'AAPL';
+
+        // Initialize chart
+        function initChart() {
+            const container = document.getElementById('chart');
+            chart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: container.clientHeight,
+                layout: {
+                    background: { color: '#0a0a0a' },
+                    textColor: '#d1d4dc',
+                },
+                grid: {
+                    vertLines: { color: '#1a1a1a' },
+                    horzLines: { color: '#1a1a1a' },
+                },
+                timeScale: {
+                    borderColor: '#333',
+                    timeVisible: true,
+                },
+                rightPriceScale: {
+                    borderColor: '#333',
+                },
+            });
+
+            series = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                borderDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+            });
+
+            loadData();
+
+            window.addEventListener('resize', () => {
+                chart.applyOptions({ width: document.getElementById('chart').clientWidth });
+            });
+        }
+
+        // Load sample data
+        function loadData() {
+            const data = [];
+            let base = 150;
+            const now = Math.floor(Date.now() / 1000);
+
+            for (let i = 100; i >= 0; i--) {
+                const time = now - (i * 86400);
+                const change = (Math.random() - 0.5) * 5;
+                base += change;
+
+                const open = base;
+                const close = base + (Math.random() - 0.5) * 3;
+                const high = Math.max(open, close) + Math.random() * 2;
+                const low = Math.min(open, close) - Math.random() * 2;
+
+                data.push({ time, open, high, low, close });
+            }
+
+            series.setData(data);
+        }
+
+        // Check API
+        async function checkAPI() {
+            try {
+                const res = await fetch(`${API}/health`);
+                if (res.ok) {
+                    document.getElementById('status').textContent = '● Connected';
+                    document.getElementById('status').className = 'status connected';
+                }
+            } catch (e) {
+                document.getElementById('status').textContent = '● Disconnected';
+                document.getElementById('status').className = 'status';
+            }
+        }
+
+        // Load symbol
+        function loadSymbol() {
+            currentSymbol = document.getElementById('symbol').value.toUpperCase();
+            loadData();
+        }
+
+        // Test drawing
+        async function testDrawing() {
+            const now = Math.floor(Date.now() / 1000);
+
+            const drawing = {
+                symbol: currentSymbol,
+                type: 'trendline',
+                data: {
+                    name: 'Test Line',
+                    color: '#4CAF50',
+                    coordinates: {
+                        a: { time: now - (50 * 86400), price: 145 },
+                        b: { time: now - (10 * 86400), price: 155 }
+                    }
+                }
+            };
+
+            try {
+                const res = await fetch(`${API}/api/drawings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(drawing)
+                });
+
+                if (res.ok) {
+                    alert('✓ Drawing saved to database!');
+                } else {
+                    alert('Error saving drawing');
+                }
+            } catch (e) {
+                alert('Connection error');
+            }
+        }
+
+        // Init
+        window.addEventListener('load', () => {
+            initChart();
+            checkAPI();
+            setInterval(checkAPI, 30000);
+        });
+    </script>
+</body>
+</html>

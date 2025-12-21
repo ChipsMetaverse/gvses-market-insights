@@ -1,204 +1,327 @@
-# Deployment Status Report - November 5, 2025
+# GVSES Deployment Status Report
+**Date**: December 4, 2025  
+**Tested**: Localhost vs Production Comparison
 
-## Current Situation
+---
 
-### ✅ Successfully Completed
-1. **Frontend Debug Logging**: Added comprehensive debug logging to `RealtimeChatKit.tsx` to trace `chart_commands` processing
-2. **Dockerfile Fixed**: Updated `/frontend/Dockerfile` to:
-   - Build the Vite app (`npm run build`)
-   - Serve static files on port 8080 (Fly.io default)
-   - Use `serve` package instead of `npm run dev`
-3. **Frontend Deployed**: Successfully deployed to Fly.io at https://gvses-market-insights.fly.dev/
+## 🚨 CRITICAL ISSUES IDENTIFIED
 
-### ❌ Critical Issue Discovered
-**The backend API is NOT running!**
+### 1. **Production Broken** - HTTP 400 Errors
+**Status**: 🔴 **CRITICAL - Production Down**
+
+**Symptoms:**
+- Chart displays "HTTP 400:" error
+- No market data loading
+- Stock history API returns: "Symbol 'TSLA' not found or invalid"
+- All technical levels, patterns, and news stuck on "Loading..."
+
+**API Test:**
+```bash
+curl https://gvses-market-insights.fly.dev/api/stock-history?symbol=TSLA&interval=1d&days=365
+# Response: {"error":{"code":"http_error","message":"Symbol 'TSLA' not found or invalid"}}
+```
+
+### 2. **Supabase Client Configuration Error** (Both Environments)
+**Status**: 🔴 **CRITICAL**
+
+**Error:**
+```
+ERROR: create_client() got an unexpected keyword argument 'is_async'
+```
+
+**Impact:**
+- ❌ Cache operations failing
+- ❌ Conversation persistence failing  
+- ❌ News caching disabled
+- ❌ Historical data caching broken
+
+**Affected Services:**
+- `services.cache_service`
+- `services.market_service_factory` (all caching operations)
+- Conversation creation endpoint
+
+### 3. **MCP Session Initialization Failures** (Both Environments)
+**Status**: 🟡 **HIGH PRIORITY**
+
+**Error:**
+```
+ERROR: Failed to initialize MCP session: All connection attempts failed
+```
+
+**Impact:**
+- ❌ Market data fetching via MCP failing
+- ❌ Forex calendar unavailable (502 Bad Gateway)
+- ⚠️ Localhost working because it falls back to Direct API mode
 
 **Root Cause:**
-- We deployed the **frontend** to the `gvses-market-insights` Fly.io app
-- The previous deployment included both frontend and backend
-- Our new Dockerfile ONLY serves the static frontend files (via `serve`)
-- No FastAPI backend is running to handle API requests
+- MCP server not responding on expected port (3001)
+- Connection refused or timeout
 
-**Evidence:**
+### 4. **Historical Data Service DateTime Error**
+**Status**: 🟡 **MEDIUM PRIORITY**
+
+**Error:**
 ```
-❌ ChatKit session error: SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON
-```
-
-The frontend is making requests to `/health`, `/api/chatkit/session`, etc., but these routes don't exist because the backend isn't running. The static file server (`serve`) returns the `index.html` for all routes, which is why we see `<!doctype` instead of JSON.
-
-**Fly.io Health Check Output:**
-```html
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    ...
+ERROR: Coverage check error: can't compare offset-naive and offset-aware datetimes
 ```
 
-This confirms that `/health` is returning HTML, not JSON.
+**Impact:**
+- Historical data coverage checks failing
+- Potential data gaps not detected
 
-## Architecture Analysis
+---
 
-### Original Architecture (Broken)
-- **Fly.io App**: `gvses-market-insights`
-- **What it was**: Frontend + Backend (monorepo deployment)
-- **What it is now**: Frontend only (static files)
+## ✅ LOCALHOST STATUS (Partially Working)
 
-### Required Architecture
+### Working Features:
+✅ **Chart Rendering** - Full TSLA data displayed (276 bars)  
+✅ **Market Insights Panel** - 5 stocks with live prices  
+✅ **Technical Levels** - BL, SH, BTD lines drawn  
+✅ **200 SMA** - Indicator plotted correctly  
+✅ **Pattern Detection** - 2 patterns identified (Doji, Bullish Engulfing)  
+✅ **News Feed** - 6 TSLA articles loaded  
+✅ **Voice Assistant UI** - ChatKit interface embedded  
+✅ **Direct API Fallback** - Yahoo Finance working despite MCP errors
 
-**Option A: Multi-Service Dockerfile**
-- Single Fly.io app with both frontend and backend
-- Nginx/Caddy reverse proxy
-- Frontend serves on `/` (static)
-- Backend serves on `/api/*` and `/health`
+### Broken Features:
+❌ **Economic Calendar** - Forex MCP server not running (502)  
+❌ **Technical Levels API** - Returns "No technical levels available"  
+❌ **Supabase Caching** - All cache operations failing  
+❌ **Conversation Persistence** - 500 error on conversation creation  
+❌ **MCP Services** - All MCP tools unavailable
 
-**Option B: Separate Apps (RECOMMENDED)**
-- **Frontend App**: `gvses-market-insights` (current)
-  - Static Vite build served via `serve`
-  - Port 8080
-- **Backend App**: `gvses-market-insights-api` (NEW)
-  - FastAPI server
-  - Port 8000
-  - Handles `/api/*`, `/health`, `/docs`
-- **Frontend Config**: Update `apiConfig.ts` to point to backend URL
+---
 
-**Option C: Use Fly.io Proxy**
-- Deploy backend separately
-- Use Fly.io's internal networking
-- Frontend makes requests to `http://gvses-market-insights-api.internal:8000`
+## 🔴 PRODUCTION STATUS (Broken)
 
-## Recommended Next Steps
+### Working Features:
+✅ **Frontend Loads** - React app serves correctly  
+✅ **Authentication UI** - Sign-in page functional  
+✅ **Demo Mode Access** - Can enter dashboard  
+✅ **Backend Health** - Reports "healthy" status  
+✅ **Voice Assistant UI** - ChatKit interface loads
 
-### Immediate Action (Option B)
-1. **Deploy Backend as Separate Fly.io App**
-   ```bash
-   cd /Volumes/WD\ My\ Passport\ 264F\ Media/claude-voice-mcp/backend
-   flyctl launch --name gvses-market-insights-api --region iad
-   flyctl deploy --app gvses-market-insights-api
-   ```
+### Broken Features:
+❌ **Chart Data** - HTTP 400 errors, no data loads  
+❌ **Market Insights** - Stuck on "Loading..."  
+❌ **All Stock APIs** - Symbol validation failing  
+❌ **Technical Levels** - No data  
+❌ **Pattern Detection** - No data  
+❌ **News Feed** - No data  
+❌ **Economic Calendar** - No data
 
-2. **Update Frontend Config**
-   - Edit `frontend/src/utils/apiConfig.ts`
-   - Set production API URL to `https://gvses-market-insights-api.fly.dev`
-   ```typescript
-   const PRODUCTION_API_URL = 'https://gvses-market-insights-api.fly.dev';
-   ```
+---
 
-3. **Redeploy Frontend**
-   ```bash
-   cd /Volumes/WD\ My\ Passport\ 264F\ Media/claude-voice-mcp/frontend
-   flyctl deploy --app gvses-market-insights
-   ```
+## 🔍 ROOT CAUSE ANALYSIS
 
-### Alternative (Option A - More Complex)
-1. **Create Multi-Service Dockerfile**
-   - Use Nginx as reverse proxy
-   - Serve frontend on `/`
-   - Proxy `/api/*` and `/health` to FastAPI backend
-   - Requires more complex Dockerfile and nginx.conf
+### Why Production is Completely Broken:
 
-## Impact
+1. **Supabase Client Library Mismatch**
+   - Code using deprecated `is_async` parameter
+   - Likely version incompatibility between local and production
+   - Breaking all Supabase operations
 
-### What's Working ✅
-- Frontend loads correctly
-- Static assets served
-- React app initializes
-- UI renders properly
+2. **MCP Server Configuration Issues**
+   - MCP server likely not running in production environment
+   - Docker/supervisord may not be starting MCP sidecars
+   - Port 3001 not accessible or service crashed
 
-### What's Broken ❌
-- **ALL API requests** (returns HTML instead of JSON)
-  - `/health` → HTML
-  - `/api/chatkit/session` → HTML
-  - `/api/agent/orchestrate` → HTML
-  - `/api/chart/data` → HTML
-  - `/api/indicators/analyze` → HTML
-- ChatKit connection fails (backend not healthy)
-- Agent responses won't work
-- Chart control won't work
-- No market data fetching
+3. **Symbol Validation Logic**
+   - Production failing basic symbol lookups
+   - Returning "Symbol 'TSLA' not found" for valid ticker
+   - May be related to cache failures causing fallback logic to break
 
-### User Impact
-- **100% Service Outage** for all backend-dependent features
-- Users see "Backend not ready" error
-- Voice/chat interface cannot connect
-- Chart shows "No historical data" error
+### Why Localhost Partially Works:
 
-## Files Changed
+1. **Direct API Mode Saves the Day**
+   - Despite MCP failures, Direct Yahoo Finance API working
+   - Hybrid architecture provides graceful degradation
+   - Chart data loads via direct HTTP calls
 
-### `/frontend/Dockerfile`
-```dockerfile
-FROM node:20-alpine
+2. **Supabase Errors Non-Fatal**
+   - Caching failures don't prevent core functionality
+   - Application continues despite persistence errors
 
-WORKDIR /app
+---
 
-# Copy package files
-COPY package*.json ./
+## 🔧 RECOMMENDED FIXES
 
-# Install dependencies
-RUN npm install
+### **IMMEDIATE (Fix Production)**
 
-# Copy application code
-COPY . .
+#### 1. Fix Supabase Client Configuration
+**File**: `backend/services/cache_service.py` and all Supabase imports
 
-# Build the application
-RUN npm run build
-
-# Install serve to serve static files
-RUN npm install -g serve
-
-# Expose port 8080 (Fly.io default)
-EXPOSE 8080
-
-# Serve the built files on port 8080
-CMD ["serve", "-s", "dist", "-l", "8080"]
+**Current (Broken):**
+```python
+from supabase import create_client
+client = create_client(url, key, is_async=True)  # ❌ is_async parameter removed
 ```
 
-**Issue**: This Dockerfile ONLY serves the frontend. No backend API.
+**Fix:**
+```python
+from supabase import create_client, Client
+client: Client = create_client(url, key)  # ✅ Synchronous client
+```
 
-## Verification Commands
+**OR** (if async needed):
+```python
+from supabase import create_async_client
+client = await create_async_client(url, key)  # ✅ Use dedicated async client
+```
 
-### Test Frontend (Working ✅)
+**Affected Files:**
+- `backend/services/cache_service.py`
+- `backend/services/market_service_factory.py`
+- `backend/mcp_server.py` (conversation creation)
+- Any file calling `create_client()`
+
+#### 2. Verify MCP Server Status in Production
 ```bash
-curl -s https://gvses-market-insights.fly.dev/ | head -20
-# Returns: <!doctype html>...
+# SSH into production
+fly ssh console -a gvses-market-insights
+
+# Check if MCP server is running
+ps aux | grep "node.*mcp"
+lsof -i :3001
+
+# Check supervisord status
+supervisorctl status
+
+# Check MCP server logs
+tail -f /var/log/app/mcp-server.err.log
 ```
 
-### Test Backend Health (FAILING ❌)
+#### 3. Restart Production Services
 ```bash
-curl -s https://gvses-market-insights.fly.dev/health
-# Expected: {"status": "healthy"}
-# Actual: <!doctype html>...
+# After fixing Supabase client issues
+fly deploy -a gvses-market-insights
+
+# Monitor deployment
+fly logs -a gvses-market-insights
 ```
 
-### Test ChatKit Session (FAILING ❌)
+### **HIGH PRIORITY (Fix Localhost)**
+
+#### 4. Start Forex MCP Server
 ```bash
-curl -X POST https://gvses-market-insights.fly.dev/api/chatkit/session \
-  -H "Content-Type: application/json" \
-  -d '{"provider":"agent-builder"}'
-# Expected: {"session_id": "...", ...}
-# Actual: <!doctype html>...
+cd forex-mcp-server
+python src/forex_mcp/server.py --transport http --host 0.0.0.0 --port 3002
 ```
 
-## Rollback Option
+#### 5. Fix DateTime Comparison
+**File**: `backend/services/historical_data_service.py`
 
-If we need to rollback to the previous working deployment:
+**Fix timezone-aware datetime comparison:**
+```python
+from datetime import datetime, timezone
 
+# Ensure all datetimes are timezone-aware
+start_time = datetime.now(timezone.utc)
+end_time = datetime.now(timezone.utc)
+```
+
+### **MEDIUM PRIORITY (Improvements)**
+
+#### 6. Update Supabase Python Client
 ```bash
-cd /Volumes/WD\ My\ Passport\ 264F\ Media/claude-voice-mcp/frontend
-flyctl releases list --app gvses-market-insights
-flyctl releases rollback v74 --app gvses-market-insights
+cd backend
+pip install --upgrade supabase
+pip freeze | grep supabase  # Verify version
 ```
 
-(Replace `v74` with the last working version number)
+#### 7. Add MCP Health Checks
+**Add to `backend/mcp_server.py`:**
+```python
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "mcp_available": await check_mcp_connection(),
+        "supabase_available": await check_supabase_connection()
+    }
+```
 
-## Conclusion
+---
 
-**The deployment was technically successful** (Fly.io accepted it, health checks pass, frontend loads), but **it broke the application** by removing the backend API.
+## 📊 COMPARISON SUMMARY
 
-**We need to decide:**
-1. Deploy backend separately (Option B - RECOMMENDED)
-2. Create multi-service Dockerfile (Option A - More complex)
-3. Rollback and investigate a better deployment strategy
+| Feature | Localhost | Production |
+|---------|-----------|------------|
+| Chart Data | ✅ Working | 🔴 Broken (HTTP 400) |
+| Market Insights | ✅ Working | 🔴 Stuck Loading |
+| Technical Levels | 🟡 API Down | 🔴 No Data |
+| Pattern Detection | ✅ Working | 🔴 No Data |
+| News Feed | ✅ Working | 🔴 No Data |
+| Economic Calendar | 🔴 502 Error | 🔴 No Data |
+| Voice UI | ✅ Working | ✅ Working |
+| Supabase Cache | 🔴 Broken | 🔴 Broken |
+| MCP Services | 🔴 Unavailable | 🔴 Unavailable |
+| Direct API | ✅ Working | 🔴 Broken |
 
-**User should NOT use the production app** until the backend is restored.
+**Legend:**
+- ✅ Fully functional
+- 🟡 Partially working or degraded
+- 🔴 Broken or unavailable
 
+---
+
+## 🎯 ACTION PLAN
+
+### Phase 1: Emergency Production Fix (30 minutes)
+1. ✅ Fix `is_async` parameter in all Supabase client calls
+2. ✅ Test locally with updated code
+3. ✅ Deploy to production: `fly deploy`
+4. ✅ Verify stock data loads: Test TSLA chart
+
+### Phase 2: MCP Service Recovery (1 hour)
+1. ✅ SSH into production, check MCP server status
+2. ✅ Update supervisord config if needed
+3. ✅ Restart MCP services
+4. ✅ Verify port 3001 accessible
+
+### Phase 3: Localhost Cleanup (30 minutes)
+1. ✅ Start forex-mcp-server
+2. ✅ Fix datetime timezone issues
+3. ✅ Test economic calendar
+4. ✅ Verify all features working
+
+### Phase 4: Testing & Validation (1 hour)
+1. ✅ Full regression test on localhost
+2. ✅ Full regression test on production
+3. ✅ Load test with multiple symbols
+4. ✅ Verify caching working correctly
+
+---
+
+## 📝 DEPLOYMENT CHECKLIST
+
+**Before Next Deployment:**
+- [ ] Update Supabase client library to latest version
+- [ ] Remove all `is_async` parameters from `create_client()` calls
+- [ ] Test all Supabase operations locally
+- [ ] Verify MCP servers start in Docker/supervisord
+- [ ] Add health checks for MCP connectivity
+- [ ] Fix timezone-aware datetime comparisons
+- [ ] Test with multiple stock symbols (TSLA, AAPL, NVDA)
+- [ ] Monitor production logs for 1 hour post-deployment
+
+---
+
+## 📸 SCREENSHOTS
+
+**Localhost (Partially Working):**
+- Chart displaying TSLA with technical levels
+- Pattern detection working
+- News feed populated
+- See: `localhost-working-screenshot.png`
+
+**Production (Broken):**
+- Red "Chart Error HTTP 400:" message
+- No data loading
+- All panels stuck on "Loading..."
+- See: `production-error-screenshot.png`
+
+---
+
+**Report Generated**: 2025-12-04 20:30 PST  
+**Next Review**: After Phase 1 deployment fixes

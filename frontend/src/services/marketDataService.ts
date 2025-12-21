@@ -407,7 +407,7 @@ class MarketDataService {
   }
 
   // Pattern Detection
-  async getPatternDetection(symbol: string): Promise<{ patterns: any[] }> {
+  async getPatternDetection(symbol: string): Promise<{ patterns: any[], trendlines?: any[] }> {
     const cacheKey = `patterns-${symbol}`;
     const cached = this.getCached<any>(cacheKey);
     if (cached) return cached;

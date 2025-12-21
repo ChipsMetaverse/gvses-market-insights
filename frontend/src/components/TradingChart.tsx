@@ -37,6 +37,7 @@ interface TradingChartProps {
   interval?: string  // Data interval: '1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo'
   technicalLevels?: any
   onChartReady?: (chart: any) => void
+  onTechnicalLevelsUpdate?: (levels: any) => void  // Callback when technical levels are fetched
 
   // Lazy loading configuration
   initialDays?: number  // Number of days to load initially (default: 60, overrides 'days' if both provided)
@@ -56,6 +57,7 @@ export function TradingChart({
   interval = "1d",
   technicalLevels,
   onChartReady,
+  onTechnicalLevelsUpdate,
   initialDays,
   enableLazyLoading = true,
   showCacheInfo = false,
@@ -483,6 +485,12 @@ export function TradingChart({
       // Fetch pattern detection with trendlines for the current interval
       const response = await fetch(`/api/pattern-detection?symbol=${symbolToFetch}&interval=${intervalToUse}`)
       const data = await response.json()
+
+      // Notify parent component of technical levels update
+      if (onTechnicalLevelsUpdate && data) {
+        console.log('[AUTO-TRENDLINES] 📤 Notifying parent of technical levels update')
+        onTechnicalLevelsUpdate(data)
+      }
 
       if (!data.trendlines || data.trendlines.length === 0) {
         console.log('[AUTO-TRENDLINES] No trendlines detected')

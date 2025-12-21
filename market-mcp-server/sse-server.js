@@ -140,6 +140,19 @@ class MarketMCPSSEServer {
             }
           }
         },
+        {
+          name: 'get_earnings_calendar',
+          description: 'Get upcoming earnings reports',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              days: {
+                type: 'number',
+                description: 'Number of days ahead (default: 7)'
+              }
+            }
+          }
+        },
 
         // Chart Control Tools for Agent Builder
         {
@@ -222,6 +235,9 @@ class MarketMCPSSEServer {
             
           case 'get_market_news':
             return await this.getMarketNews(args);
+
+          case 'get_earnings_calendar':
+            return await this.getEarningsCalendar(args);
 
           // Chart Control Tools
           case 'change_chart_symbol':
@@ -479,6 +495,38 @@ class MarketMCPSSEServer {
     });
 
     return articles;
+  }
+
+  async getEarningsCalendar(args) {
+    const days = args.days || 7;
+
+    try {
+      // This would typically call a dedicated earnings API
+      // For now, simulating with Yahoo Finance trending
+      const trending = await yahooFinance.trendingSymbols('US');
+
+      const result = {
+        period: `${days} days`,
+        upcoming: trending.quotes.slice(0, 10).map(q => ({
+          symbol: q.symbol,
+          company: q.longName || q.shortName,
+          estimatedDate: 'TBD',
+          estimatedEPS: 'N/A',
+          previousEPS: 'N/A'
+        }))
+      };
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      throw new Error(`Failed to get earnings calendar: ${error.message}`);
+    }
   }
 
   getPeriodStart(period) {

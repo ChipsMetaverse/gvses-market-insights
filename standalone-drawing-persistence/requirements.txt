@@ -1,0 +1,21 @@
+# Drawing Persistence Standalone Server Requirements
+# Python 3.11+
+
+# FastAPI & Server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+python-dotenv==1.0.0
+
+# Supabase Client
+supabase==2.3.4
+postgrest==0.13.2
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.23.3
+httpx==0.26.0
+
+# Development
+black==23.12.1
+ruff==0.1.9
