@@ -526,7 +526,7 @@ async def get_stock_price(request: Request, symbol: str):
 async def get_intraday_data(
     request: Request,
     symbol: str,
-    interval: str = Query('5m', regex='^(1m|5m|15m|1h|1d|1w|1mo)$'),
+    interval: str = Query('5m', regex='^(1m|5m|15m|1h|1d|1w|1mo|1y)$'),
     days: Optional[int] = Query(None, ge=1, le=2555),
     startDate: Optional[str] = None,
     endDate: Optional[str] = None
@@ -550,7 +550,7 @@ async def get_intraday_data(
 
     Args:
         symbol: Stock ticker (e.g., TSLA, AAPL)
-        interval: Bar interval - 1m, 5m, 15m, 1h, 1d, 1w, 1mo (Alpaca-native intervals only)
+        interval: Bar interval - 1m, 5m, 15m, 1h, 1d, 1w, 1mo, 1y (Alpaca-native + yearly aggregation)
         days: Number of days to fetch from now (standard mode)
         startDate: Start date in ISO format (lazy loading mode)
         endDate: End date in ISO format (lazy loading mode)
@@ -616,9 +616,12 @@ async def get_intraday_data(
 
         for attempt in range(max_lookback_days):
             # Fetch data using 3-tier caching
+            # For yearly aggregation, fetch monthly bars first
+            fetch_interval = '1mo' if interval == '1y' else interval
+
             bars = await data_service.get_bars(
                 symbol=symbol_upper,
-                interval=interval,
+                interval=fetch_interval,
                 start_date=start_dt,
                 end_date=end_dt
             )
@@ -643,6 +646,18 @@ async def get_intraday_data(
             logger.warning(
                 f"⚠️ No data found for {symbol_upper} in last {max_lookback_days} days"
             )
+
+        # Handle yearly aggregation: 12 monthly bars → 1 yearly bar
+        if interval == '1y' and len(bars) > 0:
+            from services.bar_aggregator import get_bar_aggregator
+
+            logger.info(f"📊 Aggregating monthly bars to yearly for {symbol_upper}")
+
+            # bars already contains monthly data (interval='1mo' from Alpaca)
+            aggregator = get_bar_aggregator()
+            bars = aggregator.aggregate_to_yearly(bars)
+
+            logger.info(f"✅ Aggregated to {len(bars)} yearly bars")
 
         # Determine cache tier that served this request
         metrics = data_service.get_metrics()
@@ -959,23 +974,49 @@ async def get_stock_history(request: Request, symbol: str, days: int = 30, inter
         end_dt = datetime.now(tz.utc)
         start_dt = end_dt - timedelta(days=days)
 
+        # For yearly aggregation, fetch monthly bars first
+        fetch_interval = '1mo' if interval == '1y' else interval
+
         # Fetch data using 3-tier caching with timezone fix
+        logger.info(f"🔍 Calling get_bars for {symbol_upper} {fetch_interval}")
         bars = await data_service.get_bars(
             symbol=symbol_upper,
-            interval=interval,
+            interval=fetch_interval,
             start_date=start_dt,
             end_date=end_dt
         )
+        logger.info(f"📦 get_bars returned {len(bars)} bars")
 
-        # Determine cache tier
-        metrics = data_service.get_metrics()
-        total = metrics['total_requests']
-        if metrics['redis_hits'] == total:
-            cache_tier = "redis"
-        elif metrics['db_hits'] + metrics['redis_hits'] == total:
-            cache_tier = "database"
-        else:
-            cache_tier = "alpaca"
+        # Handle yearly aggregation: 12 monthly bars → 1 yearly bar
+        if interval == '1y' and len(bars) > 0:
+            from services.bar_aggregator import get_bar_aggregator
+
+            logger.info(f"📊 Aggregating monthly bars to yearly for {symbol_upper}")
+
+            # bars already contains monthly data (interval='1mo')
+            aggregator = get_bar_aggregator()
+            bars = aggregator.aggregate_to_yearly(bars)
+
+            logger.info(f"✅ Aggregated to {len(bars)} yearly bars")
+
+        # Determine cache tier intelligently
+        # Check if we have database coverage (simple and reliable)
+        cache_tier = "api"  # default
+        try:
+            if len(bars) > 0:
+                coverage_check = data_service.supabase.table('data_coverage') \
+                    .select('total_bars') \
+                    .eq('symbol', symbol_upper) \
+                    .eq('interval', fetch_interval) \
+                    .execute()
+
+                if coverage_check.data and len(coverage_check.data) > 0:
+                    cached_bars = coverage_check.data[0].get('total_bars', 0)
+                    # If we have significant cache coverage (>10 bars), label as database
+                    if cached_bars > 10:
+                        cache_tier = "database"
+        except Exception:
+            pass  # Fall back to default "api" label
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         completed = telemetry.with_duration(duration_ms)
