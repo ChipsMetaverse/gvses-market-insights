@@ -20,6 +20,7 @@ import { PREFER_STRUCTURED_CHART_COMMANDS } from '../utils/featureFlags';
 import { DrawingStore } from '../drawings/DrawingStore';
 import type { AnyDrawing, Trendline, Ray, Horizontal, Tp } from '../drawings/types';
 import { uid } from '../drawings/types';
+import { MarkerPrimitive } from '../drawings/MarkerPrimitive';
 
 type ParsedDrawingCommand =
   | { action: 'pattern_level'; patternId: string; levelType: string; price: number }
@@ -58,7 +59,8 @@ class EnhancedChartControl {
   private drawingsMap: Map<string, any> = new Map();
   private annotationsMap: Map<string, ISeriesApi<SeriesType>> = new Map();
   private drawingPrimitive: DrawingPrimitive | null = null;
-  private patternMarkers: SeriesMarker<Time>[] = [];
+  private patternMarkers: SeriesMarker<Time>[] = [];  // Deprecated - kept for compatibility
+  private markerPrimitives: MarkerPrimitive[] = [];   // TradingView v5 marker primitives
   private storeRef: DrawingStore | null = null; // NEW: Reference to drawing store
 
   private overlayControls: {
@@ -1368,8 +1370,8 @@ class EnhancedChartControl {
         ...newMarkers
       ];
 
-      // Note: setMarkers() not supported in TradingView Lightweight Charts v5
-      // this.mainSeriesRef.setMarkers(this.patternMarkers);
+      // Apply markers to the series
+      this.mainSeriesRef.setMarkers(this.patternMarkers);
       console.log('[Enhanced Chart] Pattern markers applied', { count: this.patternMarkers.length });
       return `Marked ${newMarkers.length} pattern candles`;
     } catch (error) {
@@ -1417,28 +1419,31 @@ class EnhancedChartControl {
 
     try {
       console.log('[Enhanced Chart] Drawing pattern marker', marker);
-      
-      const markerShape: SeriesMarkerShape = marker.type === 'circle'
-        ? 'circle'
-        : marker.type === 'star'
-          ? 'circle'
-          : marker.direction === 'up'
-            ? 'arrowUp'
-            : 'arrowDown';
 
-      const seriesMarker: SeriesMarker<Time> = {
-        time: marker.time as UTCTimestamp,
-        position: (marker.direction === 'up' ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
+      // Create MarkerPrimitive (TradingView v5 compatible)
+      const markerPrimitive = new MarkerPrimitive({
+        time: marker.time,
+        price: marker.price,
+        type: marker.type,
+        direction: marker.direction,
         color: marker.color,
-        shape: markerShape,
-        text: marker.label || '',
-        size: marker.radius || 1
-      };
+        size: marker.radius || 6,
+        label: marker.label,
+        zOrder: 'top', // Render markers on top of candlesticks
+      });
 
-      this.patternMarkers = [...this.patternMarkers, seriesMarker];
-      // Note: setMarkers() not supported in TradingView Lightweight Charts v5
-      // this.mainSeriesRef.setMarkers(this.patternMarkers);
-      console.log('[Enhanced Chart] Pattern marker added successfully');
+      // Attach primitive to the series
+      this.mainSeriesRef.attachPrimitive(markerPrimitive);
+
+      // Store for later cleanup
+      this.markerPrimitives.push(markerPrimitive);
+
+      // Force chart to recalculate autoscale to include marker prices
+      if (this.chartRef) {
+        this.chartRef.timeScale().fitContent();
+      }
+
+      console.log('[Enhanced Chart] Pattern marker primitive attached successfully');
       return `Pattern marker added at ${marker.time}`;
     } catch (error) {
       console.error('Failed to draw pattern marker:', error);
