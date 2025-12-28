@@ -1815,12 +1815,13 @@ async def get_pattern_detection(
         daily_candles_for_btd = None
         is_intraday = 'm' in interval.lower() or 'h' in interval.lower()
         is_daily = interval.lower() == "1d"
+        is_weekly_or_monthly = interval.lower() in ["1w", "1wk", "1mo", "1m"]
 
-        if is_intraday or is_daily:
+        if is_intraday or is_daily or is_weekly_or_monthly:
             try:
                 logger.info(f"Fetching daily data for PDH/PDL and BTD calculation (interval: {interval})")
-                # For intraday, fetch daily candles; for daily, use existing data
-                if is_intraday:
+                # For intraday/weekly/monthly, fetch daily candles; for daily, use existing data
+                if is_intraday or is_weekly_or_monthly:
                     # Fetch 365 days to ensure we have 200+ trading days for BTD (200-day SMA)
                     daily_history = await data_service.get_bars(
                         symbol=symbol_upper,
