@@ -27,6 +27,7 @@ import { marketDataService } from '../services/marketDataService'
 import { ChartToolbar } from './ChartToolbar'
 import { TrendlineHandlePrimitive } from '../drawings/TrendlineHandlePrimitive'
 import { HorizontalLevelPrimitive } from '../drawings/HorizontalLevelPrimitive'
+import { OHLCLegendPrimitive } from '../drawings/OHLCLegendPrimitive'
 import { TrendlineConfigPopup } from './TrendlineConfigPopup'
 import './TradingChart.css'
 
@@ -94,6 +95,8 @@ export function TradingChart({
   const chartRef = useRef<IChartApi | null>(null)
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const sma200SeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const pdhSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const pdlSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
   const trendlinesRef = useRef<Map<string, TrendlineVisual>>(new Map())
 
   // Chart ready state - triggers data update when chart is initialized
@@ -123,6 +126,9 @@ export function TradingChart({
   // PDH/PDL lines (Previous Day High/Low)
   const pdhLineRef = useRef<HorizontalLevelPrimitive | null>(null)
   const pdlLineRef = useRef<HorizontalLevelPrimitive | null>(null)
+
+  // OHLC Legend
+  const ohlcLegendRef = useRef<OHLCLegendPrimitive | null>(null)
 
   const [levelPositions, setLevelPositions] = useState<{ sell_high?: number; buy_low?: number; btd?: number }>({})
 
@@ -833,6 +839,34 @@ export function TradingChart({
         fetchDailySMA()
       }
 
+      // Set PDH (Previous Day High) and PDL (Previous Day Low) horizontal lines
+      // Data comes from backend pattern detection API via technicalLevels prop
+      if (chartData.length > 0) {
+        // Set PDH line data (horizontal line across all chart data)
+        if (technicalLevels?.pdh_level && pdhSeriesRef.current) {
+          const pdhData = chartData.map(bar => ({
+            time: bar.time,
+            value: technicalLevels.pdh_level!
+          }))
+          pdhSeriesRef.current.setData(pdhData)
+          console.log('[CHART] ✅ PDH line set:', technicalLevels.pdh_level.toFixed(2))
+        } else if (pdhSeriesRef.current) {
+          pdhSeriesRef.current.setData([])
+        }
+
+        // Set PDL line data (horizontal line across all chart data)
+        if (technicalLevels?.pdl_level && pdlSeriesRef.current) {
+          const pdlData = chartData.map(bar => ({
+            time: bar.time,
+            value: technicalLevels.pdl_level!
+          }))
+          pdlSeriesRef.current.setData(pdlData)
+          console.log('[CHART] ✅ PDL line set:', technicalLevels.pdl_level.toFixed(2))
+        } else if (pdlSeriesRef.current) {
+          pdlSeriesRef.current.setData([])
+        }
+      }
+
       // Apply zoom if specified
       if (chartRef.current && !isChartDisposedRef.current) {
         console.log('[CHART] 🎯 Applying timeframe zoom')
@@ -854,7 +888,7 @@ export function TradingChart({
     } catch (error) {
       console.error('[CHART] ❌ Error updating chart data:', error)
     }
-  }, [chartData, chartReady, applyTimeframeZoom, calculateAndRenderPDHPDL, drawAutoTrendlines, interval, symbol])
+  }, [chartData, chartReady, applyTimeframeZoom, calculateAndRenderPDHPDL, drawAutoTrendlines, interval, symbol, technicalLevels])
 
   // Update technical levels
   const updateTechnicalLevels = useCallback(() => {
@@ -989,9 +1023,35 @@ export function TradingChart({
       title: '200 SMA',
     })
 
+    // Add PDH line series (Previous Day High)
+    const pdhSeries = chart.addSeries(LineSeries, {
+      color: '#ef4444',  // Red color for resistance
+      lineWidth: 2,
+      lineStyle: LineStyle.Dashed,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: 'PDH',
+    })
+
+    // Add PDL line series (Previous Day Low)
+    const pdlSeries = chart.addSeries(LineSeries, {
+      color: '#22c55e',  // Green color for support
+      lineWidth: 2,
+      lineStyle: LineStyle.Dashed,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: 'PDL',
+    })
+
     chartRef.current = chart
     candlestickSeriesRef.current = candlestickSeries
     sma200SeriesRef.current = sma200Series
+    pdhSeriesRef.current = pdhSeries
+    pdlSeriesRef.current = pdlSeries
+
+    // Initialize OHLC Legend primitive
+    ohlcLegendRef.current = new OHLCLegendPrimitive(symbol)
+    candlestickSeries.attachPrimitive(ohlcLegendRef.current)
 
     console.log('[CHART] ✅ Chart and series created successfully')
 
@@ -1153,10 +1213,30 @@ export function TradingChart({
       }
     })
 
-    // Crosshair move handler for drag preview and drawing preview
+    // Crosshair move handler for OHLC legend, drag preview, and drawing preview
     chart.subscribeCrosshairMove((param) => {
       // GUARD: Prevent recursion from setData() triggering crosshair events
       if (isUpdatingPreviewRef.current) return
+
+      // Update OHLC legend
+      if (ohlcLegendRef.current) {
+        if (!param.time) {
+          ohlcLegendRef.current.updateData(null)
+        } else {
+          const data = param.seriesData.get(candlestickSeries)
+          if (data && 'open' in data && 'high' in data && 'low' in data && 'close' in data) {
+            ohlcLegendRef.current.updateData({
+              time: param.time,
+              open: data.open,
+              high: data.high,
+              low: data.low,
+              close: data.close
+            })
+          } else {
+            ohlcLegendRef.current.updateData(null)
+          }
+        }
+      }
 
       if (!param.time || !param.point) return
 
@@ -1305,10 +1385,16 @@ export function TradingChart({
           candlestickSeriesRef.current.detachPrimitive(pdlLineRef.current)
         }
       } catch (e) {}
+      try {
+        if (ohlcLegendRef.current && candlestickSeriesRef.current) {
+          candlestickSeriesRef.current.detachPrimitive(ohlcLegendRef.current)
+        }
+      } catch (e) {}
 
       priceLineRefsRef.current = []
       pdhLineRef.current = null
       pdlLineRef.current = null
+      ohlcLegendRef.current = null
 
       // NOTE: We DON'T clear candlestickSeriesRef here!
       // React 18 Strict Mode causes multiple mount/unmount cycles during development.
