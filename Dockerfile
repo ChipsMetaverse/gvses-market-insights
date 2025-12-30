@@ -57,6 +57,10 @@ RUN pip install --no-cache-dir -r forex-mcp-server/requirements.txt
 RUN playwright install chromium
 RUN playwright install-deps chromium
 
+# Setup crypto-mcp-server
+COPY crypto-mcp-server/ ./crypto-mcp-server/
+RUN pip install --no-cache-dir -r crypto-mcp-server/requirements.txt
+
 # Install backend dependencies
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

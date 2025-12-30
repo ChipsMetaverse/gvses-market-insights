@@ -42,6 +42,58 @@ services:
     networks:
       - voice-assistant-network
 
+  market-mcp-server:
+    build:
+      context: ./market-mcp-server
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./market-mcp-server:/app
+      - /app/node_modules
+    command: node index.js 3001
+    networks:
+      - voice-assistant-network
+
+  forex-mcp-server:
+    build:
+      context: ./forex-mcp-server
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./forex-mcp-server:/app
+    command: python src/forex_mcp/server.py --transport http --host 0.0.0.0 --port 3002
+    networks:
+      - voice-assistant-network
+
+  crypto-mcp-server:
+    build:
+      context: ./crypto-mcp-server
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    volumes:
+      - ./crypto-mcp-server:/app
+    command: python -m crypto_mcp.server --transport http --port 3003
+    networks:
+      - voice-assistant-network
+
+  alpaca-mcp-server:
+    build:
+      context: ./alpaca-mcp-server
+      dockerfile: Dockerfile
+    ports:
+      - "3004:3004"
+    environment:
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY}
+    volumes:
+      - ./alpaca-mcp-server:/app
+    command: python server.py --transport http --port 3004
+    networks:
+      - voice-assistant-network
+
 networks:
   voice-assistant-network:
     driver: bridge
