@@ -1055,11 +1055,12 @@ async def get_stock_history(request: Request, symbol: str, days: int = 30, inter
             },
         )
 
-        # Return in backward-compatible format with 'candles' field
+        # Return in backward-compatible format with BOTH 'candles' and 'bars' fields
         return {
             "symbol": symbol_upper,
             "interval": interval,
-            "candles": bars,  # Frontend expects 'candles' not 'bars'
+            "candles": bars,  # Legacy field for backward compatibility
+            "bars": bars,     # Current frontend expects this field
             "data_source": cache_tier,
             "count": len(bars),
             "start_date": start_dt.isoformat(),
@@ -1752,16 +1753,17 @@ async def get_pattern_detection(
         # Determine appropriate number of days based on interval
         # Phase 1 Fix: Balanced lookback to ensure sufficient bars without overwhelming data
         days_map = {
-            "1m": 7,     # 1 minute: 1 week (optimal for intraday volatility)
-            "3m": 7,     # 3 minutes: 1 week
-            "5m": 7,     # 5 minutes: 1 week
-            "10m": 14,   # 10 minutes: 2 weeks
-            "15m": 30,   # 15 minutes: 1 month (increased from 14 for sufficient bars)
-            "30m": 60,   # 30 minutes: 2 months (increased from 30)
-            "1h": 60,    # 1 hour: 2 months
-            "1d": 365,   # Daily: 365 days (matches frontend chart data for accurate 200 SMA alignment)
-            "1wk": 400,  # Weekly: ~8 years
-            "1mo": 1000  # Monthly: ~80 years
+            "1m": 7,      # 1 minute: 1 week (optimal for intraday volatility)
+            "3m": 7,      # 3 minutes: 1 week
+            "5m": 7,      # 5 minutes: 1 week
+            "10m": 14,    # 10 minutes: 2 weeks
+            "15m": 30,    # 15 minutes: 1 month (increased from 14 for sufficient bars)
+            "30m": 60,    # 30 minutes: 2 months (increased from 30)
+            "1h": 60,     # 1 hour: 2 months
+            "1d": 365,    # Daily: 365 days (matches frontend chart data for accurate 200 SMA alignment)
+            "1wk": 400,   # Weekly: ~8 years
+            "1mo": 1000,  # Monthly: ~80 years
+            "1y": 18250   # Yearly: 50 years (fetches ~600 monthly bars → ~50 yearly bars after aggregation)
         }
         days = days_map.get(interval, 200)
 
@@ -1776,12 +1778,30 @@ async def get_pattern_detection(
         start_dt = end_dt - timedelta(days=days)
 
         # Fetch data using 3-tier caching (Redis → Supabase → Alpaca)
+        # #region agent log
+        import json as _json
+        with open('/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log', 'a') as _f:
+            _f.write(_json.dumps({"location":"mcp_server.py:pattern-detection:pre-fetch","message":"About to fetch bars for pattern detection","data":{"symbol":symbol_upper,"interval":interval,"days":days,"start_dt":str(start_dt),"end_dt":str(end_dt)},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"ux-issues","hypothesisId":"D"}) + '\n')
+        # #endregion
+        
+        # FIX MISSING: For 1Y interval, fetch monthly bars (like /api/intraday does)
+        fetch_interval = '1mo' if interval == '1y' else interval
+        
         candles = await data_service.get_bars(
             symbol=symbol_upper,
-            interval=interval,
+            interval=fetch_interval,
             start_date=start_dt,
             end_date=end_dt
         )
+
+        # Handle yearly aggregation BEFORE pattern detection (mirrors /api/intraday logic)
+        if interval == '1y' and len(candles) > 0:
+            from services.bar_aggregator import get_bar_aggregator
+
+            logger.info(f"📊 [PATTERN DETECTION] Aggregating {len(candles)} monthly bars to yearly for {symbol_upper}")
+            aggregator = get_bar_aggregator()
+            candles = aggregator.aggregate_to_yearly(candles)
+            logger.info(f"✅ [PATTERN DETECTION] Pattern detection using {len(candles)} yearly bars (aggregated from monthly)")
 
         # Convert to expected format
         history = {
@@ -1815,13 +1835,15 @@ async def get_pattern_detection(
         daily_candles_for_btd = None
         is_intraday = 'm' in interval.lower() or 'h' in interval.lower()
         is_daily = interval.lower() == "1d"
-        is_weekly_or_monthly = interval.lower() in ["1w", "1wk", "1mo", "1m"]
+        is_weekly_or_longer = interval.lower() in ['1w', '1mo', '1y']
 
-        if is_intraday or is_daily or is_weekly_or_monthly:
+        # BTD (200-day SMA) is important on ALL timeframes
+        # PDH/PDL are primarily for intraday/daily trading
+        if is_intraday or is_daily or is_weekly_or_longer:
             try:
                 logger.info(f"Fetching daily data for PDH/PDL and BTD calculation (interval: {interval})")
-                # For intraday/weekly/monthly, fetch daily candles; for daily, use existing data
-                if is_intraday or is_weekly_or_monthly:
+                # For intraday, fetch daily candles; for daily, use existing data; for weekly+, fetch daily for BTD only
+                if is_intraday:
                     # Fetch 365 days to ensure we have 200+ trading days for BTD (200-day SMA)
                     daily_history = await data_service.get_bars(
                         symbol=symbol_upper,
@@ -1831,10 +1853,22 @@ async def get_pattern_detection(
                     )
                     candles_for_pdh_pdl = daily_history if daily_history else []
                     daily_candles_for_btd = daily_history if daily_history else []
-                else:
+                elif is_daily:
                     # For daily charts, use the existing candles
                     candles_for_pdh_pdl = history["candles"]
                     daily_candles_for_btd = history["candles"]
+                elif is_weekly_or_longer:
+                    # Weekly/Monthly/Yearly: Fetch daily candles for BTD only
+                    # PDH/PDL not relevant for these longer timeframes
+                    logger.info(f"Fetching daily candles for BTD calculation on {interval} timeframe")
+                    daily_history = await data_service.get_bars(
+                        symbol=symbol_upper,
+                        interval="1d",
+                        start_date=end_dt - timedelta(days=365),
+                        end_date=end_dt
+                    )
+                    candles_for_pdh_pdl = []  # Don't calculate PDH/PDL (not relevant for long timeframes)
+                    daily_candles_for_btd = daily_history if daily_history else []
 
                 if candles_for_pdh_pdl and len(candles_for_pdh_pdl) >= 2:
                     # Find most recent FULL trading day (not shortened session)
@@ -1992,10 +2026,27 @@ async def get_pattern_detection(
         # Convert all trendlines to ISO format
         formatted_trendlines = [convert_trendline_timestamps(tl) for tl in results.get("trendlines", [])]
 
+        # Extract key levels from trendlines for easy access
+        # Key levels have type="key_level" and label in ["BL", "SH", "BTD (200 SMA)", "PDH", "PDL"]
+        key_level_labels = {"BL", "SH", "BTD (200 SMA)", "PDH", "PDL"}
+        key_levels = {}
+        for tl in formatted_trendlines:
+            if tl.get("type") == "key_level":
+                label = tl.get("label", "")
+                # Extract price from start/end object (key levels are horizontal so start.price == end.price)
+                price = tl.get("start", {}).get("price") if tl.get("start") else None
+
+                # Map full label to short version for API response
+                if "BTD" in label:
+                    key_levels["BTD"] = price
+                elif label in key_level_labels:
+                    key_levels[label] = price
+
         response = {
             "symbol": symbol_upper,
             "patterns": formatted_patterns,
             "trendlines": formatted_trendlines,  # Use converted trendlines with ISO timestamps
+            "key_levels": key_levels,  # NEW: Expose BTD, PDH, PDL, BL, SH as separate field
             "active_levels": results.get("active_levels", {}),
             "summary": results.get("summary", {}),
             "total_patterns": len(formatted_patterns),
