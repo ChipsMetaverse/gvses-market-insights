@@ -1778,10 +1778,10 @@ async def get_pattern_detection(
         start_dt = end_dt - timedelta(days=days)
 
         # Fetch data using 3-tier caching (Redis → Supabase → Alpaca)
-        # #region agent log
-        import json as _json
-        with open('/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log', 'a') as _f:
-            _f.write(_json.dumps({"location":"mcp_server.py:pattern-detection:pre-fetch","message":"About to fetch bars for pattern detection","data":{"symbol":symbol_upper,"interval":interval,"days":days,"start_dt":str(start_dt),"end_dt":str(end_dt)},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"ux-issues","hypothesisId":"D"}) + '\n')
+        # #region agent log - DISABLED (hardcoded path causes production errors)
+        # import json as _json
+        # with open('/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log', 'a') as _f:
+        #     _f.write(_json.dumps({"location":"mcp_server.py:pattern-detection:pre-fetch","message":"About to fetch bars for pattern detection","data":{"symbol":symbol_upper,"interval":interval,"days":days,"start_dt":str(start_dt),"end_dt":str(end_dt)},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"ux-issues","hypothesisId":"D"}) + '\n')
         # #endregion
         
         # FIX MISSING: For 1Y interval, fetch monthly bars (like /api/intraday does)
@@ -1967,10 +1967,10 @@ async def get_pattern_detection(
                         "markers": _generate_pattern_markers(pattern, candles, start_idx, end_idx)
                     }
                     
-                    # #region agent log
-                    import json as _json_log
-                    with open("/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log", "a") as _f:
-                        _f.write(_json_log.dumps({"location":"mcp_server.py:1920","message":"Visual config generated","data":{"pattern_type":pattern_type,"start_time":start_time,"end_time":end_time,"high":float(pattern_high),"low":float(pattern_low),"valid_timestamps":start_time > 0 and end_time > 0},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"post-fix","hypothesisId":"TIMESTAMP_FIX"}) + "\n")
+                    # #region agent log - DISABLED (hardcoded path causes production errors)
+                    # import json as _json_log
+                    # with open("/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log", "a") as _f:
+                    #     _f.write(_json_log.dumps({"location":"mcp_server.py:1920","message":"Visual config generated","data":{"pattern_type":pattern_type,"start_time":start_time,"end_time":end_time,"high":float(pattern_high),"low":float(pattern_low),"valid_timestamps":start_time > 0 and end_time > 0},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"post-fix","hypothesisId":"TIMESTAMP_FIX"}) + "\n")
                     # #endregion
 
                     logger.info(f"[{symbol}] Added visual_config to {pattern_type}: {len(candle_indices)} candles, {len(pattern['visual_config']['markers'])} markers")
@@ -1982,10 +1982,10 @@ async def get_pattern_detection(
         # Transform patterns to API format
         formatted_patterns = []
         for pattern in results.get("detected", []):
-            # #region agent log
-            import json as _json_log
-            with open("/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log", "a") as _f:
-                _f.write(_json_log.dumps({"location":"mcp_server.py:1775","message":"Pattern before formatting","data":{"pattern_type":pattern.get("pattern_type"),"has_visual_config":bool(pattern.get("visual_config")),"has_chart_metadata":bool(pattern.get("chart_metadata")),"visual_config_keys":list(pattern.get("visual_config",{}).keys()) if pattern.get("visual_config") else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","hypothesisId":"A,B"}) + "\n")
+            # #region agent log - DISABLED (hardcoded path causes production errors)
+            # import json as _json_log
+            # with open("/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log", "a") as _f:
+            #     _f.write(_json_log.dumps({"location":"mcp_server.py:1775","message":"Pattern before formatting","data":{"pattern_type":pattern.get("pattern_type"),"has_visual_config":bool(pattern.get("visual_config")),"has_chart_metadata":bool(pattern.get("chart_metadata")),"visual_config_keys":list(pattern.get("visual_config",{}).keys()) if pattern.get("visual_config") else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","hypothesisId":"A,B"}) + "\n")
             # #endregion
             formatted_patterns.append({
                 "id": pattern.get("id", pattern.get("pattern_id", "")),

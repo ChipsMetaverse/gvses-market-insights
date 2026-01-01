@@ -154,28 +154,56 @@ class HistoricalDataService:
     ) -> List[Dict]:
         """
         Query Supabase for bars in the requested range.
+        
+        Uses pagination to bypass Supabase's 1000 row server-side limit.
 
         Returns:
             List of bars from database (may be incomplete)
         """
         try:
-            response = self.supabase.table('historical_bars').select('*').eq(
-                'symbol', symbol
-            ).eq(
-                'interval', interval
-            ).gte(
-                'timestamp', start_date.isoformat()
-            ).lte(
-                'timestamp', end_date.isoformat()
-            ).order('timestamp', desc=False).execute()
+            # FIX: Supabase has a server-side max of 1000 rows that .limit() cannot override
+            # Must use pagination with .range() to fetch all data
+            all_bars = []
+            page_size = 1000  # Supabase max per request
+            offset = 0
+            
+            while True:
+                response = self.supabase.table('historical_bars').select('*').eq(
+                    'symbol', symbol
+                ).eq(
+                    'interval', interval
+                ).gte(
+                    'timestamp', start_date.isoformat()
+                ).lte(
+                    'timestamp', end_date.isoformat()
+                ).order('timestamp', desc=False).range(offset, offset + page_size - 1).execute()
 
-            bars = response.data if response.data else []
+                bars = response.data if response.data else []
+                all_bars.extend(bars)
+                
+                # If we got fewer than page_size, we've reached the end
+                if len(bars) < page_size:
+                    break
+                    
+                offset += page_size
+                
+                # Safety limit to prevent infinite loops
+                if offset > 50000:
+                    logger.warning(f"⚠️ Pagination limit reached for {symbol} {interval}")
+                    break
 
-            logger.debug(
-                f"📚 DB query: {symbol} {interval} → {len(bars)} bars"
+            logger.info(
+                f"📚 DB query: {symbol} {interval} → {len(all_bars)} bars (paginated)"
             )
+            # #region agent log - DISABLED (hardcoded path causes production errors)
+            # import json as _json
+            # _db_dates = sorted([b.get('timestamp','')[:10] for b in all_bars]) if all_bars else []
+            # _june_2025_count = len([b for b in all_bars if b.get('timestamp','').startswith('2025-06')])
+            # with open('/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log', 'a') as _f:
+            #     _f.write(_json.dumps({"location":"historical_data_service.py:_fetch_from_database","message":"Supabase PAGINATED query result","data":{"symbol":symbol,"interval":interval,"bar_count":len(all_bars),"first_date":_db_dates[0] if _db_dates else None,"last_date":_db_dates[-1] if _db_dates else None,"june_2025_bars":_june_2025_count,"pages_fetched":offset//page_size + 1},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pagination-fix","hypothesisId":"F"}) + '\n')
+            # #endregion
 
-            return bars
+            return all_bars
 
         except Exception as e:
             logger.error(f"❌ Database query error: {e}")
@@ -282,8 +310,21 @@ class HistoricalDataService:
             # Calculate days parameter for Yahoo Finance
             days = (end_date - start_date).days + 1
 
+            # Map internal interval format to Yahoo Finance API format
+            # Yahoo Finance uses different interval codes than our internal system
+            yahoo_interval_map = {
+                '1w': '1wk',    # Weekly: '1w' → '1wk'
+                '1mo': '1mo',   # Monthly: same
+                '1d': '1d',     # Daily: same
+                '1h': '1h',     # Hourly: same
+                '15m': '15m',   # 15-min: same
+                '5m': '5m',     # 5-min: same
+                '1min': '1m',   # 1-min: '1min' → '1m'
+            }
+            yahoo_interval = yahoo_interval_map.get(interval, interval)
+
             logger.info(
-                f"🌐 L3 FALLBACK (Yahoo via MCP): {symbol} {interval} "
+                f"🌐 L3 FALLBACK (Yahoo via MCP): {symbol} {interval} → {yahoo_interval} "
                 f"{start_date.date()} to {end_date.date()} ({days} days)"
             )
 
@@ -295,7 +336,7 @@ class HistoricalDataService:
                 "symbol": symbol,
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
-                "interval": interval
+                "interval": yahoo_interval  # Use converted Yahoo format
             }
 
             result = await client.call_tool("get_stock_history", params)
@@ -403,6 +444,61 @@ class HistoricalDataService:
             try:
                 # Calculate days to fetch
                 days = (gap['end'] - gap['start']).days + 1
+
+                # Force Yahoo MCP for weekly intervals (Alpaca IEX doesn't support 1Week)
+                if interval == '1w':
+                    logger.info(
+                        f"🌐 L3 FETCH (Yahoo MCP - weekly interval): {symbol} {interval} "
+                        f"{gap['start'].date()} to {gap['end'].date()} ({days} days)"
+                    )
+
+                    start_time = datetime.now()
+                    new_bars = await self._fetch_from_yahoo_mcp(
+                        symbol=symbol,
+                        interval=interval,
+                        start_date=gap['start'],
+                        end_date=gap['end']
+                    )
+                    duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+
+                    if new_bars:
+                        logger.info(
+                            f"✅ L3 SUCCESS (Yahoo): {symbol} {interval} "
+                            f"→ {len(new_bars)} bars in {duration_ms}ms"
+                        )
+
+                        await self._store_bars(symbol, interval, new_bars)
+                        all_new_bars.extend(new_bars)
+
+                        await self._log_api_call(
+                            provider='yahoo_finance',
+                            symbol=symbol,
+                            interval=interval,
+                            start_date=gap['start'],
+                            end_date=gap['end'],
+                            bars_fetched=len(new_bars),
+                            duration_ms=duration_ms,
+                            success=True
+                        )
+                    else:
+                        logger.warning(
+                            f"⚠️ Yahoo MCP returned no data for weekly {symbol} "
+                            f"{gap['start'].date()} to {gap['end'].date()}"
+                        )
+
+                        await self._log_api_call(
+                            provider='yahoo_finance',
+                            symbol=symbol,
+                            interval=interval,
+                            start_date=gap['start'],
+                            end_date=gap['end'],
+                            bars_fetched=0,
+                            duration_ms=duration_ms,
+                            success=False,
+                            error_message="No weekly data returned"
+                        )
+
+                    continue  # Skip Alpaca attempt for weekly data
 
                 # Route to appropriate data source based on date range
                 # For gaps older than Alpaca's limit (~2020), use Yahoo Finance directly
@@ -610,27 +706,90 @@ class HistoricalDataService:
                         error_message=str(yahoo_error)
                     )
 
-        # Merge existing + new bars, deduplicate by timestamp, and sort
-        # Use dict to deduplicate - newer bars (from API) override older (from database)
-        bars_by_timestamp = {}
+        # Merge existing + new bars, deduplicate, and sort
+        # For daily bars: merge by DATE to handle different timestamp conventions
+        # For intraday bars: merge by full TIMESTAMP
 
-        # Add existing bars first (from database)
-        for bar in existing_bars:
-            bars_by_timestamp[bar['timestamp']] = bar
+        if interval == '1d':
+            # Daily bars: Use DATE as key (handles 05:00 UTC vs 14:30 UTC issue)
+            bars_by_date = {}
 
-        # Add new bars (from API) - these override database bars if duplicate timestamp
-        for bar in all_new_bars:
-            bars_by_timestamp[bar['timestamp']] = bar
+            # Add existing bars first (from database)
+            for bar in existing_bars:
+                date = bar['timestamp'][:10]  # Extract "YYYY-MM-DD"
+                bars_by_date[date] = bar
 
-        # Convert back to list and sort
-        all_bars = list(bars_by_timestamp.values())
-        all_bars.sort(key=lambda x: x['timestamp'])
+            # Add new bars (from API) - these override database bars if same date
+            for bar in all_new_bars:
+                date = bar['timestamp'][:10]
+                bars_by_date[date] = bar  # Newer API data overwrites older DB data
+
+            # Convert to list and normalize timestamps to BusinessDay format
+            all_bars = []
+            for date, bar in bars_by_date.items():
+                bar = bar.copy()
+                bar['timestamp'] = date  # Normalize to "YYYY-MM-DD" for Lightweight Charts
+                all_bars.append(bar)
+
+            all_bars.sort(key=lambda x: x['timestamp'])
+
+            logger.info(
+                f"📊 Daily bars merged: {len(existing_bars)} DB + {len(all_new_bars)} API "
+                f"→ {len(all_bars)} unique dates"
+            )
+        else:
+            # Intraday bars: Use full timestamp as key
+            bars_by_timestamp = {}
+
+            # Add existing bars first (from database)
+            for bar in existing_bars:
+                bars_by_timestamp[bar['timestamp']] = bar
+
+            # Add new bars (from API) - these override database bars if duplicate timestamp
+            for bar in all_new_bars:
+                bars_by_timestamp[bar['timestamp']] = bar
+
+            # Convert back to list and sort
+            all_bars = list(bars_by_timestamp.values())
+            all_bars.sort(key=lambda x: x['timestamp'])
 
         return all_bars
+
+    def _normalize_daily_timestamp(self, timestamp_str: str) -> str:
+        """
+        Normalize daily bar timestamps to canonical format (BusinessDay: YYYY-MM-DD).
+
+        Problem: Different data sources use different daily timestamp conventions:
+        - Alpaca: Market open (14:30 UTC = 9:30 ET)
+        - Yahoo: Midnight exchange day (05:00 UTC = 00:00 ET)
+
+        This causes duplicate bars for the same trading day.
+
+        Solution: Extract trading date only for daily bars.
+
+        Args:
+            timestamp_str: ISO timestamp string
+
+        Returns:
+            Canonical timestamp: "YYYY-MM-DD" for daily bars
+        """
+        try:
+            # Handle both ISO format and simple date format
+            if len(timestamp_str) == 10:  # Already YYYY-MM-DD
+                return timestamp_str
+            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            # Return just the date in YYYY-MM-DD format (BusinessDay)
+            return dt.date().isoformat()
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Failed to parse timestamp {timestamp_str}: {e}")
+            return timestamp_str  # Return original if parsing fails
 
     async def _store_bars(self, symbol: str, interval: str, bars: List[Dict]):
         """
         Store bars in Supabase database.
+
+        For daily bars (interval='1d'), normalizes timestamps to BusinessDay format
+        to prevent duplicates from different timestamp conventions.
 
         Uses upsert to handle duplicates gracefully.
         Trigger will automatically update data_coverage table.
@@ -640,11 +799,17 @@ class HistoricalDataService:
 
         try:
             # Prepare data for insert
-            records = [
-                {
+            records = []
+            for bar in bars:
+                # Normalize daily timestamps to prevent duplicates
+                timestamp = bar['timestamp']
+                if interval == '1d':
+                    timestamp = self._normalize_daily_timestamp(timestamp)
+
+                records.append({
                     'symbol': symbol,
                     'interval': interval,
-                    'timestamp': bar['timestamp'],
+                    'timestamp': timestamp,
                     'open': float(bar['open']),
                     'high': float(bar['high']),
                     'low': float(bar['low']),
@@ -653,17 +818,16 @@ class HistoricalDataService:
                     'trade_count': bar.get('trade_count'),
                     'vwap': bar.get('vwap'),
                     'data_source': bar.get('data_source', 'alpaca')
-                }
-                for bar in bars
-            ]
-
-            # Upsert (insert or update if exists)
-            response = self.supabase.table('historical_bars').upsert(records).execute()
+                })
 
             logger.info(
-                f"💾 Stored {len(records)} bars: {symbol} {interval} "
-                f"({bars[0]['timestamp'][:10]} to {bars[-1]['timestamp'][:10]})"
+                f"💾 Storing {len(records)} bars for {symbol} {interval} "
+                f"({'normalized to BusinessDay' if interval == '1d' else 'as-is'})"
             )
+
+            # Upsert (insert or update if exists)
+            # Now that daily timestamps are normalized, upsert will properly deduplicate
+            response = self.supabase.table('historical_bars').upsert(records).execute()
 
         except Exception as e:
             logger.error(f"❌ Failed to store bars: {e}")

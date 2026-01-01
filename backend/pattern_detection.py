@@ -754,6 +754,7 @@ class PatternDetector:
         # Timeframe-aware pivot detection parameters
         # Intraday needs more sensitive detection (fewer bars required on each side)
         # to capture pivots in noisy data
+        # Yearly/monthly need minimal bars due to limited dataset
         if self.timeframe in ["1m", "5m", "15m", "30m"]:
             # Very sensitive for short timeframes
             left_bars = 1
@@ -762,13 +763,24 @@ class PatternDetector:
             # Moderate sensitivity for hourly timeframes
             left_bars = 2
             right_bars = 2
+        elif self.timeframe in ["1y", "1mo"]:
+            # Minimal requirements for yearly/monthly (limited bars)
+            left_bars = 1
+            right_bars = 1
         else:
-            # Standard sensitivity for daily and higher
+            # Standard sensitivity for daily and weekly
             left_bars = 2
             right_bars = 2
 
         pivot_detector = MTFPivotDetector(left_bars=left_bars, right_bars=right_bars)
         logger.info(f"🔍 Pivot detector: left_bars={left_bars}, right_bars={right_bars}, timeframe={self.timeframe}")
+        
+        # #region agent log - DISABLED (hardcoded path causes production errors)
+        # import json as _json
+        # with open('/Volumes/WD My Passport 264F Media/claude-voice-mcp/.cursor/debug.log', 'a') as _f:
+        #     _f.write(_json.dumps({"location":"pattern_detection.py:calculate_trendlines:pivot_init","message":"Pattern detector initialized for pivot detection","data":{"candle_count":len(self.candles),"timeframe":self.timeframe,"left_bars":left_bars,"right_bars":right_bars,"min_required":left_bars+right_bars+1},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"ux-issues","hypothesisId":"E"}) + '\n')
+        # #endregion
+        
         timestamps = np.array([c['time'] for c in self.candles])
 
         # Resample to 4H for higher timeframe pivots
@@ -791,10 +803,12 @@ class PatternDetector:
             logger.info(f"🎯 MTF Pivot Detector (4H→LTF): {len(pivot_highs)} highs, {len(pivot_lows)} lows")
         else:
             # Single TF with adaptive filters (better for shorter timeframes)
-            # For very short timeframes (1m-5m), disable aggressive filters
-            # to capture more pivots in noisy intraday data
-            if self.timeframe in ["1m", "5m"]:
-                # Minimal filtering for very short timeframes
+            # For intraday timeframes (1m-30m), disable aggressive filters
+            # to capture enough pivots for BL/SH calculation
+            if self.timeframe in ["1m", "5m", "15m", "30m", "1y", "1mo"]:
+                # Minimal filtering for intraday and yearly/monthly timeframes
+                # Aggressive filters remove too many pivots, preventing BL/SH detection
+                # Yearly data has very few bars (~10-15), so we need ALL pivots
                 pivot_highs, pivot_lows = pivot_detector.detect_pivots_with_filters(
                     highs, lows, timestamps,
                     apply_spacing=False,        # No spacing filter - keep all pivots
@@ -804,7 +818,7 @@ class PatternDetector:
                 )
                 logger.info(f"🎯 Single TF Pivot Detector (minimal filters): {len(pivot_highs)} highs, {len(pivot_lows)} lows")
             else:
-                # Standard filtering for longer timeframes
+                # Standard filtering for longer timeframes (1H+, 1d, 1wk)
                 pivot_highs, pivot_lows = pivot_detector.detect_pivots_with_filters(
                     highs, lows, timestamps,
                     apply_spacing=True,
@@ -820,12 +834,17 @@ class PatternDetector:
 
         # Timeframe-aware parameters for pattern detection
         # Intraday timeframes need more lenient parameters due to price noise
+        # Yearly timeframes need fewer touches due to limited bar count
         if self.timeframe in ["1m", "5m", "15m", "30m", "1H", "2H", "4H"]:
             # Intraday: More lenient tolerance, fewer touches required
             tolerance_percent = 0.008  # 0.8% tolerance for noisy intraday data
             min_touches = 2  # 2 touches minimum (instead of 3)
+        elif self.timeframe in ["1y", "1mo", "1wk"]:
+            # Yearly/Monthly/Weekly: Very lenient for limited bars (10-50 bars typically)
+            tolerance_percent = 0.01   # 1% tolerance for yearly data
+            min_touches = 2  # 2 touches minimum (yearly data has ~10-15 bars)
         else:
-            # Daily and higher: Stricter parameters for cleaner data
+            # Daily: Stricter parameters for cleaner data
             tolerance_percent = 0.005  # 0.5% tolerance
             min_touches = 3  # 3 touches minimum
 
